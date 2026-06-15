@@ -16,6 +16,34 @@
   --glyphary-muted-strong: #5f6d63;
   --glyphary-quote-border: #77977d;
   --glyphary-quote-text: #435547;
+  --glyphary-font-ui: Inter, ui-sans-serif, system-ui, sans-serif;
+  --glyphary-font-editor: Inter, ui-sans-serif, system-ui, sans-serif;
+  --glyphary-font-mono: SFMono-Regular, Consolas, Liberation Mono, monospace;
+  --glyphary-editor-font-size: 1.05rem;
+  --glyphary-editor-line-height: 1.7;
+  --glyphary-editor-max-width: none;
+  --glyphary-editor-padding-y: 38px;
+  --glyphary-editor-padding-x: min(6vw, 72px);
+  --glyphary-block-gap: 0.85em;
+  --glyphary-heading-h1-size: 2rem;
+  --glyphary-heading-h2-size: 1.45rem;
+  --glyphary-code-font-size: 0.92em;
+  --glyphary-code-tab-size: 4;
+  --glyphary-callout-background: transparent;
+  --glyphary-callout-border-width: 1px;
+  --glyphary-callout-icon-size: 1.45rem;
+  --glyphary-callout-note-color: #2f6846;
+  --glyphary-callout-info-color: #2f6846;
+  --glyphary-callout-padding: 0.85rem 1rem;
+  --glyphary-callout-radius: 8px;
+  --glyphary-callout-title-transform: uppercase;
+  --glyphary-callout-tip-color: #8fd18f;
+  --glyphary-callout-warning-color: #f5d08c;
+  --glyphary-radius-sm: 6px;
+  --glyphary-radius-md: 8px;
+  --glyphary-radius-lg: 10px;
+  --glyphary-border-width: 1px;
+  --glyphary-column-gap: 16px;
   --glyphary-selection: rgba(47, 104, 70, 0.16);
   --glyphary-shadow: rgba(45, 38, 27, 0.08);
   --glyphary-shadow-strong: rgba(45, 38, 27, 0.12);
@@ -24,6 +52,9 @@
   --syntax-blue: #8fd7ff;
   --syntax-green: #8fd18f;
   --syntax-muted: #8da092;
+  --syntax-orange: #e6a75e;
+  --syntax-purple: #c7a6ff;
+  --syntax-red: #ee8f8f;
   --syntax-yellow: #f5d08c;
   --glyphary-table-border: #d8d4ca;
   --glyphary-text: #17201a;
@@ -77,6 +108,13 @@
   --muted-strong: var(--glyphary-muted-strong);
   --quote-border: var(--blockquote-border-color);
   --quote-text: var(--blockquote-color);
+  --font-ui: var(--glyphary-font-ui);
+  --font-editor: var(--glyphary-font-editor);
+  --font-mono: var(--glyphary-font-mono);
+  --radius-sm: var(--glyphary-radius-sm);
+  --radius-md: var(--glyphary-radius-md);
+  --radius-lg: var(--glyphary-radius-lg);
+  --border-width: var(--glyphary-border-width);
   --selection: var(--text-selection);
   --shadow: var(--shadow-s);
   --shadow-strong: var(--shadow-l);
@@ -85,9 +123,7 @@
   --table-border: var(--table-border-color);
   --text: var(--text-normal);
   --text-soft: var(--glyphary-text-soft);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: var(--font-ui);
   color: var(--text);
   background: var(--app-bg);
   font-synthesis: none;
@@ -115,6 +151,11 @@
   --glyphary-muted-strong: #acb8af;
   --glyphary-quote-border: #6ea57a;
   --glyphary-quote-text: #c2d0c5;
+  --glyphary-callout-background: #202720;
+  --glyphary-callout-note-color: #7bc895;
+  --glyphary-callout-info-color: #8ecfff;
+  --glyphary-callout-tip-color: #9fe09f;
+  --glyphary-callout-warning-color: #f1d28a;
   --glyphary-selection: rgba(123, 200, 149, 0.18);
   --glyphary-shadow: rgba(0, 0, 0, 0.28);
   --glyphary-shadow-strong: rgba(0, 0, 0, 0.36);
@@ -123,6 +164,9 @@
   --syntax-blue: #8ecfff;
   --syntax-green: #9fe09f;
   --syntax-muted: #8fa092;
+  --syntax-orange: #e8a96c;
+  --syntax-purple: #c9aaff;
+  --syntax-red: #ee9a9a;
   --syntax-yellow: #f1d28a;
   --glyphary-table-border: #3a443c;
   --glyphary-text: #eef3ed;
@@ -148,6 +192,11 @@
     --glyphary-muted-strong: #acb8af;
     --glyphary-quote-border: #6ea57a;
     --glyphary-quote-text: #c2d0c5;
+    --glyphary-callout-background: #202720;
+    --glyphary-callout-note-color: #7bc895;
+    --glyphary-callout-info-color: #8ecfff;
+    --glyphary-callout-tip-color: #9fe09f;
+    --glyphary-callout-warning-color: #f1d28a;
     --glyphary-selection: rgba(123, 200, 149, 0.18);
     --glyphary-shadow: rgba(0, 0, 0, 0.28);
     --glyphary-shadow-strong: rgba(0, 0, 0, 0.36);
@@ -156,6 +205,9 @@
     --syntax-blue: #8ecfff;
     --syntax-green: #9fe09f;
     --syntax-muted: #8fa092;
+    --syntax-orange: #e8a96c;
+    --syntax-purple: #c9aaff;
+    --syntax-red: #ee9a9a;
     --syntax-yellow: #f1d28a;
     --glyphary-table-border: #3a443c;
     --glyphary-text: #eef3ed;
@@ -1200,26 +1252,74 @@ body.workspace-resizing * {
 
 .editor-surface .ProseMirror {
   min-height: 100%;
-  padding: 38px min(6vw, 72px);
+  max-width: var(--glyphary-editor-max-width);
+  margin-inline: auto;
+  padding: var(--glyphary-editor-padding-y) var(--glyphary-editor-padding-x);
   outline: none;
   color: var(--editor-text);
-  font-size: 1.05rem;
-  line-height: 1.7;
+  font-family: var(--font-editor);
+  font-size: var(--glyphary-editor-font-size);
+  line-height: var(--glyphary-editor-line-height);
 }
 
 .editor-surface .ProseMirror > * + * {
-  margin-top: 0.85em;
+  margin-top: var(--glyphary-block-gap);
 }
 
 .editor-surface h1 {
-  font-size: 2rem;
+  font-size: var(--glyphary-heading-h1-size);
   line-height: 1.12;
 }
 
 .editor-surface h2 {
   margin-top: 1.2em;
-  font-size: 1.45rem;
+  font-size: var(--glyphary-heading-h2-size);
   line-height: 1.2;
+}
+
+.app-shell.theme-colorful-headings .editor-surface h1 {
+  color: var(--accent);
+}
+
+.app-shell.theme-colorful-headings .editor-surface h2 {
+  color: var(--syntax-blue);
+}
+
+.app-shell.theme-colorful-headings .editor-surface h3 {
+  color: var(--syntax-purple);
+}
+
+.app-shell.theme-colorful-headings .editor-surface h4 {
+  color: var(--syntax-green);
+}
+
+.app-shell.theme-colorful-headings .editor-surface h5 {
+  color: var(--syntax-orange);
+}
+
+.app-shell.theme-colorful-headings .editor-surface h6 {
+  color: var(--syntax-red);
+}
+
+.app-shell.theme-heading-underlines .editor-surface h1,
+.app-shell.theme-heading-underlines .editor-surface h2 {
+  padding-bottom: 0.18em;
+  border-bottom: var(--border-width) solid var(--border-soft);
+}
+
+.app-shell.theme-heading-anchors .editor-surface h1::before,
+.app-shell.theme-heading-anchors .editor-surface h2::before,
+.app-shell.theme-heading-anchors .editor-surface h3::before,
+.app-shell.theme-heading-anchors .editor-surface h4::before,
+.app-shell.theme-heading-anchors .editor-surface h5::before,
+.app-shell.theme-heading-anchors .editor-surface h6::before {
+  content: "#";
+  display: inline-block;
+  width: 1ch;
+  margin-left: -1.35ch;
+  padding-right: 0.35ch;
+  color: var(--muted);
+  opacity: 0.72;
 }
 
 .editor-surface p {
@@ -1274,7 +1374,7 @@ body.workspace-resizing * {
 .editor-surface blockquote {
   margin-left: 0;
   padding-left: 1rem;
-  border-left: 3px solid var(--quote-border);
+  border-left: calc(var(--border-width) * 3) solid var(--quote-border);
   color: var(--quote-text);
 }
 
@@ -1282,14 +1382,14 @@ body.workspace-resizing * {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   align-items: start;
-  gap: 16px;
+  gap: var(--glyphary-column-gap);
   margin: 1.2rem 0;
 }
 
 .editor-surface .markdown-column {
   min-width: 0;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border: var(--border-width) solid var(--border-soft);
+  border-radius: var(--radius-md);
   padding: 0.85rem;
 }
 
@@ -1302,25 +1402,94 @@ body.workspace-resizing * {
 }
 
 .editor-surface .markdown-callout {
-  --callout-accent: var(--accent);
+  --callout-accent: var(--glyphary-callout-note-color);
+  --callout-icon: var(--glyphary-callout-note-icon);
   margin: 1.2rem 0;
-  border: 1px solid var(--border-soft);
-  border-left: 4px solid var(--callout-accent);
-  border-radius: 8px;
-  padding: 0.85rem 1rem;
+  border: var(--glyphary-callout-border-width) solid var(--border-soft);
+  border-left: calc(var(--glyphary-callout-border-width) * 4) solid var(--callout-accent);
+  border-radius: var(--glyphary-callout-radius);
+  background: var(--glyphary-callout-background);
+  padding: var(--glyphary-callout-padding);
 }
 
 .editor-surface .markdown-callout-note,
 .editor-surface .markdown-callout-info {
-  --callout-accent: var(--accent);
+  --callout-accent: var(--glyphary-callout-note-color);
+  --callout-icon: var(--glyphary-callout-note-icon);
+}
+
+.editor-surface .markdown-callout-info {
+  --callout-accent: var(--glyphary-callout-info-color);
+  --callout-icon: var(--glyphary-callout-info-icon);
 }
 
 .editor-surface .markdown-callout-tip {
-  --callout-accent: var(--syntax-green);
+  --callout-accent: var(--glyphary-callout-tip-color);
+  --callout-icon: var(--glyphary-callout-tip-icon);
 }
 
 .editor-surface .markdown-callout-warning {
-  --callout-accent: var(--syntax-yellow);
+  --callout-accent: var(--glyphary-callout-warning-color);
+  --callout-icon: var(--glyphary-callout-warning-icon);
+}
+
+.app-shell.theme-rich-callouts .editor-surface .markdown-callout,
+.app-shell.callout-style-card .editor-surface .markdown-callout,
+.app-shell.callout-style-obsidian .editor-surface .markdown-callout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 0.8rem;
+  border-left-width: calc(var(--glyphary-callout-border-width) * 6);
+  background: var(--surface-muted);
+}
+
+.app-shell.callout-style-striped .editor-surface .markdown-callout {
+  border-left-width: calc(var(--glyphary-callout-border-width) * 6);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0,
+      transparent 10px,
+      var(--surface-muted) 10px,
+      var(--surface-muted) 20px
+    ),
+    var(--glyphary-callout-background);
+}
+
+.app-shell.callout-style-compact .editor-surface .markdown-callout {
+  margin: 0.75rem 0;
+  border-left-width: calc(var(--glyphary-callout-border-width) * 3);
+  padding: 0.45rem 0.7rem;
+}
+
+.app-shell.callout-style-obsidian .editor-surface .markdown-callout {
+  box-shadow: inset 0 0 0 1px var(--border-soft);
+}
+
+.app-shell.theme-rich-callouts .editor-surface .markdown-callout::before,
+.app-shell.callout-style-card .editor-surface .markdown-callout::before,
+.app-shell.callout-style-obsidian .editor-surface .markdown-callout::before {
+  content: var(--callout-icon);
+  display: grid;
+  width: var(--glyphary-callout-icon-size);
+  height: var(--glyphary-callout-icon-size);
+  border-radius: 999px;
+  background: var(--callout-accent);
+  color: var(--surface);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+  font-weight: 900;
+  line-height: 1;
+  place-items: center;
+}
+
+.app-shell.theme-rich-callouts .editor-surface .markdown-callout-title,
+.app-shell.theme-rich-callouts .editor-surface .markdown-callout-body,
+.app-shell.callout-style-card .editor-surface .markdown-callout-title,
+.app-shell.callout-style-card .editor-surface .markdown-callout-body,
+.app-shell.callout-style-obsidian .editor-surface .markdown-callout-title,
+.app-shell.callout-style-obsidian .editor-surface .markdown-callout-body {
+  grid-column: 2;
 }
 
 .editor-surface .markdown-callout-title {
@@ -1330,7 +1499,12 @@ body.workspace-resizing * {
   font-size: 0.78rem;
   font-weight: 900;
   letter-spacing: 0;
-  text-transform: uppercase;
+  text-transform: var(--glyphary-callout-title-transform);
+}
+
+.app-shell.callout-style-compact .editor-surface .markdown-callout-title {
+  margin-bottom: 0.25rem;
+  font-size: 0.7rem;
 }
 
 .editor-surface .markdown-callout-body > :first-child {
@@ -1478,16 +1652,16 @@ body.workspace-resizing * {
 }
 
 .editor-surface code {
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   background: var(--hover);
   padding: 0.12rem 0.32rem;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 0.92em;
+  font-family: var(--font-mono);
+  font-size: var(--glyphary-code-font-size);
 }
 
 .editor-surface pre {
   overflow: auto;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--code-bg);
   padding: 1rem;
   color: var(--code-text);
@@ -1496,7 +1670,7 @@ body.workspace-resizing * {
 .editor-surface .code-block-node {
   position: relative;
   margin: 1rem 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--code-bg);
   color: var(--code-text);
 }
@@ -1504,7 +1678,7 @@ body.workspace-resizing * {
 .editor-surface .code-block-node pre {
   margin: 0;
   background: transparent;
-  tab-size: 4;
+  tab-size: var(--glyphary-code-tab-size);
 }
 
 .editor-surface .code-block-node.active pre {
@@ -1548,7 +1722,7 @@ body.workspace-resizing * {
 
 .editor-surface pre.toc-code-block,
 .editor-surface .code-block-node.toc-code-block {
-  border: 1px solid var(--border-soft);
+  border: var(--border-width) solid var(--border-soft);
   background: var(--surface-muted);
   color: var(--editor-text);
 }
@@ -1595,8 +1769,8 @@ body.workspace-resizing * {
 }
 
 .toc-code-header button {
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
+  border: var(--border-width) solid var(--border-soft);
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--muted-strong);
   cursor: pointer;
@@ -1624,7 +1798,7 @@ body.workspace-resizing * {
   align-items: center;
   gap: 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--heading);
   cursor: pointer;
@@ -1679,8 +1853,8 @@ body.workspace-resizing * {
   display: block;
   max-width: min(100%, 760px);
   max-height: 560px;
-  border: 1px solid var(--table-border);
-  border-radius: 8px;
+  border: var(--border-width) solid var(--table-border);
+  border-radius: var(--radius-md);
   margin: 1.1rem 0;
   object-fit: contain;
 }
@@ -1694,15 +1868,33 @@ body.workspace-resizing * {
 }
 
 .editor-surface .hljs-string,
-.editor-surface .hljs-title,
 .editor-surface .hljs-section,
 .editor-surface .hljs-attribute,
 .editor-surface .hljs-literal,
 .editor-surface .hljs-template-tag,
 .editor-surface .hljs-template-variable,
-.editor-surface .hljs-type,
 .editor-surface .hljs-addition {
   color: var(--syntax-yellow);
+}
+
+.editor-surface .hljs-title,
+.editor-surface .hljs-title.function_,
+.editor-surface .hljs-function,
+.editor-surface .hljs-selector-id,
+.editor-surface .hljs-selector-class {
+  color: var(--syntax-purple);
+}
+
+.editor-surface .hljs-params,
+.editor-surface .hljs-property,
+.editor-surface .hljs-attr {
+  color: var(--syntax-orange);
+}
+
+.editor-surface .hljs-type,
+.editor-surface .hljs-regexp,
+.editor-surface .hljs-doctag {
+  color: var(--syntax-red);
 }
 
 .editor-surface .hljs-number,
@@ -1985,7 +2177,8 @@ body.workspace-resizing * {
   text-transform: uppercase;
 }
 
-.settings-panel input {
+.settings-panel input,
+.settings-panel select {
   width: 100%;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -1996,6 +2189,21 @@ body.workspace-resizing * {
   font-weight: 800;
   outline: none;
   padding: 9px 10px;
+}
+
+.settings-panel select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 16px) 50%,
+    calc(100% - 11px) 50%;
+  background-repeat: no-repeat;
+  background-size:
+    5px 5px,
+    5px 5px;
+  padding-right: 30px;
 }
 
 .settings-tabs {
@@ -2078,6 +2286,12 @@ body.workspace-resizing * {
   color: var(--heading);
   font-size: 0.8rem;
   text-transform: none;
+}
+
+.callout-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
 }
 
 .theme-preset-grid {
@@ -2186,8 +2400,21 @@ body.workspace-resizing * {
   width: 32px;
   height: 28px;
   min-width: 32px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   padding: 2px;
+}
+
+.settings-panel .theme-token-control input[type="text"] {
+  width: min(100%, 340px);
+  min-width: 0;
+  height: 30px;
+  border: var(--border-width) solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--heading);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0 9px;
 }
 
 .settings-panel .theme-token-control code {
@@ -2616,7 +2843,7 @@ body.workspace-resizing * {
   z-index: 50;
   display: grid;
   place-items: center;
-  background: color-mix(in srgb, var(--app-bg) 70%, transparent);
+  background: transparent;
   padding: 24px;
 }
 
@@ -2631,12 +2858,19 @@ body.workspace-resizing * {
 
 .settings-header {
   display: flex;
+  user-select: none;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid var(--border-soft);
   background: var(--surface-muted);
+  cursor: grab;
   padding: 14px;
+  touch-action: none;
+}
+
+.settings-header.dragging {
+  cursor: grabbing;
 }
 
 .settings-header h2 {

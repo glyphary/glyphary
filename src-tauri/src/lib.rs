@@ -105,7 +105,64 @@ struct FrontmatterPillSettings {
 struct VaultTheme {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     preset_id: Option<String>,
+    #[serde(default, skip_serializing_if = "VaultThemeCallouts::is_default")]
+    callouts: VaultThemeCallouts,
+    #[serde(default, skip_serializing_if = "VaultThemeOptions::is_default")]
+    options: VaultThemeOptions,
+    #[serde(default)]
     tokens: HashMap<String, String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct VaultThemeCallouts {
+    #[serde(default = "default_callout_style")]
+    style: String,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    icons: HashMap<String, String>,
+}
+
+impl Default for VaultThemeCallouts {
+    fn default() -> Self {
+        Self {
+            style: default_callout_style(),
+            icons: default_callout_icons(),
+        }
+    }
+}
+
+impl VaultThemeCallouts {
+    fn is_default(callouts: &Self) -> bool {
+        callouts == &Self::default()
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct VaultThemeOptions {
+    colorful_headings: bool,
+    heading_underlines: bool,
+    heading_anchors: bool,
+    rich_callouts: bool,
+}
+
+impl VaultThemeOptions {
+    fn is_default(options: &Self) -> bool {
+        options == &Self::default()
+    }
+}
+
+fn default_callout_style() -> String {
+    "plain".into()
+}
+
+fn default_callout_icons() -> HashMap<String, String> {
+    HashMap::from([
+        ("note".into(), "info".into()),
+        ("info".into(), "info".into()),
+        ("tip".into(), "sparkles".into()),
+        ("warning".into(), "alert".into()),
+    ])
 }
 
 #[derive(Debug, Serialize)]
@@ -169,17 +226,45 @@ const THEME_TOKEN_ALLOWLIST: &[&str] = &[
     "--glyphary-border",
     "--glyphary-border-soft",
     "--glyphary-border-strong",
+    "--glyphary-callout-background",
+    "--glyphary-callout-border-width",
+    "--glyphary-callout-icon-size",
+    "--glyphary-callout-info-color",
+    "--glyphary-callout-note-color",
+    "--glyphary-callout-padding",
+    "--glyphary-callout-radius",
+    "--glyphary-callout-title-transform",
+    "--glyphary-callout-tip-color",
+    "--glyphary-callout-warning-color",
     "--glyphary-code-bg",
+    "--glyphary-code-font-size",
+    "--glyphary-code-tab-size",
     "--glyphary-code-text",
+    "--glyphary-block-gap",
+    "--glyphary-border-width",
+    "--glyphary-column-gap",
     "--glyphary-editor-text",
+    "--glyphary-editor-font-size",
+    "--glyphary-editor-line-height",
+    "--glyphary-editor-max-width",
+    "--glyphary-editor-padding-x",
+    "--glyphary-editor-padding-y",
     "--glyphary-focus",
+    "--glyphary-font-editor",
+    "--glyphary-font-mono",
+    "--glyphary-font-ui",
     "--glyphary-heading",
+    "--glyphary-heading-h1-size",
+    "--glyphary-heading-h2-size",
     "--glyphary-hover",
     "--glyphary-mono-text",
     "--glyphary-muted",
     "--glyphary-muted-strong",
     "--glyphary-quote-border",
     "--glyphary-quote-text",
+    "--glyphary-radius-lg",
+    "--glyphary-radius-md",
+    "--glyphary-radius-sm",
     "--glyphary-selection",
     "--glyphary-shadow",
     "--glyphary-shadow-strong",
@@ -191,8 +276,16 @@ const THEME_TOKEN_ALLOWLIST: &[&str] = &[
     "--syntax-blue",
     "--syntax-green",
     "--syntax-muted",
+    "--syntax-orange",
+    "--syntax-purple",
+    "--syntax-red",
     "--syntax-yellow",
 ];
+const THEME_CALLOUT_STYLE_ALLOWLIST: &[&str] =
+    &["plain", "striped", "card", "compact", "obsidian"];
+const THEME_CALLOUT_ICON_KEY_ALLOWLIST: &[&str] = &["note", "info", "tip", "warning"];
+const THEME_CALLOUT_ICON_ALLOWLIST: &[&str] =
+    &["info", "sparkles", "alert", "check", "quote", "none"];
 
 fn default_asset_directory() -> String {
     DEFAULT_ASSET_DIRECTORY.into()
@@ -333,9 +426,9 @@ fn clean_frontmatter_pill_settings(
     }
 
     if header_name.len() > 64
-        || !header_name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.'))
+        || !header_name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.')
+        })
     {
         return Err("Frontmatter pill header contains unsupported characters".into());
     }
@@ -367,25 +460,74 @@ fn clean_theme(theme: Option<VaultTheme>) -> Result<Option<VaultTheme>, String> 
             continue;
         }
 
-        if value.len() > 80 || !value.chars().all(is_safe_theme_value_char) {
+        if value.len() > 180 || !value.chars().all(is_safe_theme_value_char) {
             return Err(format!("Invalid theme value for {key}"));
         }
 
         tokens.insert(key, value.to_string());
     }
+    let callouts = clean_theme_callouts(theme.callouts)?;
 
-    if tokens.is_empty() {
+    if tokens.is_empty()
+        && theme.options == VaultThemeOptions::default()
+        && callouts == VaultThemeCallouts::default()
+    {
         Ok(None)
     } else {
-        Ok(Some(VaultTheme { preset_id, tokens }))
+        Ok(Some(VaultTheme {
+            preset_id,
+            callouts,
+            options: theme.options,
+            tokens,
+        }))
     }
+}
+
+fn clean_theme_callouts(callouts: VaultThemeCallouts) -> Result<VaultThemeCallouts, String> {
+    let style = callouts.style.trim().to_string();
+
+    if !THEME_CALLOUT_STYLE_ALLOWLIST.contains(&style.as_str()) {
+        return Err(format!("Unsupported callout style: {style}"));
+    }
+
+    let mut icons = default_callout_icons();
+
+    for (key, value) in callouts.icons {
+        let key = key.trim().to_string();
+        let value = value.trim().to_string();
+
+        if !THEME_CALLOUT_ICON_KEY_ALLOWLIST.contains(&key.as_str()) {
+            return Err(format!("Unsupported callout icon key: {key}"));
+        }
+
+        if !THEME_CALLOUT_ICON_ALLOWLIST.contains(&value.as_str()) {
+            return Err(format!("Unsupported callout icon: {value}"));
+        }
+
+        icons.insert(key, value);
+    }
+
+    Ok(VaultThemeCallouts { style, icons })
 }
 
 fn is_safe_theme_value_char(character: char) -> bool {
     character.is_ascii_alphanumeric()
         || matches!(
             character,
-            '#' | '(' | ')' | ',' | '.' | '%' | '-' | ' ' | '\t'
+            '#' | '('
+                | ')'
+                | ','
+                | '.'
+                | '%'
+                | '-'
+                | '+'
+                | '/'
+                | '_'
+                | '*'
+                | '"'
+                | '\''
+                | ' '
+                | '\t'
         )
 }
 
@@ -892,11 +1034,18 @@ fn find_meta_content(html: &str, key: &str) -> Option<String> {
         };
         let end = start + end_offset + 1;
         let attrs = parse_html_attrs(&html[start..end]);
-        let matches_key = attrs.get("property").is_some_and(|value| value.eq_ignore_ascii_case(&wanted))
-            || attrs.get("name").is_some_and(|value| value.eq_ignore_ascii_case(&wanted));
+        let matches_key = attrs
+            .get("property")
+            .is_some_and(|value| value.eq_ignore_ascii_case(&wanted))
+            || attrs
+                .get("name")
+                .is_some_and(|value| value.eq_ignore_ascii_case(&wanted));
 
         if matches_key {
-            if let Some(content) = attrs.get("content").map(|value| normalize_metadata_text(value)) {
+            if let Some(content) = attrs
+                .get("content")
+                .map(|value| normalize_metadata_text(value))
+            {
                 if !content.is_empty() {
                     return Some(content);
                 }
@@ -980,7 +1129,11 @@ fn find_first_page_image(html: &str, base_url: &str) -> Option<String> {
             .or_else(|| attrs.get("data-src"))
             .or_else(|| attrs.get("data-original"))
             .cloned()
-            .or_else(|| attrs.get("srcset").and_then(|value| first_srcset_url(value)));
+            .or_else(|| {
+                attrs
+                    .get("srcset")
+                    .and_then(|value| first_srcset_url(value))
+            });
 
         if let Some(image) = image {
             if is_usable_rich_link_image(&image) {
@@ -1444,7 +1597,11 @@ fn open_directory_shadow_file(root: String, relative: String) -> Result<OpenedFi
 }
 
 #[tauri::command]
-fn open_calendar_day_file(root: String, relative: String, _title: String) -> Result<OpenedFile, String> {
+fn open_calendar_day_file(
+    root: String,
+    relative: String,
+    _title: String,
+) -> Result<OpenedFile, String> {
     let root_path = vault_root(&root)?;
     let relative_path = clean_relative(&relative)?;
 
@@ -1472,8 +1629,7 @@ fn open_calendar_day_file(root: String, relative: String, _title: String) -> Res
 
         fs::create_dir_all(parent)
             .map_err(|err| format!("Could not create calendar directory: {err}"))?;
-        fs::write(&path, "")
-            .map_err(|err| format!("Could not create calendar note: {err}"))?;
+        fs::write(&path, "").map_err(|err| format!("Could not create calendar note: {err}"))?;
     }
 
     read_vault_file(
@@ -2066,11 +2222,9 @@ mod tests {
         );
         assert!(settings.editor.vim_mode);
         assert!(settings.appearance.glass_effect);
-        assert!(
-            fs::read_to_string(root.join(SETTINGS_FILE_NAME))
-                .expect("settings should be readable")
-                .contains("media/images")
-        );
+        assert!(fs::read_to_string(root.join(SETTINGS_FILE_NAME))
+            .expect("settings should be readable")
+            .contains("media/images"));
 
         fs::remove_dir_all(root).expect("test root should be removed");
     }
@@ -2165,6 +2319,11 @@ mod tests {
         let mut tokens = HashMap::new();
         tokens.insert("--glyphary-accent".into(), "#336699".into());
         tokens.insert("--glyphary-surface".into(), "  #ffffff  ".into());
+        tokens.insert(
+            "--glyphary-font-editor".into(),
+            "\"Avenir Next\", ui-serif, Georgia, serif".into(),
+        );
+        tokens.insert("--glyphary-editor-max-width".into(), "72ch".into());
 
         let settings = write_vault_settings(
             root.to_string_lossy().into_owned(),
@@ -2178,19 +2337,42 @@ mod tests {
                 appearance: AppearanceSettings::default(),
                 theme: Some(VaultTheme {
                     preset_id: Some("field-notes".into()),
+                    callouts: VaultThemeCallouts::default(),
+                    options: VaultThemeOptions {
+                        colorful_headings: true,
+                        heading_underlines: true,
+                        heading_anchors: false,
+                        rich_callouts: true,
+                    },
                     tokens,
                 }),
             },
         )
         .expect("settings should write");
-        let saved_theme = settings
-            .theme
-            .expect("theme should be retained");
+        let saved_theme = settings.theme.expect("theme should be retained");
+        assert!(saved_theme.options.colorful_headings);
+        assert!(saved_theme.options.heading_underlines);
+        assert!(!saved_theme.options.heading_anchors);
+        assert!(saved_theme.options.rich_callouts);
         let saved_tokens = saved_theme.tokens;
 
         assert_eq!(saved_theme.preset_id, Some("field-notes".to_string()));
-        assert_eq!(saved_tokens.get("--glyphary-accent"), Some(&"#336699".to_string()));
-        assert_eq!(saved_tokens.get("--glyphary-surface"), Some(&"#ffffff".to_string()));
+        assert_eq!(
+            saved_tokens.get("--glyphary-accent"),
+            Some(&"#336699".to_string())
+        );
+        assert_eq!(
+            saved_tokens.get("--glyphary-surface"),
+            Some(&"#ffffff".to_string())
+        );
+        assert_eq!(
+            saved_tokens.get("--glyphary-font-editor"),
+            Some(&"\"Avenir Next\", ui-serif, Georgia, serif".to_string())
+        );
+        assert_eq!(
+            saved_tokens.get("--glyphary-editor-max-width"),
+            Some(&"72ch".to_string())
+        );
 
         fs::remove_dir_all(root).expect("test root should be removed");
     }
@@ -2213,6 +2395,8 @@ mod tests {
                 appearance: AppearanceSettings::default(),
                 theme: Some(VaultTheme {
                     preset_id: None,
+                    callouts: VaultThemeCallouts::default(),
+                    options: VaultThemeOptions::default(),
                     tokens,
                 }),
             },
@@ -2220,6 +2404,119 @@ mod tests {
         .expect_err("unsupported token should fail");
 
         assert!(error.contains("Unsupported theme token"));
+
+        fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn writes_vault_theme_options_without_tokens() {
+        let root = test_root();
+
+        let settings = write_vault_settings(
+            root.to_string_lossy().into_owned(),
+            VaultSettings {
+                asset_directory: DEFAULT_ASSET_DIRECTORY.into(),
+                frontmatter_pills: FrontmatterPillSettings::default(),
+                files: FileDisplaySettings::default(),
+                autosave: AutosaveSettings::default(),
+                tidbits: TidbitSettings::default(),
+                editor: EditorSettings::default(),
+                appearance: AppearanceSettings::default(),
+                theme: Some(VaultTheme {
+                    preset_id: None,
+                    callouts: VaultThemeCallouts {
+                        style: "card".into(),
+                        icons: HashMap::from([
+                            ("note".into(), "quote".into()),
+                            ("tip".into(), "check".into()),
+                        ]),
+                    },
+                    options: VaultThemeOptions {
+                        colorful_headings: false,
+                        heading_underlines: false,
+                        heading_anchors: true,
+                        rich_callouts: true,
+                    },
+                    tokens: HashMap::new(),
+                }),
+            },
+        )
+        .expect("theme options should write without token overrides");
+        let saved_theme = settings.theme.expect("theme options should be retained");
+
+        assert!(saved_theme.tokens.is_empty());
+        assert_eq!(saved_theme.callouts.style, "card");
+        assert_eq!(
+            saved_theme.callouts.icons.get("note"),
+            Some(&"quote".to_string())
+        );
+        assert_eq!(
+            saved_theme.callouts.icons.get("info"),
+            Some(&"info".to_string())
+        );
+        assert_eq!(
+            saved_theme.callouts.icons.get("tip"),
+            Some(&"check".to_string())
+        );
+        assert!(saved_theme.options.heading_anchors);
+        assert!(saved_theme.options.rich_callouts);
+
+        fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn rejects_unsupported_vault_callout_settings() {
+        let root = test_root();
+
+        let bad_style = write_vault_settings(
+            root.to_string_lossy().into_owned(),
+            VaultSettings {
+                asset_directory: DEFAULT_ASSET_DIRECTORY.into(),
+                frontmatter_pills: FrontmatterPillSettings::default(),
+                files: FileDisplaySettings::default(),
+                autosave: AutosaveSettings::default(),
+                tidbits: TidbitSettings::default(),
+                editor: EditorSettings::default(),
+                appearance: AppearanceSettings::default(),
+                theme: Some(VaultTheme {
+                    preset_id: None,
+                    callouts: VaultThemeCallouts {
+                        style: "scripted".into(),
+                        icons: HashMap::new(),
+                    },
+                    options: VaultThemeOptions::default(),
+                    tokens: HashMap::new(),
+                }),
+            },
+        )
+        .expect_err("unsupported callout style should fail");
+
+        assert!(bad_style.contains("Unsupported callout style"));
+
+        let bad_icon = write_vault_settings(
+            root.to_string_lossy().into_owned(),
+            VaultSettings {
+                asset_directory: DEFAULT_ASSET_DIRECTORY.into(),
+                frontmatter_pills: FrontmatterPillSettings::default(),
+                files: FileDisplaySettings::default(),
+                autosave: AutosaveSettings::default(),
+                tidbits: TidbitSettings::default(),
+                editor: EditorSettings::default(),
+                appearance: AppearanceSettings::default(),
+                theme: Some(VaultTheme {
+                    preset_id: None,
+                    callouts: VaultThemeCallouts {
+                        style: "plain".into(),
+                        icons: HashMap::from([("note".into(), "skull".into())]),
+                    },
+                    options: VaultThemeOptions::default(),
+                    tokens: HashMap::new(),
+                }),
+            },
+        )
+        .expect_err("unsupported callout icon should fail");
+
+        assert!(bad_icon.contains("Unsupported callout icon"));
 
         fs::remove_dir_all(root).expect("test root should be removed");
     }
@@ -2383,7 +2680,8 @@ mod tests {
     #[test]
     fn refuses_to_move_vault_directory_into_itself() {
         let root = test_root();
-        fs::create_dir_all(root.join("notes").join("child")).expect("directories should be created");
+        fs::create_dir_all(root.join("notes").join("child"))
+            .expect("directories should be created");
 
         let error = move_vault_directory(
             root.to_string_lossy().into_owned(),
@@ -2435,8 +2733,11 @@ mod tests {
     fn lists_calendar_day_files() {
         let root = test_root();
         fs::create_dir(root.join("Calendar")).expect("calendar directory should be created");
-        fs::write(root.join("Calendar").join("Sun, Jun 14th 2026.md"), "# Day\n")
-            .expect("calendar file should be created");
+        fs::write(
+            root.join("Calendar").join("Sun, Jun 14th 2026.md"),
+            "# Day\n",
+        )
+        .expect("calendar file should be created");
         fs::create_dir(root.join("Calendar").join("Archive"))
             .expect("nested directory should be created");
 
@@ -2643,7 +2944,10 @@ mod tests {
         )
         .expect("asset should save in custom directory");
 
-        assert_eq!(saved.relative_path, "media/images/Pasted image 20230102173741.png");
+        assert_eq!(
+            saved.relative_path,
+            "media/images/Pasted image 20230102173741.png"
+        );
         assert_eq!(
             fs::read(root.join("media").join("images").join(saved.file_name))
                 .expect("asset should be read"),

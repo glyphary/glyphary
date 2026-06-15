@@ -1124,7 +1124,25 @@ type SavedAsset = {
 
 type VaultThemeSettings = {
   presetId?: string | null;
+  callouts?: VaultThemeCalloutSettings | null;
   tokens: Record<string, string>;
+  options?: VaultThemeOptions | null;
+};
+
+type CalloutKind = "note" | "info" | "tip" | "warning";
+type CalloutStyle = "plain" | "striped" | "card" | "compact" | "obsidian";
+type CalloutIconName = "info" | "sparkles" | "alert" | "check" | "quote" | "none";
+
+type VaultThemeCalloutSettings = {
+  style: CalloutStyle;
+  icons: Record<CalloutKind, CalloutIconName>;
+};
+
+type VaultThemeOptions = {
+  colorfulHeadings: boolean;
+  headingUnderlines: boolean;
+  headingAnchors: boolean;
+  richCallouts: boolean;
 };
 
 type FrontmatterPillSettings = {
@@ -1150,6 +1168,14 @@ type TidbitSettings = {
 
 type VaultAppearanceSettings = {
   glassEffect: boolean;
+};
+
+type SettingsDragState = {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  originX: number;
+  originY: number;
 };
 
 type VaultSettings = {
@@ -1246,6 +1272,8 @@ type PersistedWorkspace = {
 type ThemeTokenControl = {
   label: string;
   token: string;
+  kind?: "color" | "value";
+  placeholder?: string;
 };
 
 type ThemeTokenGroup = {
@@ -1451,6 +1479,75 @@ const defaultTidbitSettings: TidbitSettings = {
 const defaultVaultAppearanceSettings: VaultAppearanceSettings = {
   glassEffect: false,
 };
+const defaultThemeOptions: VaultThemeOptions = {
+  colorfulHeadings: false,
+  headingUnderlines: false,
+  headingAnchors: false,
+  richCallouts: false,
+};
+const calloutStyleOptions: Array<{ value: CalloutStyle; label: string }> = [
+  { value: "plain", label: "Plain" },
+  { value: "striped", label: "Striped" },
+  { value: "card", label: "Card" },
+  { value: "compact", label: "Compact" },
+  { value: "obsidian", label: "Obsidian" },
+];
+const calloutIconOptions: Array<{ value: CalloutIconName; label: string; glyph: string }> = [
+  { value: "info", label: "Info", glyph: "i" },
+  { value: "sparkles", label: "Sparkles", glyph: "*" },
+  { value: "alert", label: "Alert", glyph: "!" },
+  { value: "check", label: "Check", glyph: "+" },
+  { value: "quote", label: "Quote", glyph: "\"" },
+  { value: "none", label: "None", glyph: "" },
+];
+const calloutKinds: Array<{ value: CalloutKind; label: string }> = [
+  { value: "note", label: "Note" },
+  { value: "info", label: "Info" },
+  { value: "tip", label: "Tip" },
+  { value: "warning", label: "Warning" },
+];
+const defaultThemeCalloutSettings: VaultThemeCalloutSettings = {
+  style: "plain",
+  icons: {
+    note: "info",
+    info: "info",
+    tip: "sparkles",
+    warning: "alert",
+  },
+};
+const defaultThemeLevelOneTokens: Record<string, string> = {
+  "--glyphary-font-ui": "Inter, ui-sans-serif, system-ui, sans-serif",
+  "--glyphary-font-editor": "Inter, ui-sans-serif, system-ui, sans-serif",
+  "--glyphary-font-mono": "SFMono-Regular, Consolas, Liberation Mono, monospace",
+  "--glyphary-editor-font-size": "1.05rem",
+  "--glyphary-editor-line-height": "1.7",
+  "--glyphary-editor-max-width": "none",
+  "--glyphary-editor-padding-y": "38px",
+  "--glyphary-editor-padding-x": "min(6vw, 72px)",
+  "--glyphary-block-gap": "0.85em",
+  "--glyphary-heading-h1-size": "2rem",
+  "--glyphary-heading-h2-size": "1.45rem",
+  "--glyphary-code-font-size": "0.92em",
+  "--glyphary-code-tab-size": "4",
+  "--glyphary-callout-background": "transparent",
+  "--glyphary-callout-border-width": "1px",
+  "--glyphary-callout-icon-size": "1.45rem",
+  "--glyphary-callout-note-color": "#2f6846",
+  "--glyphary-callout-info-color": "#2f6846",
+  "--glyphary-callout-padding": "0.85rem 1rem",
+  "--glyphary-callout-radius": "8px",
+  "--glyphary-callout-title-transform": "uppercase",
+  "--glyphary-callout-tip-color": "#8fd18f",
+  "--glyphary-callout-warning-color": "#f5d08c",
+  "--glyphary-radius-sm": "6px",
+  "--glyphary-radius-md": "8px",
+  "--glyphary-radius-lg": "10px",
+  "--glyphary-border-width": "1px",
+  "--glyphary-column-gap": "16px",
+  "--syntax-red": "#ee8f8f",
+  "--syntax-purple": "#c7a6ff",
+  "--syntax-orange": "#e6a75e",
+};
 
 // The theme builder deliberately exposes only stable Glyphary variables. Vault
 // settings persist these tokens directly, while CSS maps them onto Obsidian-like
@@ -1500,12 +1597,173 @@ const themeTokenGroups: ThemeTokenGroup[] = [
     ],
   },
   {
+    title: "Callouts",
+    controls: [
+      { label: "Background", token: "--glyphary-callout-background" },
+      { label: "Note color", token: "--glyphary-callout-note-color" },
+      { label: "Info color", token: "--glyphary-callout-info-color" },
+      { label: "Tip color", token: "--glyphary-callout-tip-color" },
+      { label: "Warning color", token: "--glyphary-callout-warning-color" },
+      {
+        label: "Padding",
+        token: "--glyphary-callout-padding",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-callout-padding"],
+      },
+      {
+        label: "Radius",
+        token: "--glyphary-callout-radius",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-callout-radius"],
+      },
+      {
+        label: "Border width",
+        token: "--glyphary-callout-border-width",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-callout-border-width"],
+      },
+      {
+        label: "Icon size",
+        token: "--glyphary-callout-icon-size",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-callout-icon-size"],
+      },
+      {
+        label: "Title transform",
+        token: "--glyphary-callout-title-transform",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-callout-title-transform"],
+      },
+    ],
+  },
+  {
     title: "Syntax",
     controls: [
       { label: "Blue", token: "--syntax-blue" },
       { label: "Green", token: "--syntax-green" },
       { label: "Yellow", token: "--syntax-yellow" },
+      { label: "Red", token: "--syntax-red" },
+      { label: "Purple", token: "--syntax-purple" },
+      { label: "Orange", token: "--syntax-orange" },
       { label: "Muted", token: "--syntax-muted" },
+    ],
+  },
+  {
+    title: "Typography",
+    controls: [
+      {
+        label: "UI font stack",
+        token: "--glyphary-font-ui",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-font-ui"],
+      },
+      {
+        label: "Editor font stack",
+        token: "--glyphary-font-editor",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-font-editor"],
+      },
+      {
+        label: "Code font stack",
+        token: "--glyphary-font-mono",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-font-mono"],
+      },
+      {
+        label: "Editor font size",
+        token: "--glyphary-editor-font-size",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-editor-font-size"],
+      },
+      {
+        label: "Editor line height",
+        token: "--glyphary-editor-line-height",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-editor-line-height"],
+      },
+      {
+        label: "H1 size",
+        token: "--glyphary-heading-h1-size",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-heading-h1-size"],
+      },
+      {
+        label: "H2 size",
+        token: "--glyphary-heading-h2-size",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-heading-h2-size"],
+      },
+      {
+        label: "Code font size",
+        token: "--glyphary-code-font-size",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-code-font-size"],
+      },
+    ],
+  },
+  {
+    title: "Spacing And Shape",
+    controls: [
+      {
+        label: "Editor max width",
+        token: "--glyphary-editor-max-width",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-editor-max-width"],
+      },
+      {
+        label: "Editor vertical padding",
+        token: "--glyphary-editor-padding-y",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-editor-padding-y"],
+      },
+      {
+        label: "Editor horizontal padding",
+        token: "--glyphary-editor-padding-x",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-editor-padding-x"],
+      },
+      {
+        label: "Block gap",
+        token: "--glyphary-block-gap",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-block-gap"],
+      },
+      {
+        label: "Column gap",
+        token: "--glyphary-column-gap",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-column-gap"],
+      },
+      {
+        label: "Small radius",
+        token: "--glyphary-radius-sm",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-radius-sm"],
+      },
+      {
+        label: "Medium radius",
+        token: "--glyphary-radius-md",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-radius-md"],
+      },
+      {
+        label: "Large radius",
+        token: "--glyphary-radius-lg",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-radius-lg"],
+      },
+      {
+        label: "Border width",
+        token: "--glyphary-border-width",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-border-width"],
+      },
+      {
+        label: "Code tab size",
+        token: "--glyphary-code-tab-size",
+        kind: "value",
+        placeholder: defaultThemeLevelOneTokens["--glyphary-code-tab-size"],
+      },
     ],
   },
 ];
@@ -1952,6 +2210,13 @@ const themePresets: ThemePreset[] = [
   },
 ];
 
+for (const preset of themePresets) {
+  preset.tokens = {
+    ...defaultThemeLevelOneTokens,
+    ...preset.tokens,
+  };
+}
+
 function readPersistedWorkspace() {
   try {
     const raw = window.localStorage.getItem(workspaceStorageKey);
@@ -2030,6 +2295,77 @@ function normalizeThemePresetId(presetId: string | undefined | null) {
   const cleanPresetId = presetId?.trim() ?? "";
 
   return themePresets.some((preset) => preset.id === cleanPresetId) ? cleanPresetId : null;
+}
+
+function normalizeCalloutStyle(style: string | undefined | null): CalloutStyle {
+  return calloutStyleOptions.find((option) => option.value === style)?.value ?? "plain";
+}
+
+function normalizeCalloutIcon(
+  icon: string | undefined | null,
+  fallback: CalloutIconName,
+): CalloutIconName {
+  return calloutIconOptions.find((option) => option.value === icon)?.value ?? fallback;
+}
+
+function normalizeThemeCalloutSettings(
+  callouts: VaultThemeCalloutSettings | undefined | null,
+) {
+  return {
+    style: normalizeCalloutStyle(callouts?.style),
+    icons: {
+      note: normalizeCalloutIcon(callouts?.icons?.note, defaultThemeCalloutSettings.icons.note),
+      info: normalizeCalloutIcon(callouts?.icons?.info, defaultThemeCalloutSettings.icons.info),
+      tip: normalizeCalloutIcon(callouts?.icons?.tip, defaultThemeCalloutSettings.icons.tip),
+      warning: normalizeCalloutIcon(
+        callouts?.icons?.warning,
+        defaultThemeCalloutSettings.icons.warning,
+      ),
+    },
+  };
+}
+
+function sameThemeCalloutSettings(
+  left: VaultThemeCalloutSettings | undefined | null,
+  right: VaultThemeCalloutSettings | undefined | null,
+) {
+  const normalizedLeft = normalizeThemeCalloutSettings(left);
+  const normalizedRight = normalizeThemeCalloutSettings(right);
+
+  return (
+    normalizedLeft.style === normalizedRight.style &&
+    calloutKinds.every(
+      ({ value }) => normalizedLeft.icons[value] === normalizedRight.icons[value],
+    )
+  );
+}
+
+function calloutIconGlyph(icon: CalloutIconName) {
+  return calloutIconOptions.find((option) => option.value === icon)?.glyph ?? "";
+}
+
+function normalizeThemeOptions(options: VaultThemeOptions | undefined | null) {
+  return {
+    colorfulHeadings: options?.colorfulHeadings ?? defaultThemeOptions.colorfulHeadings,
+    headingUnderlines: options?.headingUnderlines ?? defaultThemeOptions.headingUnderlines,
+    headingAnchors: options?.headingAnchors ?? defaultThemeOptions.headingAnchors,
+    richCallouts: options?.richCallouts ?? defaultThemeOptions.richCallouts,
+  };
+}
+
+function sameThemeOptions(
+  left: VaultThemeOptions | undefined | null,
+  right: VaultThemeOptions | undefined | null,
+) {
+  const normalizedLeft = normalizeThemeOptions(left);
+  const normalizedRight = normalizeThemeOptions(right);
+
+  return (
+    normalizedLeft.colorfulHeadings === normalizedRight.colorfulHeadings &&
+    normalizedLeft.headingUnderlines === normalizedRight.headingUnderlines &&
+    normalizedLeft.headingAnchors === normalizedRight.headingAnchors &&
+    normalizedLeft.richCallouts === normalizedRight.richCallouts
+  );
 }
 
 function sameThemeTokens(
@@ -2825,6 +3161,10 @@ function App() {
     useState<VaultAppearanceSettings>(defaultVaultAppearanceSettings);
   const [selectedThemePresetIdDraft, setSelectedThemePresetIdDraft] = useState<string | null>(null);
   const [themeDraft, setThemeDraft] = useState<Record<string, string>>({});
+  const [themeOptionsDraft, setThemeOptionsDraft] =
+    useState<VaultThemeOptions>(defaultThemeOptions);
+  const [themeCalloutDraft, setThemeCalloutDraft] =
+    useState<VaultThemeCalloutSettings>(defaultThemeCalloutSettings);
   const [currentDir, setCurrentDir] = useState("");
   const [entries, setEntries] = useState<VaultEntry[]>([]);
   const [activeFile, setActiveFile] = useState<ActiveFile | null>(null);
@@ -2858,6 +3198,8 @@ function App() {
   const [calendarNoteDateKeys, setCalendarNoteDateKeys] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("main");
+  const [settingsOffset, setSettingsOffset] = useState({ x: 0, y: 0 });
+  const [settingsDragging, setSettingsDragging] = useState<SettingsDragState | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteSelectedIndex, setCommandPaletteSelectedIndex] = useState(0);
@@ -3113,6 +3455,15 @@ function App() {
     );
   }
 
+  function rawThemeTokenValue(control: ThemeTokenControl) {
+    return (
+      themeDraft[control.token] ??
+      window.getComputedStyle(document.documentElement).getPropertyValue(control.token).trim() ??
+      control.placeholder ??
+      ""
+    );
+  }
+
   function updateThemeDraftToken(token: string, value: string) {
     setThemeDraft((tokens) => ({
       ...tokens,
@@ -3133,6 +3484,14 @@ function App() {
 
   function savedThemePresetId() {
     return normalizeThemePresetId(vaultSettings.theme?.presetId);
+  }
+
+  function savedThemeOptions() {
+    return normalizeThemeOptions(vaultSettings.theme?.options);
+  }
+
+  function savedThemeCalloutSettings() {
+    return normalizeThemeCalloutSettings(vaultSettings.theme?.callouts);
   }
 
   function savedFrontmatterPillSettings() {
@@ -3169,13 +3528,17 @@ function App() {
       !sameTidbitSettings(tidbitDraft, savedTidbitSettings()) ||
       !sameVaultAppearanceSettings(vaultAppearanceDraft, savedVaultAppearanceSettings()) ||
       selectedThemePresetIdDraft !== savedThemePresetId() ||
-      !sameThemeTokens(themeDraft, savedThemeTokens())
+      !sameThemeTokens(themeDraft, savedThemeTokens()) ||
+      !sameThemeOptions(themeOptionsDraft, savedThemeOptions()) ||
+      !sameThemeCalloutSettings(themeCalloutDraft, savedThemeCalloutSettings())
     );
   }
 
   function resetThemeDraft() {
     setSelectedThemePresetIdDraft(null);
     setThemeDraft({});
+    setThemeOptionsDraft(defaultThemeOptions);
+    setThemeCalloutDraft(defaultThemeCalloutSettings);
     setStatus("Reset theme preview");
   }
 
@@ -3189,7 +3552,65 @@ function App() {
     setVaultAppearanceDraft(savedVaultAppearanceSettings());
     setSelectedThemePresetIdDraft(savedThemePresetId());
     setThemeDraft(savedThemeTokens());
+    setThemeOptionsDraft(savedThemeOptions());
+    setThemeCalloutDraft(savedThemeCalloutSettings());
     setStatus("Reverted settings preview");
+  }
+
+  function openSettings() {
+    setSettingsOffset({ x: 0, y: 0 });
+    setSettingsDragging(null);
+    setSettingsOpen(true);
+  }
+
+  function closeSettings() {
+    setSettingsDragging(null);
+    setSettingsOpen(false);
+  }
+
+  function clampSettingsOffset(x: number, y: number) {
+    const margin = 28;
+    const maxX = Math.max(0, window.innerWidth / 2 - margin);
+    const maxY = Math.max(0, window.innerHeight / 2 - margin);
+
+    return {
+      x: Math.min(maxX, Math.max(-maxX, x)),
+      y: Math.min(maxY, Math.max(-maxY, y)),
+    };
+  }
+
+  function startSettingsDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setSettingsDragging({
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: settingsOffset.x,
+      originY: settingsOffset.y,
+    });
+  }
+
+  function moveSettingsDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!settingsDragging || settingsDragging.pointerId !== event.pointerId) {
+      return;
+    }
+
+    setSettingsOffset(
+      clampSettingsOffset(
+        settingsDragging.originX + event.clientX - settingsDragging.startX,
+        settingsDragging.originY + event.clientY - settingsDragging.startY,
+      ),
+    );
+  }
+
+  function stopSettingsDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (settingsDragging?.pointerId === event.pointerId) {
+      setSettingsDragging(null);
+    }
   }
 
   function editorForGroup(groupId: EditorGroupId) {
@@ -4084,9 +4505,11 @@ function App() {
           editor: defaultEditorBehaviorSettings,
           appearance: defaultVaultAppearanceSettings,
           theme: null,
-        };
+    };
     const themeTokens = normalizeThemeTokens(settings.theme?.tokens);
     const themePresetId = normalizeThemePresetId(settings.theme?.presetId);
+    const themeOptions = normalizeThemeOptions(settings.theme?.options);
+    const themeCallouts = normalizeThemeCalloutSettings(settings.theme?.callouts);
     const frontmatterPills = normalizeFrontmatterPillSettings(settings.frontmatterPills);
     const editorSettings = normalizeEditorBehaviorSettings(settings.editor);
     const fileDisplaySettings = normalizeFileDisplaySettings(settings.files);
@@ -4102,6 +4525,17 @@ function App() {
       tidbits,
       editor: editorSettings,
       appearance: vaultAppearanceSettings,
+      theme:
+        Object.keys(themeTokens).length > 0 ||
+        !sameThemeOptions(themeOptions, defaultThemeOptions) ||
+        !sameThemeCalloutSettings(themeCallouts, defaultThemeCalloutSettings)
+          ? {
+              presetId: themePresetId,
+              callouts: themeCallouts,
+              tokens: themeTokens,
+              options: themeOptions,
+            }
+          : null,
     };
 
     vaultSettingsRef.current = normalizedSettings;
@@ -4118,6 +4552,8 @@ function App() {
     setVaultAppearanceDraft(vaultAppearanceSettings);
     setSelectedThemePresetIdDraft(themePresetId);
     setThemeDraft(themeTokens);
+    setThemeOptionsDraft(themeOptions);
+    setThemeCalloutDraft(themeCallouts);
 
     if (isTauri()) {
       // Tauri's asset protocol is deny-by-default. Re-allow the configured
@@ -4147,16 +4583,23 @@ function App() {
           tidbits: normalizeTidbitSettings(tidbitDraft),
           editor: normalizeEditorBehaviorSettings(editorBehaviorDraft),
           appearance: normalizeVaultAppearanceSettings(vaultAppearanceDraft),
-          theme: Object.keys(normalizeThemeTokens(themeDraft)).length > 0
+          theme:
+            Object.keys(normalizeThemeTokens(themeDraft)).length > 0 ||
+            !sameThemeOptions(themeOptionsDraft, defaultThemeOptions) ||
+            !sameThemeCalloutSettings(themeCalloutDraft, defaultThemeCalloutSettings)
             ? {
                 presetId: selectedThemePresetIdDraft,
+                callouts: normalizeThemeCalloutSettings(themeCalloutDraft),
                 tokens: normalizeThemeTokens(themeDraft),
+                options: normalizeThemeOptions(themeOptionsDraft),
               }
             : null,
         },
       });
       const themeTokens = normalizeThemeTokens(settings.theme?.tokens);
       const themePresetId = normalizeThemePresetId(settings.theme?.presetId);
+      const themeOptions = normalizeThemeOptions(settings.theme?.options);
+      const themeCallouts = normalizeThemeCalloutSettings(settings.theme?.callouts);
       const frontmatterPills = normalizeFrontmatterPillSettings(settings.frontmatterPills);
       const editorSettings = normalizeEditorBehaviorSettings(settings.editor);
       const fileDisplaySettings = normalizeFileDisplaySettings(settings.files);
@@ -4171,6 +4614,17 @@ function App() {
         tidbits,
         editor: editorSettings,
         appearance: vaultAppearanceSettings,
+        theme:
+          Object.keys(themeTokens).length > 0 ||
+          !sameThemeOptions(themeOptions, defaultThemeOptions) ||
+          !sameThemeCalloutSettings(themeCallouts, defaultThemeCalloutSettings)
+            ? {
+                presetId: themePresetId,
+                callouts: themeCallouts,
+                tokens: themeTokens,
+                options: themeOptions,
+              }
+            : null,
       };
 
       snapshotActiveTab("primary");
@@ -4191,6 +4645,8 @@ function App() {
       setVaultAppearanceDraft(vaultAppearanceSettings);
       setSelectedThemePresetIdDraft(themePresetId);
       setThemeDraft(themeTokens);
+      setThemeOptionsDraft(themeOptions);
+      setThemeCalloutDraft(themeCallouts);
       await invoke("allow_vault_assets", {
         root: vaultRoot,
         assetDirectory: settings.assetDirectory,
@@ -4394,6 +4850,23 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!settingsOpen) {
+      return;
+    }
+
+    const closeSettingsOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeSettings();
+      }
+    };
+
+    window.addEventListener("keydown", closeSettingsOnEscape);
+
+    return () => window.removeEventListener("keydown", closeSettingsOnEscape);
+  }, [settingsOpen]);
+
+  useEffect(() => {
     if (!commandPaletteOpen) {
       return;
     }
@@ -4461,9 +4934,7 @@ function App() {
         setStatus(error instanceof Error ? error.message : String(error));
       });
 
-    listen("settings-requested", () => {
-      setSettingsOpen(true);
-    })
+    listen("settings-requested", openSettings)
       .then((nextUnlisten) => {
         unlisteners.push(nextUnlisten);
       })
@@ -5804,8 +6275,28 @@ function App() {
     "--drawer-resizer-width": drawerOpen ? `${workspaceResizeHandleWidth}px` : "0px",
   } as CSSProperties;
 
+  const appShellClassName = [
+    "app-shell",
+    themeOptionsDraft.colorfulHeadings ? "theme-colorful-headings" : null,
+    themeOptionsDraft.headingUnderlines ? "theme-heading-underlines" : null,
+    themeOptionsDraft.headingAnchors ? "theme-heading-anchors" : null,
+    themeOptionsDraft.richCallouts ? "theme-rich-callouts" : null,
+    `callout-style-${themeCalloutDraft.style}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const appShellStyle = {
+    "--glyphary-callout-note-icon": `"${calloutIconGlyph(themeCalloutDraft.icons.note)}"`,
+    "--glyphary-callout-info-icon": `"${calloutIconGlyph(themeCalloutDraft.icons.info)}"`,
+    "--glyphary-callout-tip-icon": `"${calloutIconGlyph(themeCalloutDraft.icons.tip)}"`,
+    "--glyphary-callout-warning-icon": `"${calloutIconGlyph(themeCalloutDraft.icons.warning)}"`,
+  } as CSSProperties;
+  const settingsCardStyle = {
+    transform: `translate(${settingsOffset.x}px, ${settingsOffset.y}px)`,
+  } as CSSProperties;
+
   return (
-    <main className="app-shell">
+    <main className={appShellClassName} style={appShellStyle}>
       <datalist id="code-language-options">
         {codeLanguages.map((language) => (
           <option key={language.value || "plain"} value={language.value}>
@@ -5834,7 +6325,7 @@ function App() {
                 <button type="button" onClick={resetDocument}>
                   New
                 </button>
-                <button type="button" onClick={() => setSettingsOpen(true)}>
+                <button type="button" onClick={openSettings}>
                   Settings...
                 </button>
               </div>
@@ -6451,8 +6942,14 @@ function App() {
       </section>
       {settingsOpen ? (
         <div className="settings-screen" role="dialog" aria-modal="true" aria-label="Settings">
-          <div className="settings-card">
-            <div className="settings-header">
+          <div className="settings-card" style={settingsCardStyle}>
+            <div
+              className={settingsDragging ? "settings-header dragging" : "settings-header"}
+              onPointerCancel={stopSettingsDrag}
+              onPointerDown={startSettingsDrag}
+              onPointerMove={moveSettingsDrag}
+              onPointerUp={stopSettingsDrag}
+            >
               <div>
                 <h2>Settings</h2>
                 <span>{vaultRoot ? "Current vault" : "No vault open"}</span>
@@ -6461,7 +6958,7 @@ function App() {
                 className="inline-action"
                 type="button"
                 aria-label="Close settings"
-                onClick={() => setSettingsOpen(false)}
+                onClick={closeSettings}
               >
                 Close
               </button>
@@ -6539,12 +7036,14 @@ function App() {
                         checked={frontmatterPillDraft.enabled}
                         disabled={!vaultRoot}
                         type="checkbox"
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const enabled = event.currentTarget.checked;
+
                           setFrontmatterPillDraft((settings) => ({
                             ...settings,
-                            enabled: event.currentTarget.checked,
-                          }))
-                        }
+                            enabled,
+                          }));
+                        }}
                       />
                       <span>Show frontmatter pills</span>
                     </label>
@@ -6553,12 +7052,14 @@ function App() {
                       <input
                         disabled={!vaultRoot || !frontmatterPillDraft.enabled}
                         value={frontmatterPillDraft.headerName}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const headerName = event.currentTarget.value;
+
                           setFrontmatterPillDraft((settings) => ({
                             ...settings,
-                            headerName: event.currentTarget.value,
-                          }))
-                        }
+                            headerName,
+                          }));
+                        }}
                         placeholder={defaultFrontmatterPillHeader}
                       />
                     </label>
@@ -6654,6 +7155,138 @@ function App() {
                       ))}
                     </div>
                   </section>
+                  <section className="settings-section" aria-label="Theme options">
+                    <div className="settings-section-header">
+                      <div>
+                        <h3>Theme Options</h3>
+                        <p>Apply optional editor treatments on top of the selected theme.</p>
+                      </div>
+                    </div>
+                    <label className="settings-check-control">
+                      <input
+                        checked={themeOptionsDraft.colorfulHeadings}
+                        disabled={!vaultRoot}
+                        type="checkbox"
+                        onChange={(event) => {
+                          const colorfulHeadings = event.currentTarget.checked;
+
+                          setThemeOptionsDraft((options) => ({
+                            ...options,
+                            colorfulHeadings,
+                          }));
+                        }}
+                      />
+                      <span>Use colorful heading levels</span>
+                    </label>
+                    <label className="settings-check-control">
+                      <input
+                        checked={themeOptionsDraft.headingUnderlines}
+                        disabled={!vaultRoot}
+                        type="checkbox"
+                        onChange={(event) => {
+                          const headingUnderlines = event.currentTarget.checked;
+
+                          setThemeOptionsDraft((options) => ({
+                            ...options,
+                            headingUnderlines,
+                          }));
+                        }}
+                      />
+                      <span>Add heading underlines</span>
+                    </label>
+                    <label className="settings-check-control">
+                      <input
+                        checked={themeOptionsDraft.headingAnchors}
+                        disabled={!vaultRoot}
+                        type="checkbox"
+                        onChange={(event) => {
+                          const headingAnchors = event.currentTarget.checked;
+
+                          setThemeOptionsDraft((options) => ({
+                            ...options,
+                            headingAnchors,
+                          }));
+                        }}
+                      />
+                      <span>Show heading anchor markers</span>
+                    </label>
+                    <label className="settings-check-control">
+                      <input
+                        checked={themeOptionsDraft.richCallouts}
+                        disabled={!vaultRoot}
+                        type="checkbox"
+                        onChange={(event) => {
+                          const richCallouts = event.currentTarget.checked;
+
+                          setThemeOptionsDraft((options) => ({
+                            ...options,
+                            richCallouts,
+                          }));
+                        }}
+                      />
+                      <span>Use rich callout styling and icons</span>
+                    </label>
+                  </section>
+                  <section className="settings-section" aria-label="Callout rendering">
+                    <div className="settings-section-header">
+                      <div>
+                        <h3>Callout Rendering</h3>
+                        <p>Choose a structured callout layout and icons for this vault theme.</p>
+                      </div>
+                    </div>
+                    <label>
+                      <span>Callout layout</span>
+                      <select
+                        disabled={!vaultRoot}
+                        value={themeCalloutDraft.style}
+                        onChange={(event) => {
+                          const style = normalizeCalloutStyle(event.currentTarget.value);
+
+                          setThemeCalloutDraft((settings) => ({
+                            ...settings,
+                            style,
+                          }));
+                        }}
+                      >
+                        {calloutStyleOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="callout-icon-grid">
+                      {calloutKinds.map((kind) => (
+                        <label key={kind.value}>
+                          <span>{kind.label} icon</span>
+                          <select
+                            disabled={!vaultRoot}
+                            value={themeCalloutDraft.icons[kind.value]}
+                            onChange={(event) => {
+                              const icon = normalizeCalloutIcon(
+                                event.currentTarget.value,
+                                defaultThemeCalloutSettings.icons[kind.value],
+                              );
+
+                              setThemeCalloutDraft((settings) => ({
+                                ...settings,
+                                icons: {
+                                  ...settings.icons,
+                                  [kind.value]: icon,
+                                },
+                              }));
+                            }}
+                          >
+                            {calloutIconOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  </section>
                   <section className="settings-section" aria-label="Theme builder">
                     <div className="settings-section-header">
                       <div>
@@ -6677,14 +7310,26 @@ function App() {
                             <label className="theme-token-control" key={control.token}>
                               <span>{control.label}</span>
                               <div>
-                                <input
-                                  aria-label={control.label}
-                                  type="color"
-                                  value={themeTokenValue(control.token)}
-                                  onChange={(event) =>
-                                    updateThemeDraftToken(control.token, event.currentTarget.value)
-                                  }
-                                />
+                                {control.kind === "value" ? (
+                                  <input
+                                    aria-label={control.label}
+                                    type="text"
+                                    value={rawThemeTokenValue(control)}
+                                    placeholder={control.placeholder}
+                                    onChange={(event) =>
+                                      updateThemeDraftToken(control.token, event.currentTarget.value)
+                                    }
+                                  />
+                                ) : (
+                                  <input
+                                    aria-label={control.label}
+                                    type="color"
+                                    value={themeTokenValue(control.token)}
+                                    onChange={(event) =>
+                                      updateThemeDraftToken(control.token, event.currentTarget.value)
+                                    }
+                                  />
+                                )}
                                 <code>{control.token}</code>
                               </div>
                             </label>
@@ -6990,11 +7635,13 @@ function App() {
                   autoFocus
                   spellCheck="false"
                   value={folderActionDialog.value}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+
                     setFolderActionDialog((dialog) =>
-                      dialog ? { ...dialog, value: event.currentTarget.value } : dialog,
-                    )
-                  }
+                      dialog ? { ...dialog, value } : dialog,
+                    );
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Escape") {
                       event.preventDefault();
