@@ -34,6 +34,13 @@ struct SavedAsset {
     relative_path: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RenamedDirectory {
+    name: String,
+    relative_path: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct VaultSettings {
@@ -442,6 +449,56 @@ fn sanitize_markdown_file_name(file_name: &str) -> Result<String, String> {
     } else {
         Ok(format!("{clean}.md"))
     }
+}
+
+fn sanitize_directory_name(directory_name: &str) -> Result<String, String> {
+    let directory_name = Path::new(directory_name)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let mut clean = String::new();
+    let mut previous_space = false;
+
+    for character in directory_name.chars() {
+        let next =
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_' | ' ') {
+                character
+            } else if character.is_whitespace() {
+                ' '
+            } else {
+                '-'
+            };
+
+        if next == ' ' {
+            if !previous_space {
+                clean.push(next);
+            }
+            previous_space = true;
+        } else {
+            clean.push(next);
+            previous_space = false;
+        }
+    }
+
+    let clean = clean
+        .trim_matches(|character: char| character == '.' || character == '-' || character == ' ')
+        .to_string();
+
+    if clean.is_empty() {
+        Err("Folder name cannot be empty".into())
+    } else {
+        Ok(clean)
+    }
+}
+
+fn shadow_note_path_for_directory(dir: &Path) -> Result<PathBuf, String> {
+    let dir_name = dir
+        .file_name()
+        .ok_or_else(|| "Directory has no name".to_string())?
+        .to_string_lossy()
+        .into_owned();
+
+    Ok(dir.join(format!("{dir_name}.md")))
 }
 
 fn unique_asset_path(asset_dir: &Path, file_name: &str) -> PathBuf {
@@ -981,6 +1038,132 @@ fn rename_vault_file(
 }
 
 #[tauri::command]
+fn create_note_in_directory(
+    root: String,
+    relative: String,
+    note_name: String,
+) -> Result<OpenedFile, String> {
+    let (root_path, dir) = resolve_existing(&root, &relative)?;
+
+    if !dir.is_dir() {
+        return Err("Vault path is not a directory".into());
+    }
+
+    let note_name = sanitize_markdown_file_name(&note_name)?;
+    let path = dir.join(note_name);
+
+    if path.exists() {
+        return Err("A note with that name already exists in this folder".into());
+    }
+
+    fs::write(&path, "").map_err(|err| format!("Could not create note: {err}"))?;
+
+    read_vault_file(
+        root_path.to_string_lossy().into_owned(),
+        relative_string(&root_path, &path)?,
+    )
+}
+
+#[tauri::command]
+fn create_directory_in_directory(
+    root: String,
+    relative: String,
+    directory_name: String,
+) -> Result<RenamedDirectory, String> {
+    let (root_path, dir) = resolve_existing(&root, &relative)?;
+
+    if !dir.is_dir() {
+        return Err("Vault path is not a directory".into());
+    }
+
+    let directory_name = sanitize_directory_name(&directory_name)?;
+    let path = dir.join(&directory_name);
+
+    if path.exists() {
+        return Err("A folder with that name already exists in this folder".into());
+    }
+
+    fs::create_dir(&path).map_err(|err| format!("Could not create folder: {err}"))?;
+
+    Ok(RenamedDirectory {
+        name: directory_name,
+        relative_path: relative_string(&root_path, &path)?,
+    })
+}
+
+#[tauri::command]
+fn rename_vault_directory(
+    root: String,
+    relative: String,
+    next_name: String,
+) -> Result<RenamedDirectory, String> {
+    if relative.trim().is_empty() {
+        return Err("Cannot rename the vault root".into());
+    }
+
+    let (root_path, dir) = resolve_existing(&root, &relative)?;
+
+    if !dir.is_dir() {
+        return Err("Vault path is not a directory".into());
+    }
+
+    let next_name = sanitize_directory_name(&next_name)?;
+    let parent = dir
+        .parent()
+        .ok_or_else(|| "Directory path has no parent".to_string())?;
+    let next_dir = parent.join(&next_name);
+
+    if dir == next_dir {
+        return Ok(RenamedDirectory {
+            name: next_name,
+            relative_path: relative_string(&root_path, &dir)?,
+        });
+    }
+
+    if next_dir.exists() {
+        return Err("A folder with that name already exists".into());
+    }
+
+    let old_shadow = shadow_note_path_for_directory(&dir)?;
+    let old_shadow_exists = old_shadow.exists();
+
+    if old_shadow_exists && !old_shadow.is_file() {
+        return Err("Directory shadow note path is not a file".into());
+    }
+
+    let new_shadow = shadow_note_path_for_directory(&next_dir)?;
+    let new_shadow_name = new_shadow
+        .file_name()
+        .ok_or_else(|| "Shadow note has no name".to_string())?;
+    let old_shadow_name = old_shadow
+        .file_name()
+        .ok_or_else(|| "Shadow note has no name".to_string())?;
+    let renamed_shadow_would_move = old_shadow_exists && old_shadow_name != new_shadow_name;
+
+    if renamed_shadow_would_move && dir.join(new_shadow_name).exists() {
+        return Err("A shadow note with the new folder name already exists".into());
+    }
+
+    fs::rename(&dir, &next_dir).map_err(|err| format!("Could not rename folder: {err}"))?;
+
+    if renamed_shadow_would_move {
+        let old_shadow_after_directory_rename = next_dir.join(
+            old_shadow
+                .file_name()
+                .ok_or_else(|| "Shadow note has no name".to_string())?,
+        );
+
+        fs::rename(&old_shadow_after_directory_rename, &new_shadow)
+            .map_err(|err| format!("Could not rename folder shadow note: {err}"))?;
+    }
+
+    Ok(RenamedDirectory {
+        name: next_name,
+        relative_path: relative_string(&root_path, &next_dir)?,
+    })
+}
+
+#[tauri::command]
 fn open_directory_shadow_file(root: String, relative: String) -> Result<OpenedFile, String> {
     let (root_path, dir) = resolve_existing(&root, &relative)?;
 
@@ -988,16 +1171,17 @@ fn open_directory_shadow_file(root: String, relative: String) -> Result<OpenedFi
         return Err("Vault path is not a directory".into());
     }
 
-    let dir_name = dir
-        .file_name()
-        .ok_or_else(|| "Directory has no name".to_string())?
-        .to_string_lossy()
-        .into_owned();
-    let shadow = dir.join(format!("{dir_name}.md"));
+    let shadow = shadow_note_path_for_directory(&dir)?;
 
     // A directory can be opened as an editable note by materializing a shadow
     // markdown file inside it. Subsequent opens edit the same file.
     if !shadow.exists() {
+        let dir_name = dir
+            .file_name()
+            .ok_or_else(|| "Directory has no name".to_string())?
+            .to_string_lossy()
+            .into_owned();
+
         fs::write(&shadow, format!("# {dir_name}\n"))
             .map_err(|err| format!("Could not create directory note: {err}"))?;
     }
@@ -1302,11 +1486,29 @@ pub fn run() {
         .menu(|app| {
             let package_info = app.package_info();
             let config = app.config();
+            // macOS only renders a subset of Tauri's AboutMetadata fields. Keep
+            // the cross-platform fields populated, but put the useful product
+            // description in credits so the native macOS About panel is not bare.
             let about_metadata = AboutMetadata {
-                name: Some(package_info.name.clone()),
+                name: Some("Glyphary".into()),
                 version: Some(package_info.version.to_string()),
-                copyright: config.bundle.copyright.clone(),
-                authors: config.bundle.publisher.clone().map(|publisher| vec![publisher]),
+                short_version: Some(package_info.version.to_string()),
+                copyright: config
+                    .bundle
+                    .copyright
+                    .clone()
+                    .or_else(|| Some("Copyright © 2026 Glyphary contributors".into())),
+                authors: Some(vec!["Glyphary contributors".into()]),
+                comments: Some(
+                    "A local-first Markdown workspace with vaults, tabs, drawers, themes, and Tiptap editing."
+                        .into(),
+                ),
+                website: Some("https://github.com/".into()),
+                website_label: Some("Glyphary Project".into()),
+                credits: Some(
+                    "Glyphary\n\nA local-first Markdown workspace for vaults, rich notes, calendar pages, and themed writing.\n\nBuilt with Tauri, React, Tiptap, ProseMirror, highlight.js, and lowlight."
+                        .into(),
+                ),
                 ..Default::default()
             };
             let open_vault = MenuItem::with_id(
@@ -1438,6 +1640,9 @@ pub fn run() {
             read_vault_file,
             write_vault_file,
             rename_vault_file,
+            create_note_in_directory,
+            create_directory_in_directory,
+            rename_vault_directory,
             open_directory_shadow_file,
             open_calendar_day_file,
             list_calendar_day_files,
@@ -1713,6 +1918,72 @@ mod tests {
         assert_eq!(opened.name, "chapter.md");
         assert_eq!(opened.relative_path, "chapter/chapter.md");
         assert_eq!(opened.content, "# chapter\n");
+
+        fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn creates_note_inside_directory() {
+        let root = test_root();
+        fs::create_dir(root.join("chapter")).expect("directory should be created");
+
+        let opened = create_note_in_directory(
+            root.to_string_lossy().into_owned(),
+            "chapter".into(),
+            "Scene One".into(),
+        )
+        .expect("note should be created");
+
+        assert_eq!(opened.name, "Scene One.md");
+        assert_eq!(opened.relative_path, "chapter/Scene One.md");
+        assert!(root.join("chapter").join("Scene One.md").exists());
+
+        fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn creates_folder_inside_directory() {
+        let root = test_root();
+        fs::create_dir(root.join("chapter")).expect("directory should be created");
+
+        let created = create_directory_in_directory(
+            root.to_string_lossy().into_owned(),
+            "chapter".into(),
+            "Scenes".into(),
+        )
+        .expect("folder should be created");
+
+        assert_eq!(created.name, "Scenes");
+        assert_eq!(created.relative_path, "chapter/Scenes");
+        assert!(root.join("chapter").join("Scenes").is_dir());
+
+        fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn renames_directory_and_shadow_note() {
+        let root = test_root();
+        fs::create_dir(root.join("chapter")).expect("directory should be created");
+        fs::write(root.join("chapter").join("chapter.md"), "# Shadow\n")
+            .expect("shadow note should be written");
+
+        let renamed = rename_vault_directory(
+            root.to_string_lossy().into_owned(),
+            "chapter".into(),
+            "Book One".into(),
+        )
+        .expect("folder should rename");
+
+        assert_eq!(renamed.name, "Book One");
+        assert_eq!(renamed.relative_path, "Book One");
+        assert!(!root.join("chapter").exists());
+        assert!(root.join("Book One").is_dir());
+        assert!(!root.join("Book One").join("chapter.md").exists());
+        assert_eq!(
+            fs::read_to_string(root.join("Book One").join("Book One.md"))
+                .expect("renamed shadow note should be readable"),
+            "# Shadow\n",
+        );
 
         fs::remove_dir_all(root).expect("test root should be removed");
     }

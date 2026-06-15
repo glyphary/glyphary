@@ -1,6 +1,6 @@
 # Glyphary
 
-Glyphary is a Tauri desktop Markdown editor built with React, TypeScript, and Tiptap. It edits Markdown files from a local vault, keeps frontmatter intact, supports multiple open documents, and provides drawer-based navigation for files, search, document contents, source/export, and calendar notes.
+Glyphary is a Tauri desktop Markdown editor built with React, TypeScript, and Tiptap. It edits Markdown files from a local vault, keeps frontmatter intact, supports multiple open documents, and provides drawer-based navigation for files, recent files, search, document contents, source/export, and calendar notes.
 
 ## Current Capabilities
 
@@ -37,15 +37,18 @@ When a vault is open:
 - The vault drawer opens expanded by default.
 - The file icon view shows files and directories.
 - The search icon view searches the vault.
+- The recent icon view shows recently opened vault files, newest first.
 - Single-clicking a directory makes it the current top-level view.
 - The Back button returns up one directory level until the selected vault root is reached.
 - Double-clicking a file opens it in an editor tab.
 - Double-clicking a directory opens or creates a shadow note inside that directory named `<directory name>.md`.
+- Right-clicking a directory opens actions to create a note inside it, create a child folder, or rename the directory.
+- Directory renames also rename a matching shadow note from `<old>/<old>.md` to `<new>/<new>.md` when that note exists.
 - The currently open file is highlighted when it appears in the file drawer.
 - File and directory rows use icons rather than text badges.
 - The vault drawer can be collapsed and resized with the drag bar.
 
-Glyphary remembers the last vault and active file in local storage and restores them on app restart.
+Glyphary remembers the last vault, active file, and recent file list in local storage and restores them on app restart.
 
 ## Search
 
@@ -477,8 +480,10 @@ Rust unit tests cover backend behavior such as:
 - Directory listing.
 - File read/write.
 - Directory shadow notes.
+- Folder note creation, child folder creation, and shadow-note preserving folder renames.
 - Calendar note creation/listing.
 - Search.
+- Recent file ordering and capping.
 - Asset saving and collision avoidance.
 - Vault settings validation.
 - Vault theme token validation.
@@ -503,3 +508,7 @@ Important files:
 - Frontend tests cover pure logic; full interactive Tiptap flows are not yet automated end-to-end.
 - The right drawer and left drawer states are app state only, not persisted.
 - Obsidian theme support is currently a compatibility variable surface and theme builder, not full import of arbitrary Obsidian theme CSS.
+
+## Roadmap
+
+- Follow internal links

@@ -25,6 +25,8 @@ import {
   isMacOsPlatform,
   isSupportedImageFile,
   markdownHeadings,
+  maxRecentFiles,
+  recentFilesWithOpenedFile,
   remainingGroupAfterSplitPaneClose,
   richLinkMarkdown,
   splitHasDirtyTabs,
@@ -288,6 +290,77 @@ test("default drawer and vault asset settings match the current product defaults
   assert.equal(defaultInspectorDrawerWidth, 360);
 });
 
+test("recent files are newest-first unique and capped", () => {
+  const existing = Array.from({ length: maxRecentFiles }, (_, index) => ({
+    name: `Note ${index}.md`,
+    relativePath: `notes/note-${index}.md`,
+  }));
+  const reopened = {
+    name: "Note 4.md",
+    relativePath: "notes/note-4.md",
+  };
+  const withReopened = recentFilesWithOpenedFile(existing, reopened);
+
+  assert.equal(withReopened[0].relativePath, "notes/note-4.md");
+  assert.equal(
+    withReopened.filter((file) => file.relativePath === "notes/note-4.md").length,
+    1,
+  );
+
+  const withNewFile = recentFilesWithOpenedFile(withReopened, {
+    name: "New.md",
+    relativePath: "new.md",
+  });
+
+  assert.equal(withNewFile.length, maxRecentFiles);
+  assert.equal(withNewFile[0].relativePath, "new.md");
+  assert.equal(withNewFile.at(-1)?.relativePath, "notes/note-18.md");
+});
+
+test("vault drawer exposes files search and recent views", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+
+  assert.match(app, /type VaultDrawerItem = "files" \| "search" \| "recent"/);
+  assert.match(app, /recentFilesWithOpenedFile/);
+  assert.match(app, /recentFiles: ActiveFile\[\]/);
+  assert.match(app, /Recently opened files/);
+  assert.match(app, /toggleVaultDrawerItem\("recent"\)/);
+  assert.match(css, /\.recent-entry-text/);
+  assert.match(css, /\.recent-entry em/);
+});
+
+test("folder rows expose context menu actions for notes folders and renaming", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+  const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
+
+  assert.match(app, /onContextMenu=\{\(event\) => handleFolderContextMenu\(entry, event\)\}/);
+  assert.match(app, /suppressDirectoryClickRef/);
+  assert.match(app, /onMouseDown=\{\(event\) => handleVaultEntryMouseDown\(entry, event\)\}/);
+  assert.match(app, /event\.button !== 0 \|\| suppressDirectoryClickRef\.current/);
+  assert.match(app, /window\.addEventListener\("pointerdown", closeMenuOnPrimaryPointerDown\)/);
+  assert.match(app, /event\.button === 0/);
+  assert.match(app, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
+  assert.match(app, /createNoteFromFolderMenu/);
+  assert.match(app, /createFolderFromFolderMenu/);
+  assert.match(app, /renameFolderFromFolderMenu/);
+  assert.match(app, /folderActionDialog/);
+  assert.match(app, /openFolderActionDialog\("create-folder"/);
+  assert.match(app, /aria-label=\{folderActionDialogTitle\(folderActionDialog\.action\)\}/);
+  assert.match(app, /"create_note_in_directory"/);
+  assert.match(app, /"create_directory_in_directory"/);
+  assert.match(app, /"rename_vault_directory"/);
+  assert.match(app, /Create Note/);
+  assert.match(app, /Create Folder/);
+  assert.match(app, /Rename/);
+  assert.match(css, /\.folder-context-menu/);
+  assert.match(css, /\.folder-action-dialog-card/);
+  assert.match(backend, /fn create_note_in_directory/);
+  assert.match(backend, /fn create_directory_in_directory/);
+  assert.match(backend, /fn rename_vault_directory/);
+});
+
 test("app css exposes the Obsidian theme compatibility surface", () => {
   const css = readFileSync("src/App.css", "utf8");
   const app = readFileSync("src/App.tsx", "utf8");
@@ -324,7 +397,12 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(css, /\.theme-preset-card/);
   assert.equal(config.app.macOSPrivateApi, true);
   assert.equal(config.app.windows[0].transparent, true);
+  assert.equal(config.bundle.publisher, "Glyphary contributors");
+  assert.match(config.bundle.copyright, /Glyphary contributors/);
   assert.match(cargo, /macos-private-api/);
+  assert.match(backend, /name: Some\("Glyphary"\.into\(\)\)/);
+  assert.match(backend, /A local-first Markdown workspace/);
+  assert.match(backend, /Built with Tauri, React, Tiptap/);
   assert.match(backend, /struct AppearanceSettings/);
   assert.match(backend, /glass_effect/);
   assert.match(backend, /preset_id/);

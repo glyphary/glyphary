@@ -867,6 +867,22 @@ body.workspace-resizing * {
   white-space: nowrap;
 }
 
+.recent-entry-text {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.recent-entry em {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .empty-vault {
   margin: 12px 8px;
   color: var(--muted);
@@ -2299,6 +2315,104 @@ body.workspace-resizing * {
 }
 
 .rich-link-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.folder-context-menu {
+  position: fixed;
+  z-index: 80;
+  display: grid;
+  min-width: 168px;
+  gap: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px var(--shadow-strong);
+  padding: 5px;
+}
+
+.folder-context-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 8px 10px;
+  color: var(--heading);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-align: left;
+}
+
+.folder-context-menu button:hover {
+  background: var(--hover);
+}
+
+.folder-action-dialog-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--app-bg), transparent 35%);
+  padding: 24px;
+}
+
+.folder-action-dialog-card {
+  display: grid;
+  width: min(420px, 100%);
+  gap: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 18px 50px var(--shadow-strong);
+  padding: 18px;
+}
+
+.folder-action-dialog-header {
+  display: grid;
+  gap: 5px;
+}
+
+.folder-action-dialog-header h2 {
+  margin: 0;
+  color: var(--heading);
+  font-size: 1rem;
+}
+
+.folder-action-dialog-header span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-action-dialog-card label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.folder-action-dialog-card input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  padding: 9px 10px;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.folder-action-dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;

@@ -60,6 +60,7 @@ export const defaultVaultDrawerWidth = 320;
 export const defaultInspectorDrawerWidth = 360;
 export const minResizableDrawerWidth = 220;
 export const minEditorWorkspaceWidth = 360;
+export const maxRecentFiles = 20;
 export const calendarDirectory = "Calendar";
 export const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export const monthLabels = [
@@ -216,6 +217,19 @@ export function findTabAcrossSplitGroups<Tab extends { id: string }>(
 
 export function splitHasDirtyTabs<Tab extends { dirty: boolean }>(tabs: Tab[]) {
   return tabs.some((tab) => tab.dirty);
+}
+
+export function recentFilesWithOpenedFile<File extends { name: string; relativePath: string }>(
+  recentFiles: File[],
+  openedFile: File,
+  limit = maxRecentFiles,
+) {
+  const seenPath = openedFile.relativePath.toLowerCase();
+  const deduplicated = recentFiles.filter(
+    (file) => file.relativePath.toLowerCase() !== seenPath,
+  );
+
+  return [openedFile, ...deduplicated].slice(0, limit);
 }
 
 export function remainingGroupAfterSplitPaneClose<Tab extends { id: string }>(

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
+  FormEvent as ReactFormEvent,
   KeyboardEvent as ReactKeyboardEvent,
+  MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
 import { Extension, mergeAttributes, Node } from "@tiptap/core";
@@ -63,6 +65,7 @@ import {
   minResizableDrawerWidth,
   monthTitle,
   parentDirectory,
+  recentFilesWithOpenedFile,
   remainingGroupAfterSplitPaneClose,
   richLinkMarkdown,
   sameCalendarDate,
@@ -974,6 +977,11 @@ type OpenedFile = {
   content: string;
 };
 
+type RenamedDirectory = {
+  name: string;
+  relativePath: string;
+};
+
 type SavedAsset = {
   fileName: string;
   relativePath: string;
@@ -1040,13 +1048,28 @@ type SearchMode = "filename" | "content";
 type AppearanceMode = "auto" | "light" | "dark";
 type SettingsTab = "main" | "appearance";
 type DrawerItem = "source" | "toc" | "calendar";
-type VaultDrawerItem = "files" | "search";
+type VaultDrawerItem = "files" | "search" | "recent";
 type ResizeSide = "vault" | "drawer";
+
+type FolderContextMenuState = {
+  entry: VaultEntry;
+  x: number;
+  y: number;
+};
+
+type FolderActionKind = "create-note" | "create-folder" | "rename";
+
+type FolderActionDialogState = {
+  action: FolderActionKind;
+  entry: VaultEntry;
+  value: string;
+};
 
 type PersistedWorkspace = {
   vaultRoot: string;
   currentDir: string;
   activeFile: ActiveFile | null;
+  recentFiles: ActiveFile[];
 };
 
 type ThemeTokenControl = {
@@ -1607,6 +1630,16 @@ function readPersistedWorkspace() {
               relativePath: parsed.activeFile.relativePath,
             }
           : null,
+      recentFiles: Array.isArray(parsed.recentFiles)
+        ? parsed.recentFiles
+            .filter(
+              (file): file is ActiveFile =>
+                file &&
+                typeof file.name === "string" &&
+                typeof file.relativePath === "string",
+            )
+            .slice(0, 20)
+        : [],
     };
   } catch {
     return null;
@@ -2437,6 +2470,9 @@ function App() {
   const [searchMode, setSearchMode] = useState<SearchMode>("filename");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [recentFiles, setRecentFiles] = useState<ActiveFile[]>([]);
+  const [folderContextMenu, setFolderContextMenu] = useState<FolderContextMenuState | null>(null);
+  const [folderActionDialog, setFolderActionDialog] = useState<FolderActionDialogState | null>(null);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState("No vault open");
   const hideWindowDocumentActions = isMacOsPlatform(
@@ -2445,6 +2481,8 @@ function App() {
   );
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeFileRef = useRef<ActiveFile | null>(null);
+  const recentFilesRef = useRef<ActiveFile[]>([]);
+  const suppressDirectoryClickRef = useRef(false);
   const editorGroupsRef = useRef<Record<EditorGroupId, EditorGroupState>>(editorGroups);
   const activeGroupIdRef = useRef<EditorGroupId>("primary");
   const workspaceRef = useRef<HTMLElement | null>(null);
@@ -2480,6 +2518,10 @@ function App() {
   useEffect(() => {
     activeFileRef.current = activeFile;
   }, [activeFile]);
+
+  useEffect(() => {
+    recentFilesRef.current = recentFiles;
+  }, [recentFiles]);
 
   useEffect(() => {
     editorGroupsRef.current = editorGroups;
@@ -2606,6 +2648,32 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!folderContextMenu) {
+      return;
+    }
+
+    const closeMenu = () => setFolderContextMenu(null);
+    const closeMenuOnPrimaryPointerDown = (event: PointerEvent) => {
+      if (event.button === 0) {
+        closeMenu();
+      }
+    };
+    const closeMenuOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+
+    window.addEventListener("pointerdown", closeMenuOnPrimaryPointerDown);
+    window.addEventListener("keydown", closeMenuOnEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeMenuOnPrimaryPointerDown);
+      window.removeEventListener("keydown", closeMenuOnEscape);
+    };
+  }, [folderContextMenu]);
 
   function syncEditorState(nextEditor: Editor) {
     if (!isEditorReady(nextEditor)) {
@@ -2891,10 +2959,10 @@ function App() {
     setActiveGroupId(groupId);
     hydrateDocumentTab(tab, groupId);
     if (tab.activeFile) {
-      persistWorkspace({ activeFile: tab.activeFile });
+      persistActiveFile(tab.activeFile);
       setStatus(`Switched to ${tab.activeFile.relativePath}`);
     } else {
-      persistWorkspace({ activeFile: null });
+      persistActiveFile(null);
       setStatus(`Switched to ${tabTitle(tab)}`);
     }
   }
@@ -2936,7 +3004,7 @@ function App() {
       setSplitOpen(false);
       setEditorGroupsAndRef(nextGroups);
       hydrateDocumentTab(promotedGroup.activeTab, "primary");
-      persistWorkspace({ activeFile: promotedGroup.activeTab.activeFile });
+      persistActiveFile(promotedGroup.activeTab.activeFile);
       setStatus(`Closed ${tabTitle(tab)} and unsplit editor`);
       return;
     }
@@ -2966,7 +3034,7 @@ function App() {
     const nextTab = nextTabs[Math.min(closedIndex, nextTabs.length - 1)];
 
     hydrateDocumentTab(nextTab, groupId);
-    persistWorkspace({ activeFile: nextTab.activeFile });
+    persistActiveFile(nextTab.activeFile);
     setStatus(`Closed ${tabTitle(tab)}`);
   }
 
@@ -3260,6 +3328,8 @@ function App() {
         setVaultDrawerOpen(true);
         setVaultDrawerItem("files");
         setDrawerOpen(false);
+        recentFilesRef.current = workspace.recentFiles;
+        setRecentFiles(workspace.recentFiles);
         await loadVaultSettings(workspace.vaultRoot);
         setCurrentDir(workspace.currentDir);
         setSearchQuery("");
@@ -3517,6 +3587,22 @@ function App() {
       vaultRoot: nextVaultRoot,
       currentDir: next.currentDir ?? currentDir,
       activeFile: next.activeFile === undefined ? activeFile : next.activeFile,
+      recentFiles: next.recentFiles ?? recentFilesRef.current,
+    });
+  }
+
+  function recordRecentFile(file: ActiveFile) {
+    const nextRecentFiles = recentFilesWithOpenedFile(recentFilesRef.current, file);
+
+    recentFilesRef.current = nextRecentFiles;
+    setRecentFiles(nextRecentFiles);
+    return nextRecentFiles;
+  }
+
+  function persistActiveFile(file: ActiveFile | null) {
+    persistWorkspace({
+      activeFile: file,
+      recentFiles: file ? recordRecentFile(file) : recentFilesRef.current,
     });
   }
 
@@ -3679,7 +3765,7 @@ function App() {
       };
 
       setEditorGroupsAndRef(nextGroups);
-      persistWorkspace({ activeFile: file });
+      persistActiveFile(file);
       await loadEntries(vaultRoot, currentDir);
     }
 
@@ -3742,6 +3828,8 @@ function App() {
       setVaultDrawerOpen(true);
       setVaultDrawerItem("files");
       setDrawerOpen(false);
+      recentFilesRef.current = [];
+      setRecentFiles([]);
       await loadVaultSettings(selected);
       setCurrentDir("");
       const tab = createUntitledTab();
@@ -3755,6 +3843,7 @@ function App() {
         vaultRoot: selected,
         currentDir: "",
         activeFile: null,
+        recentFiles: [],
       });
       setStatus(`Opened vault ${selected}`);
     } catch (error) {
@@ -3900,9 +3989,7 @@ function App() {
         activeGroupIdRef.current = existing.groupId;
         setActiveGroupId(existing.groupId);
         hydrateDocumentTab(existing.tab, existing.groupId);
-        persistWorkspace({
-          activeFile: existing.tab.activeFile,
-        });
+        persistActiveFile(existing.tab.activeFile);
         setStatus(
           `Switched to ${existing.tab.activeFile?.relativePath ?? tabTitle(existing.tab)}`,
         );
@@ -3917,9 +4004,7 @@ function App() {
 
       addTabToGroup(tab);
       hydrateDocumentTab(tab);
-      persistWorkspace({
-        activeFile: tab.activeFile,
-      });
+      persistActiveFile(tab.activeFile);
       setStatus(`Opened ${file.relativePath}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -3941,7 +4026,7 @@ function App() {
       activeGroupIdRef.current = existing.groupId;
       setActiveGroupId(existing.groupId);
       hydrateDocumentTab(existing.tab, existing.groupId);
-      persistWorkspace({ activeFile: existing.tab.activeFile });
+      persistActiveFile(existing.tab.activeFile);
       setStatus(
         `Switched to ${existing.tab.activeFile?.relativePath ?? tabTitle(existing.tab)}`,
       );
@@ -3958,7 +4043,7 @@ function App() {
 
       addTabToGroup(tab);
       hydrateDocumentTab(tab);
-      persistWorkspace({ activeFile: tab.activeFile });
+      persistActiveFile(tab.activeFile);
       await loadEntries(vaultRoot, currentDir);
       setCalendarNoteDateKeys((dateKeys) =>
         dateKeys.includes(calendarDateKey(date)) ? dateKeys : [...dateKeys, calendarDateKey(date)],
@@ -3986,9 +4071,7 @@ function App() {
         activeGroupIdRef.current = existing.groupId;
         setActiveGroupId(existing.groupId);
         hydrateDocumentTab(existing.tab, existing.groupId);
-        persistWorkspace({
-          activeFile: existing.tab.activeFile,
-        });
+        persistActiveFile(existing.tab.activeFile);
         setStatus(
           `Switched to ${existing.tab.activeFile?.relativePath ?? tabTitle(existing.tab)}`,
         );
@@ -3999,12 +4082,272 @@ function App() {
 
       addTabToGroup(tab);
       hydrateDocumentTab(tab);
-      persistWorkspace({
-        activeFile: tab.activeFile,
-      });
+      persistActiveFile(tab.activeFile);
       setStatus(`Opened directory note ${file.relativePath}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function relativePathFileName(relativePath: string) {
+    return relativePath.split("/").pop() || relativePath;
+  }
+
+  function rebasePathAfterDirectoryRename(
+    relativePath: string,
+    oldDirectory: VaultEntry,
+    newDirectory: RenamedDirectory,
+  ) {
+    const oldDirectoryPath = oldDirectory.relativePath;
+    const newDirectoryPath = newDirectory.relativePath;
+    const oldShadowPath = `${oldDirectoryPath}/${oldDirectory.name}.md`;
+    const newShadowPath = `${newDirectoryPath}/${newDirectory.name}.md`;
+
+    if (relativePath === oldShadowPath) {
+      return newShadowPath;
+    }
+
+    if (relativePath === oldDirectoryPath) {
+      return newDirectoryPath;
+    }
+
+    if (relativePath.startsWith(`${oldDirectoryPath}/`)) {
+      return `${newDirectoryPath}${relativePath.slice(oldDirectoryPath.length)}`;
+    }
+
+    return relativePath;
+  }
+
+  function activeFileWithRelativePath(relativePath: string): ActiveFile {
+    return {
+      name: relativePathFileName(relativePath),
+      relativePath,
+    };
+  }
+
+  function applyRenamedDirectoryToOpenState(
+    oldDirectory: VaultEntry,
+    newDirectory: RenamedDirectory,
+  ) {
+    const rebaseFile = (file: ActiveFile | null) => {
+      if (!file) {
+        return null;
+      }
+
+      const nextPath = rebasePathAfterDirectoryRename(file.relativePath, oldDirectory, newDirectory);
+      return nextPath === file.relativePath ? file : activeFileWithRelativePath(nextPath);
+    };
+    const nextGroups = Object.fromEntries(
+      (Object.entries(editorGroupsRef.current) as Array<[EditorGroupId, EditorGroupState]>).map(
+        ([groupId, group]) => {
+          let nextActiveTabId = group.activeTabId;
+          const nextTabs = group.tabs.map((tab) => {
+            const nextActiveFile = rebaseFile(tab.activeFile);
+
+            if (!nextActiveFile || nextActiveFile === tab.activeFile) {
+              return tab;
+            }
+
+            const nextId = tabIdForFile(nextActiveFile.relativePath);
+
+            if (tab.id === group.activeTabId) {
+              nextActiveTabId = nextId;
+            }
+
+            return {
+              ...tab,
+              id: nextId,
+              activeFile: nextActiveFile,
+              pageName: fileNameWithoutMarkdownExtension(nextActiveFile.name),
+            };
+          });
+
+          return [
+            groupId,
+            {
+              ...group,
+              tabs: nextTabs,
+              activeTabId: nextActiveTabId,
+            },
+          ];
+        },
+      ),
+    ) as Record<EditorGroupId, EditorGroupState>;
+    const nextActiveFile = rebaseFile(activeFileRef.current);
+    const nextRecentFiles = recentFilesRef.current.map((file) => rebaseFile(file) ?? file);
+    const nextCurrentDir = rebasePathAfterDirectoryRename(
+      currentDir,
+      oldDirectory,
+      newDirectory,
+    );
+
+    setEditorGroupsAndRef(nextGroups);
+    activeFileRef.current = nextActiveFile;
+    setActiveFile(nextActiveFile);
+    if (nextActiveFile) {
+      setPageName(fileNameWithoutMarkdownExtension(nextActiveFile.name));
+    }
+    recentFilesRef.current = nextRecentFiles;
+    setRecentFiles(nextRecentFiles);
+    setCurrentDir(nextCurrentDir);
+    persistWorkspace({
+      currentDir: nextCurrentDir,
+      activeFile: nextActiveFile,
+      recentFiles: nextRecentFiles,
+    });
+  }
+
+  function handleFolderContextMenu(
+    entry: VaultEntry,
+    event: ReactMouseEvent<HTMLButtonElement>,
+  ) {
+    if (!entry.isDir) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    suppressDirectoryClickRef.current = true;
+    if (clickTimer.current) {
+      clearTimeout(clickTimer.current);
+    }
+    setFolderContextMenu({
+      entry,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
+  function openFolderActionDialog(action: FolderActionKind, entry: VaultEntry) {
+    setFolderContextMenu(null);
+    setFolderActionDialog({
+      action,
+      entry,
+      value: action === "rename" ? entry.name : "",
+    });
+  }
+
+  function folderActionDialogTitle(action: FolderActionKind) {
+    if (action === "create-note") {
+      return "Create Note";
+    }
+
+    if (action === "create-folder") {
+      return "Create Folder";
+    }
+
+    return "Rename Folder";
+  }
+
+  function folderActionDialogLabel(action: FolderActionKind) {
+    if (action === "create-note") {
+      return "Note name";
+    }
+
+    return "Folder name";
+  }
+
+  async function createNoteFromFolderMenu(entry: VaultEntry, noteName: string) {
+    if (!vaultRoot) {
+      return;
+    }
+
+    if (!noteName?.trim()) {
+      return;
+    }
+
+    try {
+      const file = await invoke<OpenedFile>("create_note_in_directory", {
+        root: vaultRoot,
+        relative: entry.relativePath,
+        noteName,
+      });
+      const tab = createDocumentTabFromFile(file);
+
+      snapshotActiveTab();
+      addTabToGroup(tab);
+      hydrateDocumentTab(tab);
+      persistActiveFile(tab.activeFile);
+      await loadEntries(vaultRoot, currentDir);
+      setStatus(`Created note ${file.relativePath}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function createFolderFromFolderMenu(entry: VaultEntry, directoryName: string) {
+    if (!vaultRoot) {
+      return;
+    }
+
+    if (!directoryName?.trim()) {
+      return;
+    }
+
+    try {
+      const directory = await invoke<RenamedDirectory>("create_directory_in_directory", {
+        root: vaultRoot,
+        relative: entry.relativePath,
+        directoryName,
+      });
+
+      await loadEntries(vaultRoot, currentDir);
+      setStatus(`Created folder ${directory.relativePath}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function renameFolderFromFolderMenu(entry: VaultEntry, nextName: string) {
+    if (!vaultRoot) {
+      return;
+    }
+
+    if (!nextName?.trim()) {
+      return;
+    }
+
+    try {
+      const renamed = await invoke<RenamedDirectory>("rename_vault_directory", {
+        root: vaultRoot,
+        relative: entry.relativePath,
+        nextName,
+      });
+
+      applyRenamedDirectoryToOpenState(entry, renamed);
+      await loadEntries(
+        vaultRoot,
+        rebasePathAfterDirectoryRename(currentDir, entry, renamed),
+      );
+      setStatus(`Renamed folder ${entry.name} to ${renamed.name}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function submitFolderActionDialog(event: ReactFormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!folderActionDialog) {
+      return;
+    }
+
+    const value = folderActionDialog.value.trim();
+
+    if (!value) {
+      return;
+    }
+
+    const { action, entry } = folderActionDialog;
+
+    setFolderActionDialog(null);
+
+    if (action === "create-note") {
+      await createNoteFromFolderMenu(entry, value);
+    } else if (action === "create-folder") {
+      await createFolderFromFolderMenu(entry, value);
+    } else {
+      await renameFolderFromFolderMenu(entry, value);
     }
   }
 
@@ -4032,20 +4375,35 @@ function App() {
     await enterDirectory(parentDirectory(currentDir));
   }
 
-  function handleDirectoryClick(entry: VaultEntry) {
+  function cancelPendingDirectoryClick() {
     if (clickTimer.current) {
       clearTimeout(clickTimer.current);
+      clickTimer.current = null;
+    }
+  }
+
+  function handleVaultEntryMouseDown(entry: VaultEntry, event: ReactMouseEvent<HTMLButtonElement>) {
+    if (entry.isDir && event.button !== 0) {
+      suppressDirectoryClickRef.current = true;
+      cancelPendingDirectoryClick();
+    }
+  }
+
+  function handleDirectoryClick(entry: VaultEntry, event: ReactMouseEvent<HTMLButtonElement>) {
+    if (event.button !== 0 || suppressDirectoryClickRef.current) {
+      suppressDirectoryClickRef.current = false;
+      cancelPendingDirectoryClick();
+      return;
     }
 
+    cancelPendingDirectoryClick();
     clickTimer.current = setTimeout(() => {
       enterDirectory(entry.relativePath);
     }, 180);
   }
 
   function handleDirectoryDoubleClick(entry: VaultEntry) {
-    if (clickTimer.current) {
-      clearTimeout(clickTimer.current);
-    }
+    cancelPendingDirectoryClick();
 
     openDirectoryShadow(entry.relativePath);
   }
@@ -4056,7 +4414,7 @@ function App() {
 
     addTabToGroup(tab);
     hydrateDocumentTab(tab);
-    persistWorkspace({ activeFile: null });
+    persistActiveFile(null);
     setStatus("New unsaved document");
   }
 
@@ -4270,6 +4628,30 @@ function App() {
 
     setVaultDrawerItem(item);
     setVaultDrawerOpen(true);
+  }
+
+  function vaultDrawerTitle() {
+    if (vaultDrawerItem === "files") {
+      return "Files";
+    }
+
+    if (vaultDrawerItem === "recent") {
+      return "Recent";
+    }
+
+    return "Search";
+  }
+
+  function vaultDrawerSubtitle() {
+    if (vaultDrawerItem === "files") {
+      return vaultRoot || "No vault selected";
+    }
+
+    if (vaultDrawerItem === "recent") {
+      return vaultRoot ? "Recently opened files" : "Open a vault";
+    }
+
+    return "Find in vault";
   }
 
   async function searchVault() {
@@ -4835,13 +5217,30 @@ function App() {
                 <path d="m15 15 4.5 4.5" />
               </svg>
             </button>
+            <button
+              className={vaultDrawerItem === "recent" && vaultDrawerOpen ? "vault-tab active" : "vault-tab"}
+              type="button"
+              aria-label={
+                vaultDrawerOpen && vaultDrawerItem === "recent"
+                  ? "Close recent files drawer"
+                  : "Open recent files drawer"
+              }
+              title={vaultDrawerOpen && vaultDrawerItem === "recent" ? "Close Recent" : "Open Recent"}
+              onClick={() => toggleVaultDrawerItem("recent")}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M4 5.5v5h5" />
+                <path d="M4.5 10.2a7.5 7.5 0 1 0 2.2-5.1" />
+                <path d="M12 7.5v5l3.2 1.9" />
+              </svg>
+            </button>
           </div>
           {vaultDrawerOpen ? (
             <div className="vault-content">
               <div className="vault-header">
                 <div>
-                  <h2>{vaultDrawerItem === "files" ? "Files" : "Search"}</h2>
-                  <p>{vaultDrawerItem === "files" ? vaultRoot || "No vault selected" : "Find in vault"}</p>
+                  <h2>{vaultDrawerTitle()}</h2>
+                  <p>{vaultDrawerSubtitle()}</p>
                 </div>
                 <div className="vault-header-actions">
                   {vaultDrawerItem === "files" ? (
@@ -4876,9 +5275,10 @@ function App() {
                             : "vault-entry"
                         }
                         key={entry.relativePath}
-                        onClick={() => {
+                        onMouseDown={(event) => handleVaultEntryMouseDown(entry, event)}
+                        onClick={(event) => {
                           if (entry.isDir) {
-                            handleDirectoryClick(entry);
+                            handleDirectoryClick(entry, event);
                           }
                         }}
                         onDoubleClick={() => {
@@ -4888,6 +5288,7 @@ function App() {
                             openFile(entry.relativePath);
                           }
                         }}
+                        onContextMenu={(event) => handleFolderContextMenu(entry, event)}
                         type="button"
                       >
                         {entry.isDir ? (
@@ -4937,6 +5338,49 @@ function App() {
                     ) : null}
                   </div>
                 </>
+              ) : vaultDrawerItem === "recent" ? (
+                <div className="vault-list recent-list" role="list" aria-label="Recently opened files">
+                  {recentFiles.map((file) => (
+                    <button
+                      className={
+                        activeFile?.relativePath === file.relativePath
+                          ? "vault-entry recent-entry active"
+                          : "vault-entry recent-entry"
+                      }
+                      key={file.relativePath}
+                      type="button"
+                      onClick={() => openFile(file.relativePath)}
+                    >
+                      <svg
+                        aria-hidden="true"
+                        className="vault-entry-icon markdown-icon"
+                        viewBox="0 0 32 32"
+                      >
+                        <path
+                          className="document-page"
+                          d="M8.5 3.8h10.9l4.1 4.2v20.2h-15z"
+                        />
+                        <path className="document-fold" d="M19.2 3.9v4.4h4.2z" />
+                        <path className="document-line" d="M11.3 11.8h9.3" />
+                        <path className="document-line" d="M11.3 14.7h9.3" />
+                        <rect className="markdown-badge" x="9.9" y="18.3" width="12.2" height="6.1" rx="1.8" />
+                        <text x="16" y="22.8" textAnchor="middle">
+                          md
+                        </text>
+                      </svg>
+                      <span className="recent-entry-text">
+                        <strong>{file.name}</strong>
+                        <em>{file.relativePath}</em>
+                      </span>
+                    </button>
+                  ))}
+                  {vaultRoot && recentFiles.length === 0 ? (
+                    <p className="empty-vault">No recently opened files yet.</p>
+                  ) : null}
+                  {!vaultRoot ? (
+                    <p className="empty-vault">Open a vault to track recent files.</p>
+                  ) : null}
+                </div>
               ) : (
                 <div className="vault-search" role="search">
                   <label>
@@ -5641,6 +6085,101 @@ function App() {
                 type="submit"
               >
                 {richLinkSubmitting ? "Fetching..." : "Insert"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+      {folderContextMenu ? (
+        <div
+          className="folder-context-menu"
+          style={{ left: folderContextMenu.x, top: folderContextMenu.y }}
+          role="menu"
+          aria-label={`Folder actions for ${folderContextMenu.entry.name}`}
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              openFolderActionDialog("create-note", folderContextMenu.entry);
+            }}
+          >
+            Create Note
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              openFolderActionDialog("create-folder", folderContextMenu.entry);
+            }}
+          >
+            Create Folder
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              openFolderActionDialog("rename", folderContextMenu.entry);
+            }}
+          >
+            Rename
+          </button>
+        </div>
+      ) : null}
+      {folderActionDialog ? (
+        <div
+          className="folder-action-dialog-screen"
+          role="presentation"
+          onMouseDown={() => setFolderActionDialog(null)}
+        >
+          <form
+            className="folder-action-dialog-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label={folderActionDialogTitle(folderActionDialog.action)}
+            onMouseDown={(event) => event.stopPropagation()}
+            onSubmit={(event) => void submitFolderActionDialog(event)}
+          >
+            <div className="folder-action-dialog-header">
+              <h2>{folderActionDialogTitle(folderActionDialog.action)}</h2>
+              <span>{folderActionDialog.entry.relativePath}</span>
+            </div>
+            <label>
+              <span>{folderActionDialogLabel(folderActionDialog.action)}</span>
+              <input
+                autoFocus
+                spellCheck="false"
+                value={folderActionDialog.value}
+                onChange={(event) =>
+                  setFolderActionDialog((dialog) =>
+                    dialog ? { ...dialog, value: event.currentTarget.value } : dialog,
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setFolderActionDialog(null);
+                  }
+                }}
+              />
+            </label>
+            <div className="folder-action-dialog-actions">
+              <button
+                className="inline-action"
+                type="button"
+                onClick={() => setFolderActionDialog(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-action"
+                disabled={!folderActionDialog.value.trim()}
+                type="submit"
+              >
+                {folderActionDialogTitle(folderActionDialog.action)}
               </button>
             </div>
           </form>
