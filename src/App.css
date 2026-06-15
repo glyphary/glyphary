@@ -1571,6 +1571,70 @@ body.workspace-resizing * {
   margin-bottom: 0;
 }
 
+.editor-surface .markdown-collapse {
+  margin: 1.2rem 0;
+  border: var(--border-width) solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: transparent;
+  overflow: hidden;
+}
+
+.editor-surface .markdown-collapse.open,
+.editor-surface .markdown-collapse[open] {
+  background: color-mix(in srgb, var(--surface-muted) 48%, transparent);
+}
+
+.editor-surface .markdown-collapse-summary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--heading);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.86rem;
+  font-weight: 900;
+  padding: 0.72rem 0.85rem;
+  text-align: left;
+  user-select: none;
+}
+
+.editor-surface .markdown-collapse-summary::before {
+  margin-right: 0.55rem;
+  color: var(--muted-strong);
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  content: "";
+  transform: rotate(0deg);
+  transition: transform var(--motion-duration-fast) var(--motion-ease);
+}
+
+.editor-surface .markdown-collapse.open .markdown-collapse-summary::before,
+.editor-surface .markdown-collapse[open] .markdown-collapse-summary::before {
+  transform: rotate(90deg);
+}
+
+.editor-surface .markdown-collapse-summary:hover {
+  background: var(--hover);
+}
+
+.editor-surface .markdown-collapse-body {
+  border-top: var(--border-width) solid var(--border-soft);
+  padding: 0.85rem;
+}
+
+.editor-surface .markdown-collapse-body > :first-child {
+  margin-top: 0;
+}
+
+.editor-surface .markdown-collapse-body > :last-child {
+  margin-bottom: 0;
+}
+
 .editor-surface .rich-link-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 132px;

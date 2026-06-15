@@ -26,6 +26,10 @@ export const emptyCalloutMarkdown = `::: callout note "Note"
 Callout content
 :::`;
 
+export const emptyCollapseMarkdown = `::: collapse More details
+Hidden content
+:::`;
+
 export type RichLinkMarkdownFields = {
   url: string;
   title?: string;

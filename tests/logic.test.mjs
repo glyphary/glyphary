@@ -17,6 +17,7 @@ import {
   defaultVaultAssetDirectory,
   defaultTidbitPathPattern,
   emptyCalloutMarkdown,
+  emptyCollapseMarkdown,
   emptyColumnsMarkdown,
   emptyTableMarkdown,
   expandDateFormat,
@@ -272,6 +273,34 @@ test("callout markdown containers are wired into the editor", () => {
   assert.match(css, /\.markdown-callout/);
   assert.match(css, /\.markdown-callout-warning/);
   assert.match(css, /\.markdown-callout-title/);
+});
+
+test("collapse markdown containers render as expandable details blocks", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+
+  assert.match(emptyCollapseMarkdown, /^::: collapse More details/);
+  assert.match(app, /function collapseContainerOpening/);
+  assert.match(app, /function CollapseNodeView/);
+  assert.match(app, /const \[open, setOpen\] = useState\(Boolean\(node\.attrs\.defaultOpen\)\)/);
+  assert.match(app, /name: "collapse"/);
+  assert.match(app, /markdownTokenName: "collapse"/);
+  assert.match(app, /defaultOpen/);
+  assert.match(app, /plainTitleIncludesOpenFlag/);
+  assert.match(app, /data-glyphary-collapse/);
+  assert.match(app, /markdown-collapse-summary/);
+  assert.match(app, /ReactNodeViewRenderer\(CollapseNodeView\)/);
+  assert.match(app, /setOpen\(\(value\) => !value\)/);
+  assert.match(app, /createCollapseExtension\(\)/);
+  assert.match(app, /insertCollapseBlock\(\)/);
+  assert.match(app, /id: "insert-collapse"/);
+  assert.match(app, /title: "Insert collapse"/);
+  assert.match(app, /insertContent\(emptyCollapseMarkdown, \{ contentType: "markdown" \}\)/);
+  assert.match(app, /const openPart = attrs\.defaultOpen === true \? " open" : ""/);
+  assert.match(css, /\.markdown-collapse/);
+  assert.match(css, /\.markdown-collapse\.open/);
+  assert.match(css, /\.markdown-collapse-summary/);
+  assert.match(css, /\.markdown-collapse-body/);
 });
 
 test("rich link markdown containers are wired into the editor", () => {
@@ -684,6 +713,8 @@ test("quick command palette exposes initial editor commands", () => {
   assert.match(app, /title: "Insert columns"/);
   assert.match(app, /id: "insert-callout"/);
   assert.match(app, /title: "Insert callout"/);
+  assert.match(app, /id: "insert-collapse"/);
+  assert.match(app, /title: "Insert collapse"/);
   assert.match(app, /id: "insert-table-of-contents"/);
   assert.match(app, /title: "Insert table of contents"/);
   assert.match(app, /function appendTableOfContentsBlock\(\)/);

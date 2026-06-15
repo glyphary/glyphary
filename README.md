@@ -19,6 +19,7 @@ Glyphary is a Tauri desktop Markdown editor built with React, TypeScript, and Ti
 - Task lists support GitHub-flavored Markdown checkboxes such as `- [ ]` and `- [x]`.
 - Column layout blocks using `::: columns` and nested `::: column` containers.
 - Callout blocks using `::: callout <type> "Optional title"` containers.
+- Expand/collapse blocks using `::: collapse "Title"` containers rendered as native details blocks.
 - Rich link cards that fetch page metadata and render URL previews.
 - Code blocks support language selection and Markdown fences such as ```` ```python ```` or ```` ```sh ````.
 - Syntax highlighting for code blocks using `highlight.js` and `lowlight`.
@@ -133,6 +134,28 @@ Back up the database before running this.
 
 The body can contain normal block Markdown such as paragraphs, lists, links, and code blocks. Saving writes the same `::: callout` syntax back to disk.
 
+## Collapse Blocks
+
+Glyphary supports editable expand/collapse sections using Markdown container fences:
+
+```markdown
+::: collapse "More details"
+Hidden content goes here.
+
+- Lists, links, and code blocks can live inside.
+:::
+```
+
+Collapse blocks are closed by default. Add `open` after the title when a block should start expanded:
+
+```markdown
+::: collapse "More details" open
+This starts expanded.
+:::
+```
+
+The WYSIWYG editor renders this as an editable disclosure block. The summary is shown as the clickable title, and the body remains editable when expanded. Saving writes the same `::: collapse` container syntax back to disk.
+
 ## Quick Commands
 
 Press `Cmd+P` on macOS or `Ctrl+P` on other platforms to open the quick command palette. Type to filter commands, use arrow keys to move selection, press `Enter` to run the selected command, and press `Escape` to close it.
@@ -140,6 +163,7 @@ Press `Cmd+P` on macOS or `Ctrl+P` on other platforms to open the quick command 
 Initial commands:
 
 - `Insert callout`: inserts a note callout block.
+- `Insert collapse`: inserts an expandable details block.
 - `Insert columns`: inserts a two-column container.
 - `Insert rich link`: opens a URL dialog, fetches page metadata, and inserts a rich link card.
 
@@ -482,6 +506,7 @@ Frontend unit tests cover helper behavior such as:
 - Inline `toc` fenced-block support.
 - Markdown column container integration.
 - Markdown callout container integration.
+- Markdown collapse container integration.
 - Rich link Markdown formatting and metadata extraction.
 - Frontmatter list extraction for display pills.
 - Vim-mode integration surface.

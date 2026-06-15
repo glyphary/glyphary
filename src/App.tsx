@@ -59,6 +59,7 @@ import {
   displayPath,
   defaultTidbitPathPattern,
   emptyCalloutMarkdown,
+  emptyCollapseMarkdown,
   emptyColumnsMarkdown,
   emptyTableMarkdown,
   expandDateTemplate,
@@ -2721,6 +2722,68 @@ function calloutContainerOpening(src: string) {
   };
 }
 
+function collapseContainerOpening(src: string) {
+  const match = src.match(
+    /^:::[^\S\n]*collapse(?:[^\S\n]+(?:"((?:\\.|[^"\\])*)"|([^\r\n]*?)))?(?:[^\S\n]+(open))?[^\S\n]*\r?\n/,
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const [, quotedTitle, plainTitle, openFlag] = match;
+  const plainParts = plainTitle?.trim().split(/\s+/).filter(Boolean) ?? [];
+  const plainTitleIncludesOpenFlag =
+    !quotedTitle && plainParts[plainParts.length - 1]?.toLowerCase() === "open";
+  const title = quotedTitle
+    ? unescapeCalloutTitle(quotedTitle)
+    : plainTitleIncludesOpenFlag
+      ? plainParts.slice(0, -1).join(" ")
+      : plainTitle?.trim() ?? "";
+
+  return {
+    length: match[0].length,
+    attrs: {
+      title: title || "Details",
+      defaultOpen: Boolean(openFlag) || plainTitleIncludesOpenFlag,
+    },
+  };
+}
+
+function CollapseNodeView({ node }: NodeViewProps) {
+  const title =
+    typeof node.attrs.title === "string" && node.attrs.title.trim()
+      ? node.attrs.title.trim()
+      : "Details";
+  const [open, setOpen] = useState(Boolean(node.attrs.defaultOpen));
+
+  return (
+    <NodeViewWrapper className={`markdown-collapse ${open ? "open" : "closed"}`}>
+      <button
+        aria-expanded={open}
+        className="markdown-collapse-summary"
+        contentEditable={false}
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
+        onMouseDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+      >
+        {title}
+      </button>
+      <NodeViewContent
+        className="markdown-collapse-body"
+        style={{ display: open ? undefined : "none" }}
+      />
+    </NodeViewWrapper>
+  );
+}
+
 function emptyParagraphNode(helpers: {
   createNode: (type: string, attrs?: Record<string, unknown>, content?: JSONContent[]) => JSONContent;
 }) {
@@ -2908,6 +2971,101 @@ function createCalloutExtension() {
       const body = helpers.renderChildren(node.content ?? [], "\n\n").trim();
 
       return `::: callout ${kind}${titlePart}\n${body}\n:::`;
+    },
+  });
+}
+
+function createCollapseExtension() {
+  return Node.create({
+    name: "collapse",
+    group: "block",
+    content: "block+",
+    defining: true,
+
+    addAttributes() {
+      return {
+        title: {
+          default: "Details",
+          parseHTML: (element) =>
+            element.getAttribute("data-collapse-title") ||
+            element.querySelector("summary")?.textContent?.trim() ||
+            "Details",
+          renderHTML: () => ({}),
+        },
+        defaultOpen: {
+          default: false,
+          parseHTML: (element) => element.hasAttribute("open"),
+          renderHTML: () => ({}),
+        },
+      };
+    },
+
+    parseHTML() {
+      return [
+        { tag: "details[data-glyphary-collapse]" },
+        { tag: "details" },
+      ];
+    },
+
+    renderHTML({ node, HTMLAttributes }) {
+      const title =
+        typeof node.attrs.title === "string" && node.attrs.title.trim()
+          ? node.attrs.title.trim()
+          : "Details";
+
+      return [
+        "details",
+        mergeAttributes(HTMLAttributes, {
+          "data-glyphary-collapse": "true",
+          "data-collapse-title": title,
+          class: "markdown-collapse",
+          ...(node.attrs.defaultOpen ? { open: "true" } : {}),
+        }),
+        ["summary", { class: "markdown-collapse-summary", contenteditable: "false" }, title],
+        ["div", { class: "markdown-collapse-body" }, 0],
+      ];
+    },
+
+    markdownTokenName: "collapse",
+
+    markdownTokenizer: {
+      name: "collapse",
+      level: "block",
+      start: (src: string) => src.search(/^:::[^\S\n]*collapse(?:[^\n\r]*)?$/m),
+      tokenize: (src: string, _tokens: MarkdownToken[], lexer: ContainerMarkdownLexer) =>
+        createMarkdownContainerToken(src, "collapse", collapseContainerOpening(src), lexer),
+    },
+
+    parseMarkdown: (token: MarkdownToken, helpers) => {
+      const collapseToken = token as MarkdownToken & {
+        title?: unknown;
+        defaultOpen?: unknown;
+      };
+      const content = helpers.parseBlockChildren
+        ? helpers.parseBlockChildren(token.tokens ?? [])
+        : helpers.parseChildren(token.tokens ?? []);
+
+      return helpers.createNode(
+        "collapse",
+        {
+          title: typeof collapseToken.title === "string" ? collapseToken.title : "Details",
+          defaultOpen: collapseToken.defaultOpen === true,
+        },
+        content.length ? content : [emptyParagraphNode(helpers)],
+      );
+    },
+
+    renderMarkdown: (node: JSONContent, helpers) => {
+      const attrs = node.attrs ?? {};
+      const title = typeof attrs.title === "string" && attrs.title ? attrs.title : "Details";
+      const openPart = attrs.defaultOpen === true ? " open" : "";
+      const body = helpers.renderChildren(node.content ?? [], "\n\n").trim();
+
+      return `::: collapse "${escapeCalloutTitle(title)}"${openPart}\n${body}\n:::`;
+    },
+
+    addNodeView() {
+      return ReactNodeViewRenderer(CollapseNodeView);
     },
   });
 }
@@ -4064,6 +4222,7 @@ function App() {
         createColumnExtension(),
         createColumnsExtension(),
         createCalloutExtension(),
+        createCollapseExtension(),
         createRichLinkExtension(),
         // Vault images resolve late through refs because the same editor
         // instance can survive vault setting changes such as the asset folder.
@@ -5798,6 +5957,18 @@ function App() {
     setEditorBody(`${markdown.trimEnd()}\n\n${emptyCalloutMarkdown}`, false);
   }
 
+  function insertCollapseBlock() {
+    if (!editor) {
+      return;
+    }
+
+    editor
+      .chain()
+      .focus()
+      .insertContent(emptyCollapseMarkdown, { contentType: "markdown" })
+      .run();
+  }
+
   function appendTableOfContentsBlock() {
     if (!editor) {
       return;
@@ -5951,6 +6122,12 @@ function App() {
       title: "Insert callout",
       description: "Add a note callout block",
       run: appendCallout,
+    },
+    {
+      id: "insert-collapse",
+      title: "Insert collapse",
+      description: "Add an expandable details block",
+      run: insertCollapseBlock,
     },
     {
       id: "insert-table-of-contents",
