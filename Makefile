@@ -1,4 +1,4 @@
-APP_NAME := MEdit
+APP_NAME := Glyphary
 APP_BUNDLE := src-tauri/target/release/bundle/macos/$(APP_NAME).app
 DMG := src-tauri/target/release/bundle/dmg/$(APP_NAME)_0.1.0_aarch64.dmg
 

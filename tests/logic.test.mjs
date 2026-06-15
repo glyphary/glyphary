@@ -234,7 +234,7 @@ test("callout markdown containers are wired into the editor", () => {
   assert.match(app, /function calloutContainerOpening/);
   assert.match(app, /name: "callout"/);
   assert.match(app, /markdownTokenName: "callout"/);
-  assert.match(app, /data-medit-callout/);
+  assert.match(app, /data-glyphary-callout/);
   assert.match(app, /data-callout-kind/);
   assert.match(app, /escapeCalloutTitle/);
   assert.match(app, /createCalloutExtension\(\)/);
@@ -266,7 +266,7 @@ siteName: Example Site
   );
   assert.match(app, /name: "richLink"/);
   assert.match(app, /markdownTokenName: "rich-link"/);
-  assert.match(app, /data-medit-rich-link/);
+  assert.match(app, /data-glyphary-rich-link/);
   assert.match(app, /fetch_rich_link_metadata/);
   assert.match(app, /id: "insert-rich-link"/);
   assert.doesNotMatch(app, /window\.prompt/);
@@ -310,7 +310,10 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.equal((presetBlock.match(/id: "[a-z-]+"/g) ?? []).length, 12);
   assert.match(app, /Theme Templates/);
   assert.match(app, /applyThemePreset/);
-  assert.match(app, /--medit-accent/);
+  assert.match(app, /presetId\?: string \| null/);
+  assert.match(app, /selectedThemePresetIdDraft/);
+  assert.match(app, /normalizeThemePresetId/);
+  assert.match(app, /--glyphary-accent/);
   assert.match(app, /Reset Theme/);
   assert.match(app, /type VaultAppearanceSettings/);
   assert.match(app, /glassEffect/);
@@ -324,6 +327,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(cargo, /macos-private-api/);
   assert.match(backend, /struct AppearanceSettings/);
   assert.match(backend, /glass_effect/);
+  assert.match(backend, /preset_id/);
   assert.match(backend, /Effect::UnderWindowBackground/);
   assert.match(backend, /set_background_color\(Some\(Color\(0, 0, 0, 0\)\)\)/);
 });
@@ -333,8 +337,8 @@ test("vim-style editing is wired behind a settings option", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 
   assert.equal(pkg.dependencies["@prose-motions/core"], undefined);
-  assert.match(app, /name: "meditVimMode"/);
-  assert.match(app, /editorBehavior\.vimMode \? \[createMEditVimMode\(setStatus\)\] : \[\]/);
+  assert.match(app, /name: "glypharyVimMode"/);
+  assert.match(app, /editorBehavior\.vimMode \? \[createGlypharyVimMode\(setStatus\)\] : \[\]/);
   assert.match(app, /Vim normal mode/);
   assert.match(app, /Vim insert mode/);
   assert.match(app, /case "u":/);

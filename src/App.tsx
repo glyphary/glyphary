@@ -404,19 +404,19 @@ function isEditorReady(editor: Editor | null | undefined): editor is Editor {
 
 function isVimNormalMode(editor: Editor) {
   const storage = editor.storage as unknown as {
-    meditVimMode?: { state?: { mode?: string } };
+    glypharyVimMode?: { state?: { mode?: string } };
   };
 
-  return storage.meditVimMode?.state?.mode === "normal";
+  return storage.glypharyVimMode?.state?.mode === "normal";
 }
 
 function setVimMode(editor: Editor, mode: "insert" | "normal") {
   const storage = editor.storage as unknown as {
-    meditVimMode?: { state?: { mode?: string } };
+    glypharyVimMode?: { state?: { mode?: string } };
   };
 
-  if (storage.meditVimMode?.state) {
-    storage.meditVimMode.state.mode = mode;
+  if (storage.glypharyVimMode?.state) {
+    storage.glypharyVimMode.state.mode = mode;
   }
 }
 
@@ -430,14 +430,14 @@ type VimCopyBuffer = {
   linewise: boolean;
 };
 
-function createMEditVimMode(reportStatus: (message: string) => void) {
+function createGlypharyVimMode(reportStatus: (message: string) => void) {
   let pendingCommand: VimPendingCommand | null = null;
   let copyBuffer: VimCopyBuffer = { text: "", linewise: false };
 
   return Extension.create({
-    name: "meditVimMode",
+    name: "glypharyVimMode",
 
-    // MEdit owns Vim handling locally instead of delegating to an external
+    // Glyphary owns Vim handling locally instead of delegating to an external
     // keymap. That keeps multi-key commands deterministic and prevents broad
     // Normal-mode catchalls from swallowing the second key in commands like gg.
     priority: 10000,
@@ -924,7 +924,7 @@ function createMEditVimMode(reportStatus: (message: string) => void) {
 
       return [
         new Plugin({
-          key: new PluginKey("meditVimMode"),
+          key: new PluginKey("glypharyVimMode"),
           props: {
             handleKeyDown: (_view, event) => {
               if (!isEditorReady(this.editor)) {
@@ -980,6 +980,7 @@ type SavedAsset = {
 };
 
 type VaultThemeSettings = {
+  presetId?: string | null;
   tokens: Record<string, string>;
 };
 
@@ -1065,8 +1066,8 @@ type ThemePreset = {
   tokens: Record<string, string>;
 };
 
-const workspaceStorageKey = "medit.workspace";
-const appearanceStorageKey = "medit.appearance";
+const workspaceStorageKey = "glyphary.workspace";
+const appearanceStorageKey = "glyphary.appearance";
 const closedDrawerWidth = 48;
 const workspaceResizeHandleWidth = 10;
 const defaultFrontmatterPillSettings: FrontmatterPillSettings = {
@@ -1080,51 +1081,51 @@ const defaultVaultAppearanceSettings: VaultAppearanceSettings = {
   glassEffect: false,
 };
 
-// The theme builder deliberately exposes only stable MEdit variables. Vault
+// The theme builder deliberately exposes only stable Glyphary variables. Vault
 // settings persist these tokens directly, while CSS maps them onto Obsidian-like
 // names for future theme compatibility.
 const themeTokenGroups: ThemeTokenGroup[] = [
   {
     title: "Canvas",
     controls: [
-      { label: "App background", token: "--medit-app-bg" },
-      { label: "Surface", token: "--medit-surface" },
-      { label: "Muted surface", token: "--medit-surface-muted" },
-      { label: "Hover", token: "--medit-hover" },
-      { label: "Selection", token: "--medit-selection" },
+      { label: "App background", token: "--glyphary-app-bg" },
+      { label: "Surface", token: "--glyphary-surface" },
+      { label: "Muted surface", token: "--glyphary-surface-muted" },
+      { label: "Hover", token: "--glyphary-hover" },
+      { label: "Selection", token: "--glyphary-selection" },
     ],
   },
   {
     title: "Text",
     controls: [
-      { label: "Text", token: "--medit-text" },
-      { label: "Soft text", token: "--medit-text-soft" },
-      { label: "Editor text", token: "--medit-editor-text" },
-      { label: "Heading", token: "--medit-heading" },
-      { label: "Muted text", token: "--medit-muted" },
-      { label: "Strong muted text", token: "--medit-muted-strong" },
-      { label: "Mono text", token: "--medit-mono-text" },
+      { label: "Text", token: "--glyphary-text" },
+      { label: "Soft text", token: "--glyphary-text-soft" },
+      { label: "Editor text", token: "--glyphary-editor-text" },
+      { label: "Heading", token: "--glyphary-heading" },
+      { label: "Muted text", token: "--glyphary-muted" },
+      { label: "Strong muted text", token: "--glyphary-muted-strong" },
+      { label: "Mono text", token: "--glyphary-mono-text" },
     ],
   },
   {
     title: "Accent And Borders",
     controls: [
-      { label: "Accent", token: "--medit-accent" },
-      { label: "Accent text", token: "--medit-accent-text" },
-      { label: "Focus", token: "--medit-focus" },
-      { label: "Border", token: "--medit-border" },
-      { label: "Soft border", token: "--medit-border-soft" },
-      { label: "Strong border", token: "--medit-border-strong" },
-      { label: "Table border", token: "--medit-table-border" },
+      { label: "Accent", token: "--glyphary-accent" },
+      { label: "Accent text", token: "--glyphary-accent-text" },
+      { label: "Focus", token: "--glyphary-focus" },
+      { label: "Border", token: "--glyphary-border" },
+      { label: "Soft border", token: "--glyphary-border-soft" },
+      { label: "Strong border", token: "--glyphary-border-strong" },
+      { label: "Table border", token: "--glyphary-table-border" },
     ],
   },
   {
     title: "Blocks",
     controls: [
-      { label: "Code background", token: "--medit-code-bg" },
-      { label: "Code text", token: "--medit-code-text" },
-      { label: "Quote border", token: "--medit-quote-border" },
-      { label: "Quote text", token: "--medit-quote-text" },
+      { label: "Code background", token: "--glyphary-code-bg" },
+      { label: "Code text", token: "--glyphary-code-text" },
+      { label: "Quote border", token: "--glyphary-quote-border" },
+      { label: "Quote text", token: "--glyphary-quote-text" },
     ],
   },
   {
@@ -1151,31 +1152,31 @@ const themePresets: ThemePreset[] = [
     name: "Field Notes",
     description: "Warm paper, green accents, quiet editorial contrast.",
     tokens: {
-      "--medit-app-bg": "#f3f1eb",
-      "--medit-surface": "#fffdfa",
-      "--medit-surface-muted": "#faf8f2",
-      "--medit-hover": "#eef1ea",
-      "--medit-selection": "rgba(47, 104, 70, 0.16)",
-      "--medit-text": "#17201a",
-      "--medit-text-soft": "#405044",
-      "--medit-editor-text": "#1d271f",
-      "--medit-heading": "#213227",
-      "--medit-muted": "#637167",
-      "--medit-muted-strong": "#5f6d63",
-      "--medit-mono-text": "#273329",
-      "--medit-accent": "#2f6846",
-      "--medit-accent-text": "#ffffff",
-      "--medit-focus": "#7d8f7f",
-      "--medit-border": "#ded9ce",
-      "--medit-border-soft": "#e7e2d8",
-      "--medit-border-strong": "#d4d0c6",
-      "--medit-table-border": "#d8d4ca",
-      "--medit-code-bg": "#18231c",
-      "--medit-code-text": "#f2f7ef",
-      "--medit-quote-border": "#77977d",
-      "--medit-quote-text": "#435547",
-      "--medit-shadow": "rgba(45, 38, 27, 0.08)",
-      "--medit-shadow-strong": "rgba(45, 38, 27, 0.12)",
+      "--glyphary-app-bg": "#f3f1eb",
+      "--glyphary-surface": "#fffdfa",
+      "--glyphary-surface-muted": "#faf8f2",
+      "--glyphary-hover": "#eef1ea",
+      "--glyphary-selection": "rgba(47, 104, 70, 0.16)",
+      "--glyphary-text": "#17201a",
+      "--glyphary-text-soft": "#405044",
+      "--glyphary-editor-text": "#1d271f",
+      "--glyphary-heading": "#213227",
+      "--glyphary-muted": "#637167",
+      "--glyphary-muted-strong": "#5f6d63",
+      "--glyphary-mono-text": "#273329",
+      "--glyphary-accent": "#2f6846",
+      "--glyphary-accent-text": "#ffffff",
+      "--glyphary-focus": "#7d8f7f",
+      "--glyphary-border": "#ded9ce",
+      "--glyphary-border-soft": "#e7e2d8",
+      "--glyphary-border-strong": "#d4d0c6",
+      "--glyphary-table-border": "#d8d4ca",
+      "--glyphary-code-bg": "#18231c",
+      "--glyphary-code-text": "#f2f7ef",
+      "--glyphary-quote-border": "#77977d",
+      "--glyphary-quote-text": "#435547",
+      "--glyphary-shadow": "rgba(45, 38, 27, 0.08)",
+      "--glyphary-shadow-strong": "rgba(45, 38, 27, 0.12)",
       "--syntax-blue": "#8fd7ff",
       "--syntax-green": "#8fd18f",
       "--syntax-yellow": "#f5d08c",
@@ -1187,31 +1188,31 @@ const themePresets: ThemePreset[] = [
     name: "Ink & Linen",
     description: "Clean white surfaces with crisp ink and restrained blue.",
     tokens: {
-      "--medit-app-bg": "#f6f7f7",
-      "--medit-surface": "#ffffff",
-      "--medit-surface-muted": "#eef2f3",
-      "--medit-hover": "#e8eff2",
-      "--medit-selection": "rgba(30, 95, 132, 0.16)",
-      "--medit-text": "#11191d",
-      "--medit-text-soft": "#38464d",
-      "--medit-editor-text": "#182126",
-      "--medit-heading": "#10242d",
-      "--medit-muted": "#64727a",
-      "--medit-muted-strong": "#52616a",
-      "--medit-mono-text": "#273a42",
-      "--medit-accent": "#1e5f84",
-      "--medit-accent-text": "#ffffff",
-      "--medit-focus": "#6da5bd",
-      "--medit-border": "#d8e0e4",
-      "--medit-border-soft": "#e5ebee",
-      "--medit-border-strong": "#c5d0d6",
-      "--medit-table-border": "#ccd7dc",
-      "--medit-code-bg": "#142026",
-      "--medit-code-text": "#eef7fb",
-      "--medit-quote-border": "#7ca7b7",
-      "--medit-quote-text": "#425d68",
-      "--medit-shadow": "rgba(26, 38, 45, 0.08)",
-      "--medit-shadow-strong": "rgba(26, 38, 45, 0.13)",
+      "--glyphary-app-bg": "#f6f7f7",
+      "--glyphary-surface": "#ffffff",
+      "--glyphary-surface-muted": "#eef2f3",
+      "--glyphary-hover": "#e8eff2",
+      "--glyphary-selection": "rgba(30, 95, 132, 0.16)",
+      "--glyphary-text": "#11191d",
+      "--glyphary-text-soft": "#38464d",
+      "--glyphary-editor-text": "#182126",
+      "--glyphary-heading": "#10242d",
+      "--glyphary-muted": "#64727a",
+      "--glyphary-muted-strong": "#52616a",
+      "--glyphary-mono-text": "#273a42",
+      "--glyphary-accent": "#1e5f84",
+      "--glyphary-accent-text": "#ffffff",
+      "--glyphary-focus": "#6da5bd",
+      "--glyphary-border": "#d8e0e4",
+      "--glyphary-border-soft": "#e5ebee",
+      "--glyphary-border-strong": "#c5d0d6",
+      "--glyphary-table-border": "#ccd7dc",
+      "--glyphary-code-bg": "#142026",
+      "--glyphary-code-text": "#eef7fb",
+      "--glyphary-quote-border": "#7ca7b7",
+      "--glyphary-quote-text": "#425d68",
+      "--glyphary-shadow": "rgba(26, 38, 45, 0.08)",
+      "--glyphary-shadow-strong": "rgba(26, 38, 45, 0.13)",
       "--syntax-blue": "#8ed6ff",
       "--syntax-green": "#9bdba8",
       "--syntax-yellow": "#f1d28e",
@@ -1223,31 +1224,31 @@ const themePresets: ThemePreset[] = [
     name: "Harbor",
     description: "Cool gray-blue workspace with a calm maritime accent.",
     tokens: {
-      "--medit-app-bg": "#edf2f4",
-      "--medit-surface": "#f9fbfc",
-      "--medit-surface-muted": "#e7eef2",
-      "--medit-hover": "#dfe9ee",
-      "--medit-selection": "rgba(49, 111, 132, 0.18)",
-      "--medit-text": "#142126",
-      "--medit-text-soft": "#3e5159",
-      "--medit-editor-text": "#1c2e35",
-      "--medit-heading": "#16313a",
-      "--medit-muted": "#63777f",
-      "--medit-muted-strong": "#546a73",
-      "--medit-mono-text": "#263d45",
-      "--medit-accent": "#316f84",
-      "--medit-accent-text": "#ffffff",
-      "--medit-focus": "#7fa9b7",
-      "--medit-border": "#d0dce2",
-      "--medit-border-soft": "#dde6ea",
-      "--medit-border-strong": "#bdccd3",
-      "--medit-table-border": "#c4d2d8",
-      "--medit-code-bg": "#13242c",
-      "--medit-code-text": "#eff8fb",
-      "--medit-quote-border": "#6f9aac",
-      "--medit-quote-text": "#3f606b",
-      "--medit-shadow": "rgba(17, 40, 51, 0.09)",
-      "--medit-shadow-strong": "rgba(17, 40, 51, 0.14)",
+      "--glyphary-app-bg": "#edf2f4",
+      "--glyphary-surface": "#f9fbfc",
+      "--glyphary-surface-muted": "#e7eef2",
+      "--glyphary-hover": "#dfe9ee",
+      "--glyphary-selection": "rgba(49, 111, 132, 0.18)",
+      "--glyphary-text": "#142126",
+      "--glyphary-text-soft": "#3e5159",
+      "--glyphary-editor-text": "#1c2e35",
+      "--glyphary-heading": "#16313a",
+      "--glyphary-muted": "#63777f",
+      "--glyphary-muted-strong": "#546a73",
+      "--glyphary-mono-text": "#263d45",
+      "--glyphary-accent": "#316f84",
+      "--glyphary-accent-text": "#ffffff",
+      "--glyphary-focus": "#7fa9b7",
+      "--glyphary-border": "#d0dce2",
+      "--glyphary-border-soft": "#dde6ea",
+      "--glyphary-border-strong": "#bdccd3",
+      "--glyphary-table-border": "#c4d2d8",
+      "--glyphary-code-bg": "#13242c",
+      "--glyphary-code-text": "#eff8fb",
+      "--glyphary-quote-border": "#6f9aac",
+      "--glyphary-quote-text": "#3f606b",
+      "--glyphary-shadow": "rgba(17, 40, 51, 0.09)",
+      "--glyphary-shadow-strong": "rgba(17, 40, 51, 0.14)",
       "--syntax-blue": "#8fd9ff",
       "--syntax-green": "#92d7bd",
       "--syntax-yellow": "#f0cf8a",
@@ -1259,31 +1260,31 @@ const themePresets: ThemePreset[] = [
     name: "Moss Glass",
     description: "Soft green-gray surfaces with low-noise reading tones.",
     tokens: {
-      "--medit-app-bg": "#eef2ec",
-      "--medit-surface": "#fbfdf8",
-      "--medit-surface-muted": "#e8eee4",
-      "--medit-hover": "#dfe8dc",
-      "--medit-selection": "rgba(76, 122, 84, 0.18)",
-      "--medit-text": "#172119",
-      "--medit-text-soft": "#415344",
-      "--medit-editor-text": "#1d2b20",
-      "--medit-heading": "#203625",
-      "--medit-muted": "#627164",
-      "--medit-muted-strong": "#55665a",
-      "--medit-mono-text": "#28392d",
-      "--medit-accent": "#4c7a54",
-      "--medit-accent-text": "#ffffff",
-      "--medit-focus": "#86a888",
-      "--medit-border": "#d4ded0",
-      "--medit-border-soft": "#e1e8dd",
-      "--medit-border-strong": "#c1cfbd",
-      "--medit-table-border": "#cad7c6",
-      "--medit-code-bg": "#142318",
-      "--medit-code-text": "#eef8ee",
-      "--medit-quote-border": "#85a776",
-      "--medit-quote-text": "#4d6446",
-      "--medit-shadow": "rgba(32, 45, 29, 0.08)",
-      "--medit-shadow-strong": "rgba(32, 45, 29, 0.13)",
+      "--glyphary-app-bg": "#eef2ec",
+      "--glyphary-surface": "#fbfdf8",
+      "--glyphary-surface-muted": "#e8eee4",
+      "--glyphary-hover": "#dfe8dc",
+      "--glyphary-selection": "rgba(76, 122, 84, 0.18)",
+      "--glyphary-text": "#172119",
+      "--glyphary-text-soft": "#415344",
+      "--glyphary-editor-text": "#1d2b20",
+      "--glyphary-heading": "#203625",
+      "--glyphary-muted": "#627164",
+      "--glyphary-muted-strong": "#55665a",
+      "--glyphary-mono-text": "#28392d",
+      "--glyphary-accent": "#4c7a54",
+      "--glyphary-accent-text": "#ffffff",
+      "--glyphary-focus": "#86a888",
+      "--glyphary-border": "#d4ded0",
+      "--glyphary-border-soft": "#e1e8dd",
+      "--glyphary-border-strong": "#c1cfbd",
+      "--glyphary-table-border": "#cad7c6",
+      "--glyphary-code-bg": "#142318",
+      "--glyphary-code-text": "#eef8ee",
+      "--glyphary-quote-border": "#85a776",
+      "--glyphary-quote-text": "#4d6446",
+      "--glyphary-shadow": "rgba(32, 45, 29, 0.08)",
+      "--glyphary-shadow-strong": "rgba(32, 45, 29, 0.13)",
       "--syntax-blue": "#92d9f3",
       "--syntax-green": "#9bdb9d",
       "--syntax-yellow": "#e8d589",
@@ -1295,31 +1296,31 @@ const themePresets: ThemePreset[] = [
     name: "Nordic Dawn",
     description: "Pale cool canvas, muted coral accent, clear document text.",
     tokens: {
-      "--medit-app-bg": "#f2f4f1",
-      "--medit-surface": "#fffefd",
-      "--medit-surface-muted": "#edf0ed",
-      "--medit-hover": "#e6ecea",
-      "--medit-selection": "rgba(157, 91, 82, 0.17)",
-      "--medit-text": "#18201f",
-      "--medit-text-soft": "#45524f",
-      "--medit-editor-text": "#202927",
-      "--medit-heading": "#263330",
-      "--medit-muted": "#6b7774",
-      "--medit-muted-strong": "#5c6966",
-      "--medit-mono-text": "#2f3a38",
-      "--medit-accent": "#9d5b52",
-      "--medit-accent-text": "#ffffff",
-      "--medit-focus": "#b7928a",
-      "--medit-border": "#d9dfdc",
-      "--medit-border-soft": "#e6ebe8",
-      "--medit-border-strong": "#cbd4d0",
-      "--medit-table-border": "#d0d8d5",
-      "--medit-code-bg": "#202928",
-      "--medit-code-text": "#f3f8f6",
-      "--medit-quote-border": "#a79f76",
-      "--medit-quote-text": "#5e5b47",
-      "--medit-shadow": "rgba(32, 39, 37, 0.08)",
-      "--medit-shadow-strong": "rgba(32, 39, 37, 0.13)",
+      "--glyphary-app-bg": "#f2f4f1",
+      "--glyphary-surface": "#fffefd",
+      "--glyphary-surface-muted": "#edf0ed",
+      "--glyphary-hover": "#e6ecea",
+      "--glyphary-selection": "rgba(157, 91, 82, 0.17)",
+      "--glyphary-text": "#18201f",
+      "--glyphary-text-soft": "#45524f",
+      "--glyphary-editor-text": "#202927",
+      "--glyphary-heading": "#263330",
+      "--glyphary-muted": "#6b7774",
+      "--glyphary-muted-strong": "#5c6966",
+      "--glyphary-mono-text": "#2f3a38",
+      "--glyphary-accent": "#9d5b52",
+      "--glyphary-accent-text": "#ffffff",
+      "--glyphary-focus": "#b7928a",
+      "--glyphary-border": "#d9dfdc",
+      "--glyphary-border-soft": "#e6ebe8",
+      "--glyphary-border-strong": "#cbd4d0",
+      "--glyphary-table-border": "#d0d8d5",
+      "--glyphary-code-bg": "#202928",
+      "--glyphary-code-text": "#f3f8f6",
+      "--glyphary-quote-border": "#a79f76",
+      "--glyphary-quote-text": "#5e5b47",
+      "--glyphary-shadow": "rgba(32, 39, 37, 0.08)",
+      "--glyphary-shadow-strong": "rgba(32, 39, 37, 0.13)",
       "--syntax-blue": "#9dd7f5",
       "--syntax-green": "#a6d99a",
       "--syntax-yellow": "#ead38e",
@@ -1331,31 +1332,31 @@ const themePresets: ThemePreset[] = [
     name: "Sepia Study",
     description: "Library paper, subdued umber accent, comfortable long-form writing.",
     tokens: {
-      "--medit-app-bg": "#f0ece2",
-      "--medit-surface": "#fffaf0",
-      "--medit-surface-muted": "#f5efe2",
-      "--medit-hover": "#ece4d5",
-      "--medit-selection": "rgba(129, 91, 47, 0.18)",
-      "--medit-text": "#211a12",
-      "--medit-text-soft": "#55483a",
-      "--medit-editor-text": "#2b2116",
-      "--medit-heading": "#3a2a18",
-      "--medit-muted": "#786b5c",
-      "--medit-muted-strong": "#6d5f4e",
-      "--medit-mono-text": "#463827",
-      "--medit-accent": "#815b2f",
-      "--medit-accent-text": "#ffffff",
-      "--medit-focus": "#a88d68",
-      "--medit-border": "#ded2bd",
-      "--medit-border-soft": "#e9dfcc",
-      "--medit-border-strong": "#d1c0a6",
-      "--medit-table-border": "#d7c8b0",
-      "--medit-code-bg": "#221a12",
-      "--medit-code-text": "#fbf4e8",
-      "--medit-quote-border": "#a78c5b",
-      "--medit-quote-text": "#604c2e",
-      "--medit-shadow": "rgba(49, 37, 21, 0.08)",
-      "--medit-shadow-strong": "rgba(49, 37, 21, 0.13)",
+      "--glyphary-app-bg": "#f0ece2",
+      "--glyphary-surface": "#fffaf0",
+      "--glyphary-surface-muted": "#f5efe2",
+      "--glyphary-hover": "#ece4d5",
+      "--glyphary-selection": "rgba(129, 91, 47, 0.18)",
+      "--glyphary-text": "#211a12",
+      "--glyphary-text-soft": "#55483a",
+      "--glyphary-editor-text": "#2b2116",
+      "--glyphary-heading": "#3a2a18",
+      "--glyphary-muted": "#786b5c",
+      "--glyphary-muted-strong": "#6d5f4e",
+      "--glyphary-mono-text": "#463827",
+      "--glyphary-accent": "#815b2f",
+      "--glyphary-accent-text": "#ffffff",
+      "--glyphary-focus": "#a88d68",
+      "--glyphary-border": "#ded2bd",
+      "--glyphary-border-soft": "#e9dfcc",
+      "--glyphary-border-strong": "#d1c0a6",
+      "--glyphary-table-border": "#d7c8b0",
+      "--glyphary-code-bg": "#221a12",
+      "--glyphary-code-text": "#fbf4e8",
+      "--glyphary-quote-border": "#a78c5b",
+      "--glyphary-quote-text": "#604c2e",
+      "--glyphary-shadow": "rgba(49, 37, 21, 0.08)",
+      "--glyphary-shadow-strong": "rgba(49, 37, 21, 0.13)",
       "--syntax-blue": "#9dccdd",
       "--syntax-green": "#accb8f",
       "--syntax-yellow": "#f0ce82",
@@ -1367,31 +1368,31 @@ const themePresets: ThemePreset[] = [
     name: "Graphite",
     description: "Neutral dark graphite with sharp text and restrained amber.",
     tokens: {
-      "--medit-app-bg": "#17191a",
-      "--medit-surface": "#202324",
-      "--medit-surface-muted": "#25292a",
-      "--medit-hover": "#2e3435",
-      "--medit-selection": "rgba(205, 151, 82, 0.2)",
-      "--medit-text": "#edf0ed",
-      "--medit-text-soft": "#c4cbc6",
-      "--medit-editor-text": "#edf1ed",
-      "--medit-heading": "#f5f2e9",
-      "--medit-muted": "#9aa29d",
-      "--medit-muted-strong": "#b0b8b3",
-      "--medit-mono-text": "#d8ded9",
-      "--medit-accent": "#cd9752",
-      "--medit-accent-text": "#1a1208",
-      "--medit-focus": "#d6b17d",
-      "--medit-border": "#383e3f",
-      "--medit-border-soft": "#303536",
-      "--medit-border-strong": "#4b5253",
-      "--medit-table-border": "#454c4d",
-      "--medit-code-bg": "#101314",
-      "--medit-code-text": "#f2f4ef",
-      "--medit-quote-border": "#a88755",
-      "--medit-quote-text": "#d0c2aa",
-      "--medit-shadow": "rgba(0, 0, 0, 0.32)",
-      "--medit-shadow-strong": "rgba(0, 0, 0, 0.42)",
+      "--glyphary-app-bg": "#17191a",
+      "--glyphary-surface": "#202324",
+      "--glyphary-surface-muted": "#25292a",
+      "--glyphary-hover": "#2e3435",
+      "--glyphary-selection": "rgba(205, 151, 82, 0.2)",
+      "--glyphary-text": "#edf0ed",
+      "--glyphary-text-soft": "#c4cbc6",
+      "--glyphary-editor-text": "#edf1ed",
+      "--glyphary-heading": "#f5f2e9",
+      "--glyphary-muted": "#9aa29d",
+      "--glyphary-muted-strong": "#b0b8b3",
+      "--glyphary-mono-text": "#d8ded9",
+      "--glyphary-accent": "#cd9752",
+      "--glyphary-accent-text": "#1a1208",
+      "--glyphary-focus": "#d6b17d",
+      "--glyphary-border": "#383e3f",
+      "--glyphary-border-soft": "#303536",
+      "--glyphary-border-strong": "#4b5253",
+      "--glyphary-table-border": "#454c4d",
+      "--glyphary-code-bg": "#101314",
+      "--glyphary-code-text": "#f2f4ef",
+      "--glyphary-quote-border": "#a88755",
+      "--glyphary-quote-text": "#d0c2aa",
+      "--glyphary-shadow": "rgba(0, 0, 0, 0.32)",
+      "--glyphary-shadow-strong": "rgba(0, 0, 0, 0.42)",
       "--syntax-blue": "#8dcdf4",
       "--syntax-green": "#a7d79c",
       "--syntax-yellow": "#e8c87f",
@@ -1403,31 +1404,31 @@ const themePresets: ThemePreset[] = [
     name: "Night Owl",
     description: "Deep teal-black writing surface with luminous syntax colors.",
     tokens: {
-      "--medit-app-bg": "#11191a",
-      "--medit-surface": "#172223",
-      "--medit-surface-muted": "#1c292b",
-      "--medit-hover": "#243436",
-      "--medit-selection": "rgba(95, 161, 154, 0.22)",
-      "--medit-text": "#e9f1ef",
-      "--medit-text-soft": "#bed0cc",
-      "--medit-editor-text": "#e7f2ef",
-      "--medit-heading": "#f1f6f3",
-      "--medit-muted": "#95aaa6",
-      "--medit-muted-strong": "#abc0bc",
-      "--medit-mono-text": "#d5e3df",
-      "--medit-accent": "#5fa19a",
-      "--medit-accent-text": "#071615",
-      "--medit-focus": "#86c1b9",
-      "--medit-border": "#2b3a3c",
-      "--medit-border-soft": "#243234",
-      "--medit-border-strong": "#415255",
-      "--medit-table-border": "#394a4c",
-      "--medit-code-bg": "#0b1213",
-      "--medit-code-text": "#eff9f6",
-      "--medit-quote-border": "#78aaa0",
-      "--medit-quote-text": "#c1d7d2",
-      "--medit-shadow": "rgba(0, 0, 0, 0.34)",
-      "--medit-shadow-strong": "rgba(0, 0, 0, 0.46)",
+      "--glyphary-app-bg": "#11191a",
+      "--glyphary-surface": "#172223",
+      "--glyphary-surface-muted": "#1c292b",
+      "--glyphary-hover": "#243436",
+      "--glyphary-selection": "rgba(95, 161, 154, 0.22)",
+      "--glyphary-text": "#e9f1ef",
+      "--glyphary-text-soft": "#bed0cc",
+      "--glyphary-editor-text": "#e7f2ef",
+      "--glyphary-heading": "#f1f6f3",
+      "--glyphary-muted": "#95aaa6",
+      "--glyphary-muted-strong": "#abc0bc",
+      "--glyphary-mono-text": "#d5e3df",
+      "--glyphary-accent": "#5fa19a",
+      "--glyphary-accent-text": "#071615",
+      "--glyphary-focus": "#86c1b9",
+      "--glyphary-border": "#2b3a3c",
+      "--glyphary-border-soft": "#243234",
+      "--glyphary-border-strong": "#415255",
+      "--glyphary-table-border": "#394a4c",
+      "--glyphary-code-bg": "#0b1213",
+      "--glyphary-code-text": "#eff9f6",
+      "--glyphary-quote-border": "#78aaa0",
+      "--glyphary-quote-text": "#c1d7d2",
+      "--glyphary-shadow": "rgba(0, 0, 0, 0.34)",
+      "--glyphary-shadow-strong": "rgba(0, 0, 0, 0.46)",
       "--syntax-blue": "#86d5ff",
       "--syntax-green": "#9ce0b4",
       "--syntax-yellow": "#f0d783",
@@ -1439,31 +1440,31 @@ const themePresets: ThemePreset[] = [
     name: "Alpine Dark",
     description: "Cool dark mountain palette with green-blue emphasis.",
     tokens: {
-      "--medit-app-bg": "#14191d",
-      "--medit-surface": "#1b2227",
-      "--medit-surface-muted": "#202a30",
-      "--medit-hover": "#29363d",
-      "--medit-selection": "rgba(113, 158, 139, 0.22)",
-      "--medit-text": "#edf2f0",
-      "--medit-text-soft": "#c2ceca",
-      "--medit-editor-text": "#e7efec",
-      "--medit-heading": "#f0f6f3",
-      "--medit-muted": "#98a9a4",
-      "--medit-muted-strong": "#adbbb7",
-      "--medit-mono-text": "#d8e2df",
-      "--medit-accent": "#719e8b",
-      "--medit-accent-text": "#071310",
-      "--medit-focus": "#95bba9",
-      "--medit-border": "#313d43",
-      "--medit-border-soft": "#2a353b",
-      "--medit-border-strong": "#47545a",
-      "--medit-table-border": "#3d4a50",
-      "--medit-code-bg": "#0e1417",
-      "--medit-code-text": "#f0f7f4",
-      "--medit-quote-border": "#89a871",
-      "--medit-quote-text": "#cdd8c5",
-      "--medit-shadow": "rgba(0, 0, 0, 0.33)",
-      "--medit-shadow-strong": "rgba(0, 0, 0, 0.45)",
+      "--glyphary-app-bg": "#14191d",
+      "--glyphary-surface": "#1b2227",
+      "--glyphary-surface-muted": "#202a30",
+      "--glyphary-hover": "#29363d",
+      "--glyphary-selection": "rgba(113, 158, 139, 0.22)",
+      "--glyphary-text": "#edf2f0",
+      "--glyphary-text-soft": "#c2ceca",
+      "--glyphary-editor-text": "#e7efec",
+      "--glyphary-heading": "#f0f6f3",
+      "--glyphary-muted": "#98a9a4",
+      "--glyphary-muted-strong": "#adbbb7",
+      "--glyphary-mono-text": "#d8e2df",
+      "--glyphary-accent": "#719e8b",
+      "--glyphary-accent-text": "#071310",
+      "--glyphary-focus": "#95bba9",
+      "--glyphary-border": "#313d43",
+      "--glyphary-border-soft": "#2a353b",
+      "--glyphary-border-strong": "#47545a",
+      "--glyphary-table-border": "#3d4a50",
+      "--glyphary-code-bg": "#0e1417",
+      "--glyphary-code-text": "#f0f7f4",
+      "--glyphary-quote-border": "#89a871",
+      "--glyphary-quote-text": "#cdd8c5",
+      "--glyphary-shadow": "rgba(0, 0, 0, 0.33)",
+      "--glyphary-shadow-strong": "rgba(0, 0, 0, 0.45)",
       "--syntax-blue": "#8dcfff",
       "--syntax-green": "#a8d99e",
       "--syntax-yellow": "#ead17e",
@@ -1475,31 +1476,31 @@ const themePresets: ThemePreset[] = [
     name: "Plum Ledger",
     description: "Charcoal base with plum accent and accountant-clean contrast.",
     tokens: {
-      "--medit-app-bg": "#19181d",
-      "--medit-surface": "#222128",
-      "--medit-surface-muted": "#282631",
-      "--medit-hover": "#332f3d",
-      "--medit-selection": "rgba(153, 113, 142, 0.22)",
-      "--medit-text": "#f0edf1",
-      "--medit-text-soft": "#cec6d0",
-      "--medit-editor-text": "#f0edf2",
-      "--medit-heading": "#f8f1f5",
-      "--medit-muted": "#a49aa6",
-      "--medit-muted-strong": "#b9afbb",
-      "--medit-mono-text": "#ded6e0",
-      "--medit-accent": "#99718e",
-      "--medit-accent-text": "#160d13",
-      "--medit-focus": "#b797ad",
-      "--medit-border": "#3b3842",
-      "--medit-border-soft": "#332f39",
-      "--medit-border-strong": "#514c59",
-      "--medit-table-border": "#48434f",
-      "--medit-code-bg": "#121116",
-      "--medit-code-text": "#f6f1f5",
-      "--medit-quote-border": "#9d8bba",
-      "--medit-quote-text": "#d4c8db",
-      "--medit-shadow": "rgba(0, 0, 0, 0.34)",
-      "--medit-shadow-strong": "rgba(0, 0, 0, 0.46)",
+      "--glyphary-app-bg": "#19181d",
+      "--glyphary-surface": "#222128",
+      "--glyphary-surface-muted": "#282631",
+      "--glyphary-hover": "#332f3d",
+      "--glyphary-selection": "rgba(153, 113, 142, 0.22)",
+      "--glyphary-text": "#f0edf1",
+      "--glyphary-text-soft": "#cec6d0",
+      "--glyphary-editor-text": "#f0edf2",
+      "--glyphary-heading": "#f8f1f5",
+      "--glyphary-muted": "#a49aa6",
+      "--glyphary-muted-strong": "#b9afbb",
+      "--glyphary-mono-text": "#ded6e0",
+      "--glyphary-accent": "#99718e",
+      "--glyphary-accent-text": "#160d13",
+      "--glyphary-focus": "#b797ad",
+      "--glyphary-border": "#3b3842",
+      "--glyphary-border-soft": "#332f39",
+      "--glyphary-border-strong": "#514c59",
+      "--glyphary-table-border": "#48434f",
+      "--glyphary-code-bg": "#121116",
+      "--glyphary-code-text": "#f6f1f5",
+      "--glyphary-quote-border": "#9d8bba",
+      "--glyphary-quote-text": "#d4c8db",
+      "--glyphary-shadow": "rgba(0, 0, 0, 0.34)",
+      "--glyphary-shadow-strong": "rgba(0, 0, 0, 0.46)",
       "--syntax-blue": "#9bcfff",
       "--syntax-green": "#a9d7a3",
       "--syntax-yellow": "#ead08a",
@@ -1511,31 +1512,31 @@ const themePresets: ThemePreset[] = [
     name: "Slate Rose",
     description: "Pale slate UI with a dried-rose accent and soft borders.",
     tokens: {
-      "--medit-app-bg": "#f1f2f3",
-      "--medit-surface": "#fffdfd",
-      "--medit-surface-muted": "#ebeef0",
-      "--medit-hover": "#e4e9eb",
-      "--medit-selection": "rgba(154, 87, 96, 0.16)",
-      "--medit-text": "#1d2022",
-      "--medit-text-soft": "#4b5357",
-      "--medit-editor-text": "#252a2d",
-      "--medit-heading": "#2c3134",
-      "--medit-muted": "#6c7478",
-      "--medit-muted-strong": "#5e666b",
-      "--medit-mono-text": "#343d41",
-      "--medit-accent": "#9a5760",
-      "--medit-accent-text": "#ffffff",
-      "--medit-focus": "#b98d93",
-      "--medit-border": "#d9dee1",
-      "--medit-border-soft": "#e6eaec",
-      "--medit-border-strong": "#cbd2d6",
-      "--medit-table-border": "#d1d7da",
-      "--medit-code-bg": "#202326",
-      "--medit-code-text": "#f4f6f6",
-      "--medit-quote-border": "#9b9a72",
-      "--medit-quote-text": "#5b5b45",
-      "--medit-shadow": "rgba(32, 38, 42, 0.08)",
-      "--medit-shadow-strong": "rgba(32, 38, 42, 0.13)",
+      "--glyphary-app-bg": "#f1f2f3",
+      "--glyphary-surface": "#fffdfd",
+      "--glyphary-surface-muted": "#ebeef0",
+      "--glyphary-hover": "#e4e9eb",
+      "--glyphary-selection": "rgba(154, 87, 96, 0.16)",
+      "--glyphary-text": "#1d2022",
+      "--glyphary-text-soft": "#4b5357",
+      "--glyphary-editor-text": "#252a2d",
+      "--glyphary-heading": "#2c3134",
+      "--glyphary-muted": "#6c7478",
+      "--glyphary-muted-strong": "#5e666b",
+      "--glyphary-mono-text": "#343d41",
+      "--glyphary-accent": "#9a5760",
+      "--glyphary-accent-text": "#ffffff",
+      "--glyphary-focus": "#b98d93",
+      "--glyphary-border": "#d9dee1",
+      "--glyphary-border-soft": "#e6eaec",
+      "--glyphary-border-strong": "#cbd2d6",
+      "--glyphary-table-border": "#d1d7da",
+      "--glyphary-code-bg": "#202326",
+      "--glyphary-code-text": "#f4f6f6",
+      "--glyphary-quote-border": "#9b9a72",
+      "--glyphary-quote-text": "#5b5b45",
+      "--glyphary-shadow": "rgba(32, 38, 42, 0.08)",
+      "--glyphary-shadow-strong": "rgba(32, 38, 42, 0.13)",
       "--syntax-blue": "#8ed2f4",
       "--syntax-green": "#a4d69c",
       "--syntax-yellow": "#e9d084",
@@ -1547,31 +1548,31 @@ const themePresets: ThemePreset[] = [
     name: "Blueprint",
     description: "Technical blue-gray dark mode with diagram-clean contrast.",
     tokens: {
-      "--medit-app-bg": "#121821",
-      "--medit-surface": "#182231",
-      "--medit-surface-muted": "#1d2b3c",
-      "--medit-hover": "#26384d",
-      "--medit-selection": "rgba(86, 142, 186, 0.24)",
-      "--medit-text": "#edf3f8",
-      "--medit-text-soft": "#c2cfda",
-      "--medit-editor-text": "#eaf2f8",
-      "--medit-heading": "#f5f9fc",
-      "--medit-muted": "#96a8b7",
-      "--medit-muted-strong": "#adbdca",
-      "--medit-mono-text": "#d8e4ee",
-      "--medit-accent": "#568eba",
-      "--medit-accent-text": "#07121a",
-      "--medit-focus": "#83b0d1",
-      "--medit-border": "#2d3d50",
-      "--medit-border-soft": "#263548",
-      "--medit-border-strong": "#43566d",
-      "--medit-table-border": "#394d63",
-      "--medit-code-bg": "#0c1118",
-      "--medit-code-text": "#eff7fd",
-      "--medit-quote-border": "#75a2c6",
-      "--medit-quote-text": "#c8d8e4",
-      "--medit-shadow": "rgba(0, 0, 0, 0.34)",
-      "--medit-shadow-strong": "rgba(0, 0, 0, 0.46)",
+      "--glyphary-app-bg": "#121821",
+      "--glyphary-surface": "#182231",
+      "--glyphary-surface-muted": "#1d2b3c",
+      "--glyphary-hover": "#26384d",
+      "--glyphary-selection": "rgba(86, 142, 186, 0.24)",
+      "--glyphary-text": "#edf3f8",
+      "--glyphary-text-soft": "#c2cfda",
+      "--glyphary-editor-text": "#eaf2f8",
+      "--glyphary-heading": "#f5f9fc",
+      "--glyphary-muted": "#96a8b7",
+      "--glyphary-muted-strong": "#adbdca",
+      "--glyphary-mono-text": "#d8e4ee",
+      "--glyphary-accent": "#568eba",
+      "--glyphary-accent-text": "#07121a",
+      "--glyphary-focus": "#83b0d1",
+      "--glyphary-border": "#2d3d50",
+      "--glyphary-border-soft": "#263548",
+      "--glyphary-border-strong": "#43566d",
+      "--glyphary-table-border": "#394d63",
+      "--glyphary-code-bg": "#0c1118",
+      "--glyphary-code-text": "#eff7fd",
+      "--glyphary-quote-border": "#75a2c6",
+      "--glyphary-quote-text": "#c8d8e4",
+      "--glyphary-shadow": "rgba(0, 0, 0, 0.34)",
+      "--glyphary-shadow-strong": "rgba(0, 0, 0, 0.46)",
       "--syntax-blue": "#8ed5ff",
       "--syntax-green": "#9edaa7",
       "--syntax-yellow": "#efd17e",
@@ -1634,7 +1635,7 @@ function normalizeThemeTokens(tokens: Record<string, string> | undefined | null)
   for (const [token, value] of Object.entries(tokens ?? {})) {
     const cleanValue = value.trim();
 
-    // Ignore unknown CSS variables from .medit so imported or hand-edited
+    // Ignore unknown CSS variables from .glyphary so imported or hand-edited
     // settings cannot unexpectedly restyle arbitrary parts of the app.
     if (editableThemeTokens.has(token) && cleanValue) {
       normalized[token] = cleanValue;
@@ -1642,6 +1643,12 @@ function normalizeThemeTokens(tokens: Record<string, string> | undefined | null)
   }
 
   return normalized;
+}
+
+function normalizeThemePresetId(presetId: string | undefined | null) {
+  const cleanPresetId = presetId?.trim() ?? "";
+
+  return themePresets.some((preset) => preset.id === cleanPresetId) ? cleanPresetId : null;
 }
 
 function sameThemeTokens(
@@ -1897,14 +1904,14 @@ function createColumnExtension() {
     defining: true,
 
     parseHTML() {
-      return [{ tag: "div[data-medit-column]" }];
+      return [{ tag: "div[data-glyphary-column]" }];
     },
 
     renderHTML({ HTMLAttributes }) {
       return [
         "div",
         mergeAttributes(HTMLAttributes, {
-          "data-medit-column": "true",
+          "data-glyphary-column": "true",
           class: "markdown-column",
         }),
         0,
@@ -1945,14 +1952,14 @@ function createColumnsExtension() {
     defining: true,
 
     parseHTML() {
-      return [{ tag: "div[data-medit-columns]" }];
+      return [{ tag: "div[data-glyphary-columns]" }];
     },
 
     renderHTML({ HTMLAttributes }) {
       return [
         "div",
         mergeAttributes(HTMLAttributes, {
-          "data-medit-columns": "true",
+          "data-glyphary-columns": "true",
           class: "markdown-columns",
         }),
         0,
@@ -2017,7 +2024,7 @@ function createCalloutExtension() {
     },
 
     parseHTML() {
-      return [{ tag: "aside[data-medit-callout]" }];
+      return [{ tag: "aside[data-glyphary-callout]" }];
     },
 
     renderHTML({ node, HTMLAttributes }) {
@@ -2027,7 +2034,7 @@ function createCalloutExtension() {
       return [
         "aside",
         mergeAttributes(HTMLAttributes, {
-          "data-medit-callout": "true",
+          "data-glyphary-callout": "true",
           "data-callout-kind": kind,
           ...(title ? { "data-callout-title": title } : {}),
           class: `markdown-callout markdown-callout-${kind}`,
@@ -2130,7 +2137,7 @@ function createRichLinkExtension() {
     },
 
     parseHTML() {
-      return [{ tag: "div[data-medit-rich-link]" }];
+      return [{ tag: "div[data-glyphary-rich-link]" }];
     },
 
     renderHTML({ node }) {
@@ -2154,7 +2161,7 @@ function createRichLinkExtension() {
         ? [
             "div",
             {
-              "data-medit-rich-link": "true",
+              "data-glyphary-rich-link": "true",
               "data-rich-link-url": url,
               "data-rich-link-title": title,
               "data-rich-link-description": description,
@@ -2169,7 +2176,7 @@ function createRichLinkExtension() {
         : [
             "div",
             {
-              "data-medit-rich-link": "true",
+              "data-glyphary-rich-link": "true",
               "data-rich-link-url": url,
               "data-rich-link-title": title,
               "data-rich-link-description": description,
@@ -2385,6 +2392,7 @@ function App() {
   );
   const [vaultAppearanceDraft, setVaultAppearanceDraft] =
     useState<VaultAppearanceSettings>(defaultVaultAppearanceSettings);
+  const [selectedThemePresetIdDraft, setSelectedThemePresetIdDraft] = useState<string | null>(null);
   const [themeDraft, setThemeDraft] = useState<Record<string, string>>({});
   const [currentDir, setCurrentDir] = useState("");
   const [entries, setEntries] = useState<VaultEntry[]>([]);
@@ -2624,15 +2632,21 @@ function App() {
       ...tokens,
       [token]: value,
     }));
+    setSelectedThemePresetIdDraft(null);
   }
 
   function applyThemePreset(preset: ThemePreset) {
+    setSelectedThemePresetIdDraft(preset.id);
     setThemeDraft(normalizeThemeTokens(preset.tokens));
-    setStatus(`Previewing theme template: ${preset.name}`);
+    setStatus(`Previewing theme template: ${preset.name}. Save Settings to keep it.`);
   }
 
   function savedThemeTokens() {
     return normalizeThemeTokens(vaultSettings.theme?.tokens);
+  }
+
+  function savedThemePresetId() {
+    return normalizeThemePresetId(vaultSettings.theme?.presetId);
   }
 
   function savedFrontmatterPillSettings() {
@@ -2653,11 +2667,13 @@ function App() {
       !sameFrontmatterPillSettings(frontmatterPillDraft, savedFrontmatterPillSettings()) ||
       !sameEditorBehaviorSettings(editorBehaviorDraft, savedEditorBehaviorSettings()) ||
       !sameVaultAppearanceSettings(vaultAppearanceDraft, savedVaultAppearanceSettings()) ||
+      selectedThemePresetIdDraft !== savedThemePresetId() ||
       !sameThemeTokens(themeDraft, savedThemeTokens())
     );
   }
 
   function resetThemeDraft() {
+    setSelectedThemePresetIdDraft(null);
     setThemeDraft({});
     setStatus("Reset theme preview");
   }
@@ -2667,6 +2683,7 @@ function App() {
     setFrontmatterPillDraft(savedFrontmatterPillSettings());
     setEditorBehaviorDraft(savedEditorBehaviorSettings());
     setVaultAppearanceDraft(savedVaultAppearanceSettings());
+    setSelectedThemePresetIdDraft(savedThemePresetId());
     setThemeDraft(savedThemeTokens());
     setStatus("Reverted settings preview");
   }
@@ -3031,7 +3048,7 @@ function App() {
           lowlight,
         }),
         TocCodeBlockRenderer,
-        ...(editorBehavior.vimMode ? [createMEditVimMode(setStatus)] : []),
+        ...(editorBehavior.vimMode ? [createGlypharyVimMode(setStatus)] : []),
         createColumnExtension(),
         createColumnsExtension(),
         createCalloutExtension(),
@@ -3523,6 +3540,7 @@ function App() {
           theme: null,
         };
     const themeTokens = normalizeThemeTokens(settings.theme?.tokens);
+    const themePresetId = normalizeThemePresetId(settings.theme?.presetId);
     const frontmatterPills = normalizeFrontmatterPillSettings(settings.frontmatterPills);
     const editorSettings = normalizeEditorBehaviorSettings(settings.editor);
     const vaultAppearanceSettings = normalizeVaultAppearanceSettings(settings.appearance);
@@ -3541,6 +3559,7 @@ function App() {
     setEditorBehaviorDraft(editorSettings);
     setEditorBehavior(editorSettings);
     setVaultAppearanceDraft(vaultAppearanceSettings);
+    setSelectedThemePresetIdDraft(themePresetId);
     setThemeDraft(themeTokens);
 
     if (isTauri()) {
@@ -3569,11 +3588,15 @@ function App() {
           editor: normalizeEditorBehaviorSettings(editorBehaviorDraft),
           appearance: normalizeVaultAppearanceSettings(vaultAppearanceDraft),
           theme: Object.keys(normalizeThemeTokens(themeDraft)).length > 0
-            ? { tokens: normalizeThemeTokens(themeDraft) }
+            ? {
+                presetId: selectedThemePresetIdDraft,
+                tokens: normalizeThemeTokens(themeDraft),
+              }
             : null,
         },
       });
       const themeTokens = normalizeThemeTokens(settings.theme?.tokens);
+      const themePresetId = normalizeThemePresetId(settings.theme?.presetId);
       const frontmatterPills = normalizeFrontmatterPillSettings(settings.frontmatterPills);
       const editorSettings = normalizeEditorBehaviorSettings(settings.editor);
       const vaultAppearanceSettings = normalizeVaultAppearanceSettings(settings.appearance);
@@ -3595,6 +3618,7 @@ function App() {
       setEditorBehaviorDraft(editorSettings);
       setEditorBehavior(editorSettings);
       setVaultAppearanceDraft(vaultAppearanceSettings);
+      setSelectedThemePresetIdDraft(themePresetId);
       setThemeDraft(themeTokens);
       await invoke("allow_vault_assets", {
         root: vaultRoot,
@@ -5383,6 +5407,7 @@ function App() {
                       {themePresets.map((preset) => (
                         <button
                           className={
+                            selectedThemePresetIdDraft === preset.id ||
                             sameThemeTokens(themeDraft, preset.tokens)
                               ? "theme-preset-card active"
                               : "theme-preset-card"
@@ -5393,10 +5418,10 @@ function App() {
                           onClick={() => applyThemePreset(preset)}
                         >
                           <span className="theme-preset-swatches" aria-hidden="true">
-                            <i style={{ background: preset.tokens["--medit-app-bg"] }} />
-                            <i style={{ background: preset.tokens["--medit-surface"] }} />
-                            <i style={{ background: preset.tokens["--medit-accent"] }} />
-                            <i style={{ background: preset.tokens["--medit-code-bg"] }} />
+                            <i style={{ background: preset.tokens["--glyphary-app-bg"] }} />
+                            <i style={{ background: preset.tokens["--glyphary-surface"] }} />
+                            <i style={{ background: preset.tokens["--glyphary-accent"] }} />
+                            <i style={{ background: preset.tokens["--glyphary-code-bg"] }} />
                           </span>
                           <strong>{preset.name}</strong>
                           <small>{preset.description}</small>

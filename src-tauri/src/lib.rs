@@ -70,6 +70,8 @@ struct FrontmatterPillSettings {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct VaultTheme {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    preset_id: Option<String>,
     tokens: HashMap<String, String>,
 }
 
@@ -124,33 +126,33 @@ const MAX_RICH_LINK_HTML_BYTES: u64 = 2 * 1024 * 1024;
 const RICH_LINK_IMAGE_SCAN_BYTES: usize = 160 * 1024;
 const DEFAULT_ASSET_DIRECTORY: &str = "_assets_";
 const DEFAULT_FRONTMATTER_PILL_HEADER: &str = "tags";
-const SETTINGS_FILE_NAME: &str = ".medit";
+const SETTINGS_FILE_NAME: &str = ".glyphary";
 const THEME_TOKEN_ALLOWLIST: &[&str] = &[
-    "--medit-accent",
-    "--medit-accent-text",
-    "--medit-app-bg",
-    "--medit-border",
-    "--medit-border-soft",
-    "--medit-border-strong",
-    "--medit-code-bg",
-    "--medit-code-text",
-    "--medit-editor-text",
-    "--medit-focus",
-    "--medit-heading",
-    "--medit-hover",
-    "--medit-mono-text",
-    "--medit-muted",
-    "--medit-muted-strong",
-    "--medit-quote-border",
-    "--medit-quote-text",
-    "--medit-selection",
-    "--medit-shadow",
-    "--medit-shadow-strong",
-    "--medit-surface",
-    "--medit-surface-muted",
-    "--medit-table-border",
-    "--medit-text",
-    "--medit-text-soft",
+    "--glyphary-accent",
+    "--glyphary-accent-text",
+    "--glyphary-app-bg",
+    "--glyphary-border",
+    "--glyphary-border-soft",
+    "--glyphary-border-strong",
+    "--glyphary-code-bg",
+    "--glyphary-code-text",
+    "--glyphary-editor-text",
+    "--glyphary-focus",
+    "--glyphary-heading",
+    "--glyphary-hover",
+    "--glyphary-mono-text",
+    "--glyphary-muted",
+    "--glyphary-muted-strong",
+    "--glyphary-quote-border",
+    "--glyphary-quote-text",
+    "--glyphary-selection",
+    "--glyphary-shadow",
+    "--glyphary-shadow-strong",
+    "--glyphary-surface",
+    "--glyphary-surface-muted",
+    "--glyphary-table-border",
+    "--glyphary-text",
+    "--glyphary-text-soft",
     "--syntax-blue",
     "--syntax-green",
     "--syntax-muted",
@@ -218,7 +220,7 @@ fn clean_settings_asset_directory(asset_directory: &str) -> Result<PathBuf, Stri
 
 fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, String> {
     let asset_directory = clean_settings_asset_directory(&settings.asset_directory)?;
-    // Store settings with forward slashes even on Windows so .medit remains
+    // Store settings with forward slashes even on Windows so .glyphary remains
     // portable and matches the frontend's markdown asset references.
     let asset_directory = asset_directory
         .components()
@@ -273,6 +275,10 @@ fn clean_theme(theme: Option<VaultTheme>) -> Result<Option<VaultTheme>, String> 
         return Ok(None);
     };
     let mut tokens = HashMap::new();
+    let preset_id = theme
+        .preset_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     for (key, value) in theme.tokens {
         if !THEME_TOKEN_ALLOWLIST.contains(&key.as_str()) {
@@ -295,7 +301,7 @@ fn clean_theme(theme: Option<VaultTheme>) -> Result<Option<VaultTheme>, String> 
     if tokens.is_empty() {
         Ok(None)
     } else {
-        Ok(Some(VaultTheme { tokens }))
+        Ok(Some(VaultTheme { preset_id, tokens }))
     }
 }
 
@@ -871,7 +877,7 @@ fn list_vault_dir(root: String, relative: String) -> Result<Vec<VaultEntry>, Str
     let mut entries = fs::read_dir(&dir)
         .map_err(|err| format!("Could not list directory: {err}"))?
         .filter_map(|entry| match entry {
-            // .medit is vault-local application state, not a user note.
+            // .glyphary is vault-local application state, not a user note.
             Ok(entry) if entry.file_name().to_string_lossy() == SETTINGS_FILE_NAME => None,
             other => Some(other),
         })
@@ -1260,7 +1266,7 @@ async fn fetch_rich_link_metadata(url: String) -> Result<RichLinkMetadata, Strin
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
-        .user_agent("MEdit/0.1 rich-link preview")
+        .user_agent("Glyphary/0.1 rich-link preview")
         .build()
         .map_err(|err| format!("Could not prepare rich link request: {err}"))?;
     let response = client
@@ -1461,7 +1467,7 @@ mod tests {
             .expect("clock should be available")
             .as_nanos();
         let counter = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let root = std::env::temp_dir().join(format!("medit-vault-test-{unique}-{counter}"));
+        let root = std::env::temp_dir().join(format!("glyphary-vault-test-{unique}-{counter}"));
         if root.exists() {
             fs::remove_dir_all(&root).expect("stale test root should be removed");
         }
@@ -1617,8 +1623,8 @@ mod tests {
     fn writes_vault_theme_tokens() {
         let root = test_root();
         let mut tokens = HashMap::new();
-        tokens.insert("--medit-accent".into(), "#336699".into());
-        tokens.insert("--medit-surface".into(), "  #ffffff  ".into());
+        tokens.insert("--glyphary-accent".into(), "#336699".into());
+        tokens.insert("--glyphary-surface".into(), "  #ffffff  ".into());
 
         let settings = write_vault_settings(
             root.to_string_lossy().into_owned(),
@@ -1627,17 +1633,21 @@ mod tests {
                 frontmatter_pills: FrontmatterPillSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
-                theme: Some(VaultTheme { tokens }),
+                theme: Some(VaultTheme {
+                    preset_id: Some("field-notes".into()),
+                    tokens,
+                }),
             },
         )
         .expect("settings should write");
-        let saved_tokens = settings
+        let saved_theme = settings
             .theme
-            .expect("theme should be retained")
-            .tokens;
+            .expect("theme should be retained");
+        let saved_tokens = saved_theme.tokens;
 
-        assert_eq!(saved_tokens.get("--medit-accent"), Some(&"#336699".to_string()));
-        assert_eq!(saved_tokens.get("--medit-surface"), Some(&"#ffffff".to_string()));
+        assert_eq!(saved_theme.preset_id, Some("field-notes".to_string()));
+        assert_eq!(saved_tokens.get("--glyphary-accent"), Some(&"#336699".to_string()));
+        assert_eq!(saved_tokens.get("--glyphary-surface"), Some(&"#ffffff".to_string()));
 
         fs::remove_dir_all(root).expect("test root should be removed");
     }
@@ -1655,7 +1665,10 @@ mod tests {
                 frontmatter_pills: FrontmatterPillSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
-                theme: Some(VaultTheme { tokens }),
+                theme: Some(VaultTheme {
+                    preset_id: None,
+                    tokens,
+                }),
             },
         )
         .expect_err("unsupported token should fail");

@@ -1,6 +1,6 @@
-# MEdit
+# Glyphary
 
-MEdit is a Tauri desktop Markdown editor built with React, TypeScript, and Tiptap. It edits Markdown files from a local vault, keeps frontmatter intact, supports multiple open documents, and provides drawer-based navigation for files, search, document contents, source/export, and calendar notes.
+Glyphary is a Tauri desktop Markdown editor built with React, TypeScript, and Tiptap. It edits Markdown files from a local vault, keeps frontmatter intact, supports multiple open documents, and provides drawer-based navigation for files, search, document contents, source/export, and calendar notes.
 
 ## Current Capabilities
 
@@ -45,7 +45,7 @@ When a vault is open:
 - File and directory rows use icons rather than text badges.
 - The vault drawer can be collapsed and resized with the drag bar.
 
-MEdit remembers the last vault and active file in local storage and restores them on app restart.
+Glyphary remembers the last vault and active file in local storage and restores them on app restart.
 
 ## Search
 
@@ -86,7 +86,7 @@ renders as an embedded table of contents while the cursor is outside the block. 
 
 ## Columns
 
-MEdit supports an editable column layout using Markdown container fences:
+Glyphary supports an editable column layout using Markdown container fences:
 
 ```markdown
 ::: columns
@@ -104,7 +104,7 @@ The WYSIWYG editor renders the child `column` containers side by side when there
 
 ## Callouts
 
-MEdit supports editable callout blocks using the same container-fence family as columns:
+Glyphary supports editable callout blocks using the same container-fence family as columns:
 
 ```markdown
 ::: callout note
@@ -204,7 +204,7 @@ Dragging or pasting an image into the editor:
 Settings are tied to the current vault and stored as JSON in:
 
 ```text
-<vault root>/.medit
+<vault root>/.glyphary
 ```
 
 Currently supported setting:
@@ -214,18 +214,19 @@ Currently supported setting:
 - `frontmatterPills.headerName`: the frontmatter header used for pills. Defaults to `tags`.
 - `editor.vimMode`: whether editor panes use Vim-style keybindings. Defaults to `false`.
 - `appearance.glassEffect`: whether the app window previews a translucent native glass material. Defaults to `false`.
-- `theme.tokens`: vault-specific theme token overrides created by the Settings theme builder.
+- `theme.presetId`: the selected theme template, when one is active.
+- `theme.tokens`: vault-specific theme token overrides created by theme templates or the Settings theme builder.
 
 The settings screen is separate from the right drawer and can be opened through the menu or `Cmd+,`. Settings are grouped into tabs:
 
 - `Main`: vault asset directory, metadata pill settings, and editor behavior.
 - `Appearance`: window glass effect, theme builder, and vault-specific color tokens.
 
-Theme tokens are allowlisted and validated by the Tauri backend before they are written to `.medit`.
+Theme tokens are allowlisted and validated by the Tauri backend before they are written to `.glyphary`.
 
 ## Frontmatter And Metadata
 
-MEdit recognizes frontmatter at the top of Markdown files using either:
+Glyphary recognizes frontmatter at the top of Markdown files using either:
 
 ```markdown
 ---
@@ -273,9 +274,9 @@ Editor tabs let multiple documents stay open at once.
 
 ## Vim-Style Editing
 
-Vim-style editing is optional and can be enabled per vault in `Settings -> Main -> Editor` with `Use Vim keybindings`. The setting is persisted in the vault `.medit` file as `editor.vimMode`.
+Vim-style editing is optional and can be enabled per vault in `Settings -> Main -> Editor` with `Use Vim keybindings`. The setting is persisted in the vault `.glyphary` file as `editor.vimMode`.
 
-The implementation is a local MEdit Tiptap extension. It owns Normal/Insert mode state, motions, yanks, deletes, paste behavior, status updates, and a small Vim copy buffer.
+The implementation is a local Glyphary Tiptap extension. It owns Normal/Insert mode state, motions, yanks, deletes, paste behavior, status updates, and a small Vim copy buffer.
 
 ### Modes
 
@@ -325,7 +326,7 @@ The bottom status bar reports transitions as `Vim normal mode` and `Vim insert m
 | `p` | Paste the copy buffer after the cursor. |
 | `O` | Paste the copy buffer before the cursor. |
 
-MEdit keeps its own Vim copy buffer as the source of truth. Yank and delete operations also attempt a best-effort write to the system clipboard when the webview allows it.
+Glyphary keeps its own Vim copy buffer as the source of truth. Yank and delete operations also attempt a best-effort write to the system clipboard when the webview allows it.
 
 ### Undo And Redo
 
@@ -355,7 +356,7 @@ On macOS, the in-window File and New buttons are hidden because those actions ar
 
 ## Theming
 
-MEdit has built-in light, dark, and auto appearance modes. The current theme system exposes common Obsidian-style CSS variables such as:
+Glyphary has built-in light, dark, and auto appearance modes. The current theme system exposes common Obsidian-style CSS variables such as:
 
 - `--background-primary`
 - `--background-secondary`
@@ -365,9 +366,9 @@ MEdit has built-in light, dark, and auto appearance modes. The current theme sys
 - `--code-background`
 - `--blockquote-border-color`
 
-The app maps its own internal theme tokens through those variables, and it applies `theme-light` / `theme-dark` classes based on the resolved appearance. This is a compatibility foundation for future Obsidian-theme imports, not full Obsidian theme support yet. Obsidian themes can still depend on Obsidian-specific DOM structure and selectors that MEdit does not currently emulate.
+The app maps its own internal theme tokens through those variables, and it applies `theme-light` / `theme-dark` classes based on the resolved appearance. This is a compatibility foundation for future Obsidian-theme imports, not full Obsidian theme support yet. Obsidian themes can still depend on Obsidian-specific DOM structure and selectors that Glyphary does not currently emulate.
 
-The Settings screen includes a macOS-oriented glass window effect, a dozen theme templates, and a Theme Builder for the current vault. The glass setting previews immediately and is saved as `appearance.glassEffect` in `<vault root>/.medit`; unsupported platforms keep the regular opaque window. Theme templates apply complete token sets for canvas, surfaces, text, accents, borders, code, quotes, tables, and syntax colors. The Theme Builder then lets each token be refined manually. Color changes preview immediately by applying CSS variables to the running app. Saving writes the selected token values to `<vault root>/.medit`; Reset Theme clears custom token overrides, and Revert returns to the last saved vault settings.
+The Settings screen includes a macOS-oriented glass window effect, a dozen theme templates, and a Theme Builder for the current vault. The glass setting previews immediately and is saved as `appearance.glassEffect` in `<vault root>/.glyphary`; unsupported platforms keep the regular opaque window. Theme templates apply complete token sets for canvas, surfaces, text, accents, borders, code, quotes, tables, and syntax colors, and the selected template id is saved with the vault settings. The Theme Builder then lets each token be refined manually. Color changes preview immediately by applying CSS variables to the running app. Saving writes the selected template and token values to `<vault root>/.glyphary`; Reset Theme clears custom token overrides, and Revert returns to the last saved vault settings.
 
 The app also exposes an icon-only Auto/Light/Dark appearance control for quick switching.
 

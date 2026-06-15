@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MEdit",
+  "productName": "Glyphary",
   "version": "0.1.0",
-  "identifier": "com.local.medit",
+  "identifier": "com.local.glyphary",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "MEdit",
+        "title": "Glyphary",
         "width": 1470,
         "height": 956,
         "minWidth": 760,
