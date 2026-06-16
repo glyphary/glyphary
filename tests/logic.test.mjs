@@ -17,6 +17,7 @@ import {
   defaultVaultDrawerOpen,
   defaultVaultAssetDirectory,
   defaultTidbitPathPattern,
+  displayVaultRelativePath,
   emptyCalloutMarkdown,
   emptyCollapseMarkdown,
   emptyColumnsMarkdown,
@@ -38,6 +39,7 @@ import {
   splitHasDirtyTabs,
   splitMetaHeader,
   tabIdForFile,
+  tabsAfterClose,
 } from "../.test-dist/logic.js";
 
 test("frontmatter is split out of the editor body and composed back without losing it", () => {
@@ -73,6 +75,26 @@ test("date templates expand centrally for tidbit paths", () => {
   assert.equal(
     expandDateTemplate(defaultTidbitPathPattern, date),
     "__transit__/Objects/tidbit-2026-06-15-09-04-07.md",
+  );
+});
+
+test("vault paths display relative to the vault root without markdown extensions", () => {
+  assert.equal(displayVaultRelativePath(""), "/");
+  assert.equal(displayVaultRelativePath("folder1/hello.md"), "folder1/hello");
+  assert.equal(displayVaultRelativePath("/folder1/hello.markdown"), "folder1/hello");
+  assert.equal(
+    displayVaultRelativePath(
+      "/Users/Chris/Documents/Obsidian/CFR/folder1/hello.md",
+      "/Users/Chris/Documents/Obsidian/CFR",
+    ),
+    "folder1/hello",
+  );
+  assert.equal(
+    displayVaultRelativePath(
+      "/Users/Chris/Documents/Obsidian/CFR",
+      "/Users/Chris/Documents/Obsidian/CFR",
+    ),
+    "/",
   );
 });
 
@@ -357,6 +379,12 @@ test("excalidraw drawings are embedded as vault files", () => {
   assert.match(app, /src\.search\(/);
   assert.match(app, /return index >= 0 \? index : src\.length/);
   assert.match(app, /excalidraw-embed-invalid/);
+  const excalidrawViewStart = app.indexOf("function ExcalidrawEmbedView");
+  const invalidEmbedReturn = app.indexOf("excalidraw-embed-invalid", excalidrawViewStart);
+  const previewEffectHook = app.indexOf("useEffect(() => {", excalidrawViewStart);
+  assert.ok(excalidrawViewStart >= 0);
+  assert.ok(previewEffectHook > excalidrawViewStart);
+  assert.ok(previewEffectHook < invalidEmbedReturn);
   assert.match(app, /excalidrawPreviewRefreshEvent/);
   assert.match(app, /window\.dispatchEvent\(\s*new CustomEvent\(excalidrawPreviewRefreshEvent/);
   assert.doesNotMatch(app, /excalidrawIgnoreNextChangeRef/);
@@ -406,7 +434,11 @@ test("motion layer keeps interface animations short and reduced-motion aware", (
   assert.match(css, /@keyframes glyphary-status-update/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(app, /key=\{`\$\{calendarMonth\.getFullYear\(\)\}-\$\{calendarMonth\.getMonth\(\)\}`\}/);
+  assert.match(app, /normalizedVaultAppearanceDraft\.statusBarVisible \? \(/);
   assert.match(app, /<footer className="statusbar" key=\{status\}>/);
+  assert.match(css, /min-height: 14px/);
+  assert.match(css, /--glyphary-shell-gap: 4px/);
+  assert.doesNotMatch(css, /--glyphary-shell-gap: 20px/);
 });
 
 test("vault plugins are settings-gated and run commands through safe host paths", () => {
@@ -582,6 +614,14 @@ test("vault drawer exposes files search and recent views", () => {
   assert.match(app, /recentFiles: ActiveFile\[\]/);
   assert.match(app, /Recently opened files/);
   assert.match(app, /toggleVaultDrawerItem\("recent"\)/);
+  assert.doesNotMatch(app, /className="file-context"/);
+  assert.match(app, /displayVaultRelativePath\(activeFile\?\.relativePath \?\? currentDir, vaultRoot\)/);
+  assert.doesNotMatch(app, /vaultDrawerItem === "files"[\s\S]*?return vaultRoot \|\| "No vault selected"/);
+  assert.doesNotMatch(app, /aria-label="Close vault drawer"/);
+  assert.match(app, /className=\{isActiveGroup \? "editor-pane-shell active-group" : "editor-pane-shell"\}/);
+  assert.match(css, /\.editor-pane-shell/);
+  assert.match(css, /\.editor-pane-shell\.active-group \.editor-pane/);
+  assert.doesNotMatch(css, /\.editor-groups\s*\{[^}]*padding-top:\s*50px/s);
   assert.match(css, /\.recent-entry-text/);
   assert.match(css, /\.recent-entry em/);
 });
@@ -758,7 +798,30 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(app, /window\.setInterval/);
   assert.match(app, /60_000/);
   assert.match(app, /glassEffect/);
+  assert.match(app, /statusBarVisible: true/);
+  assert.match(app, /sectionCorners: "rounded"/);
+  assert.match(app, /workspaceMargin: "comfortable"/);
   assert.match(app, /Use glass window effect/);
+  assert.match(app, /Show status bar/);
+  assert.match(app, /Use rounded section corners/);
+  assert.match(app, /Workspace margins/);
+  assert.match(app, /<option value="compact">Flush<\/option>/);
+  assert.match(app, /<option value="spacious">Roomy<\/option>/);
+  assert.match(app, /normalizedVaultAppearanceDraft/);
+  assert.match(app, /section-corners-\$\{normalizedVaultAppearanceDraft\.sectionCorners\}/);
+  assert.match(app, /workspace-margin-\$\{normalizedVaultAppearanceDraft\.workspaceMargin\}/);
+  assert.doesNotMatch(
+    app,
+    /setVaultAppearanceDraft\(\(settings\) => \(\{(?:(?!\}\)\);)[\s\S])*event\.currentTarget/,
+  );
+  assert.match(css, /\.section-corners-square \.editor-pane/);
+  assert.match(css, /\.workspace-margin-compact/);
+  assert.match(css, /\.workspace-margin-spacious/);
+  assert.match(css, /--glyphary-shell-padding-top: 8px/);
+  assert.match(css, /--glyphary-shell-padding-inline: 8px/);
+  assert.match(css, /\.workspace-margin-compact \{[\s\S]*--glyphary-shell-padding-top: 0px/);
+  assert.match(css, /\.workspace-margin-compact \{[\s\S]*--glyphary-shell-padding-inline: 0px/);
+  assert.match(css, /\.workspace-margin-spacious \{[\s\S]*--glyphary-shell-padding-top: 14px/);
   assert.match(app, /set_window_glass_effect/);
   assert.match(app, /type SettingsDragState/);
   assert.match(app, /function openSettings/);
@@ -1031,6 +1094,8 @@ test("tauri starts with the requested default window size", () => {
 
 test("split editor groups find an already open file across both panes", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+  const main = readFileSync("src/main.tsx", "utf8");
   const groups = {
     primary: {
       id: "primary",
@@ -1053,11 +1118,47 @@ test("split editor groups find an already open file across both panes", () => {
   assert.match(app, /setVaultDrawerItem\("files"\)/);
   assert.match(app, /const fileDirectory = parentDirectory\(file\.relativePath\)/);
   assert.match(app, /void revealFileInVaultDrawer\(tab\.activeFile\)/);
+  assert.match(app, /function setEditorMarkdownContent\(targetEditor: Editor, markdown: string\)/);
+  assert.match(app, /targetEditor\.commands\.setContent\(\{\s*type: "doc"/);
+  assert.match(app, /function hydrateDocumentTabAfterCommit\(tab: DocumentTab/);
+  assert.match(app, /window\.requestAnimationFrame\(\(\) => \{/);
+  assert.match(app, /hydrateDocumentTabAfterCommit\(closeResult\.nextActiveTab, groupId\)/);
+  assert.match(app, /className="empty-document-placeholder"/);
+  assert.doesNotMatch(app, /commands\.setContent\(tab\.markdown, \{ contentType: "markdown" \}\)/);
+  assert.match(css, /\.empty-document-placeholder/);
+  assert.match(css, /\.app-error-screen/);
+  assert.match(main, /class ErrorBoundary extends React\.Component/);
+  assert.match(main, /<ErrorBoundary>/);
 });
 
 test("split editor refuses to close a secondary group with dirty tabs", () => {
   assert.equal(splitHasDirtyTabs([{ dirty: false }, { dirty: false }]), false);
   assert.equal(splitHasDirtyTabs([{ dirty: false }, { dirty: true }]), true);
+});
+
+test("closing the active tab selects a neighboring remaining tab", () => {
+  const todayTab = { id: tabIdForFile("Calendar/Tue, Jun 16th 2026.md") };
+  const heyTab = { id: tabIdForFile("hey.md") };
+  const notesTab = { id: tabIdForFile("notes.md") };
+
+  assert.deepEqual(tabsAfterClose([todayTab, heyTab], heyTab.id, heyTab.id), {
+    nextTabs: [todayTab],
+    nextActiveTab: todayTab,
+    nextActiveTabId: todayTab.id,
+    wasActiveTab: true,
+  });
+  assert.deepEqual(tabsAfterClose([todayTab, heyTab, notesTab], heyTab.id, heyTab.id), {
+    nextTabs: [todayTab, notesTab],
+    nextActiveTab: notesTab,
+    nextActiveTabId: notesTab.id,
+    wasActiveTab: true,
+  });
+  assert.deepEqual(tabsAfterClose([todayTab, heyTab], todayTab.id, heyTab.id), {
+    nextTabs: [todayTab],
+    nextActiveTab: todayTab,
+    nextActiveTabId: todayTab.id,
+    wasActiveTab: false,
+  });
 });
 
 test("closing the final tab in a split pane leaves the other pane as primary", () => {

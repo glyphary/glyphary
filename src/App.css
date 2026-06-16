@@ -314,49 +314,33 @@ button {
 }
 
 .app-shell {
+  --glyphary-shell-padding: 24px;
+  --glyphary-shell-padding-top: 8px;
+  --glyphary-shell-padding-inline: 8px;
+  --glyphary-shell-gap: 4px;
+  --glyphary-split-gap: 12px;
   position: relative;
   display: flex;
   height: 100vh;
   min-height: 0;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--glyphary-shell-gap);
   overflow: hidden;
-  padding: 24px;
+  padding:
+    var(--glyphary-shell-padding-top)
+    var(--glyphary-shell-padding-inline)
+    var(--glyphary-shell-padding);
 }
 
 .titlebar {
+  position: absolute;
+  top: var(--glyphary-shell-padding-top);
+  right: calc(var(--glyphary-shell-padding-inline) + var(--drawer-width, 48px) + var(--drawer-resizer-width, 0px));
+  z-index: 12;
   display: flex;
-  flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 18px;
-}
-
-.file-context {
-  min-width: 0;
-}
-
-.file-context span {
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 900;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.titlebar p {
-  max-width: min(58vw, 720px);
-  margin: 0;
-  overflow: hidden;
-  color: var(--heading);
-  font-size: 0.9rem;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.file-context span + p {
-  margin-top: 3px;
 }
 
 .app-actions {
@@ -364,6 +348,22 @@ button {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.workspace-margin-compact {
+  --glyphary-shell-padding: 12px;
+  --glyphary-shell-padding-top: 0px;
+  --glyphary-shell-padding-inline: 0px;
+  --glyphary-shell-gap: 2px;
+  --glyphary-split-gap: 8px;
+}
+
+.workspace-margin-spacious {
+  --glyphary-shell-padding: 34px;
+  --glyphary-shell-padding-top: 14px;
+  --glyphary-shell-padding-inline: 14px;
+  --glyphary-shell-gap: 6px;
+  --glyphary-split-gap: 18px;
 }
 
 .appearance-control {
@@ -568,7 +568,7 @@ h2 {
 
 .editor-groups.split {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--glyphary-split-gap);
 }
 
 .workspace-resizer {
@@ -990,14 +990,23 @@ body.workspace-resizing * {
   font-weight: 700;
 }
 
-.editor-pane {
+.editor-pane-shell {
   display: flex;
   min-width: 0;
   min-height: 0;
   flex-direction: column;
 }
 
-.editor-pane.active-group {
+.editor-pane {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-radius: 0 0 8px 8px;
+}
+
+.editor-pane-shell.active-group .editor-pane {
   border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
 }
 
@@ -1007,9 +1016,23 @@ body.workspace-resizing * {
   min-height: 42px;
   gap: 4px;
   overflow-x: auto;
-  border-bottom: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
   background: var(--surface-muted);
+  box-shadow: 0 18px 45px var(--shadow);
   padding: 7px 8px 0;
+}
+
+.section-corners-square .editor-pane,
+.section-corners-square .drawer-pane,
+.section-corners-square .vault-pane,
+.section-corners-square .document-tabs,
+.section-corners-square .settings-card,
+.section-corners-square .rich-link-dialog-card,
+.section-corners-square .excalidraw-dialog-card,
+.section-corners-square .excalidraw-create-dialog-card {
+  border-radius: 0;
 }
 
 .document-tab {
@@ -1324,6 +1347,64 @@ body.workspace-resizing * {
 
 .editor-surface .ProseMirror > * + * {
   margin-top: var(--glyphary-block-gap);
+}
+
+.empty-document-placeholder {
+  position: absolute;
+  top: calc(var(--glyphary-editor-padding-y) + 92px);
+  left: var(--glyphary-editor-padding-x);
+  z-index: 1;
+  color: var(--muted);
+  font-family: var(--font-editor);
+  font-size: var(--glyphary-editor-font-size);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.app-error-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background: var(--app-bg);
+  color: var(--text);
+  padding: 24px;
+}
+
+.app-error-card {
+  display: grid;
+  width: min(520px, 100%);
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 18px 45px var(--shadow);
+  padding: 22px;
+}
+
+.app-error-card h1,
+.app-error-card p {
+  margin: 0;
+}
+
+.app-error-card h1 {
+  color: var(--heading);
+  font-size: 1.1rem;
+}
+
+.app-error-card p {
+  color: var(--muted-strong);
+  font-weight: 700;
+}
+
+.app-error-card button {
+  justify-self: start;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-muted);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 800;
+  padding: 8px 12px;
 }
 
 .editor-surface h1 {
@@ -3469,11 +3550,16 @@ body.workspace-resizing * {
 
 .statusbar {
   flex: 0 0 auto;
-  min-height: 20px;
+  display: flex;
+  min-height: 14px;
+  align-items: center;
+  margin-top: 6px;
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   font-weight: 700;
+  line-height: 1;
+  padding: 0 2px;
   text-overflow: ellipsis;
   white-space: nowrap;
   animation: glyphary-status-update var(--motion-duration-slow) var(--motion-ease);
@@ -3534,11 +3620,15 @@ body.workspace-resizing * {
 
 @media (max-width: 840px) {
   .app-shell {
-    padding: 16px;
+    padding:
+      var(--glyphary-shell-padding-top)
+      var(--glyphary-shell-padding-inline)
+      min(var(--glyphary-shell-padding), 16px);
   }
 
   .titlebar {
     align-items: flex-start;
+    right: var(--glyphary-shell-padding-inline);
   }
 
   .workspace,
@@ -3596,10 +3686,6 @@ body.workspace-resizing * {
 @media (max-width: 560px) {
   .titlebar {
     flex-direction: column;
-  }
-
-  .titlebar p {
-    max-width: 100%;
   }
 
   .app-actions {

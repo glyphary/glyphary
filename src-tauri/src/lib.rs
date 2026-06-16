@@ -222,6 +222,7 @@ struct PluginManifest {
     name: String,
     // Runtime is intentionally separate from the plugin package version. It
     // lets future runtimes coexist without guessing from command shape.
+    #[serde(default)]
     runtime: String,
     #[serde(default)]
     version: String,
@@ -708,6 +709,12 @@ fn clean_plugin_manifest(
     }
 
     let runtime = manifest.runtime.trim();
+
+    if runtime.is_empty() {
+        return Err(format!(
+            "Plugin manifest must declare runtime: {PLUGIN_RUNTIME_WASM_TRANSFORM_V1}"
+        ));
+    }
 
     // Rejecting unknown runtimes at discovery time makes unsupported plugins
     // visible in Settings while keeping them out of the executable command set.
@@ -3353,6 +3360,39 @@ mod tests {
         assert!(catalog.plugins.is_empty());
         assert_eq!(catalog.errors.len(), 1);
         assert!(catalog.errors[0].contains("Unsupported plugin runtime"));
+
+        fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn rejects_missing_plugin_runtime_with_actionable_error() {
+        let root = test_root();
+        let plugin_dir = root.join(PLUGIN_DIRECTORY).join("legacy_plugin");
+        fs::create_dir_all(&plugin_dir).expect("plugin directory should exist");
+        fs::write(
+            plugin_dir.join(PLUGIN_MANIFEST_FILE),
+            r#"{
+  "id": "legacy_plugin",
+  "name": "Legacy Plugin",
+  "commands": [
+    {
+      "id": "legacy",
+      "title": "Legacy",
+      "insertMarkdown": "legacy"
+    }
+  ]
+}"#,
+        )
+        .expect("manifest should be written");
+
+        let catalog =
+            list_vault_plugins(root.to_string_lossy().into_owned()).expect("plugins should list");
+
+        assert!(catalog.plugins.is_empty());
+        assert_eq!(catalog.errors.len(), 1);
+        assert!(catalog.errors[0].contains(
+            "Plugin manifest must declare runtime: glyphary-wasm-transform@1"
+        ));
 
         fs::remove_dir_all(root).expect("test root should be removed");
     }

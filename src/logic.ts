@@ -258,6 +258,27 @@ export function displayPath(path: string) {
   return path || "/";
 }
 
+export function displayVaultRelativePath(path: string, vaultRoot = "") {
+  const cleanRoot = vaultRoot
+    .split("/")
+    .filter(Boolean)
+    .join("/");
+  const cleanPath = path
+    .split("/")
+    .filter(Boolean)
+    .join("/");
+  const relativePath =
+    cleanRoot && (cleanPath === cleanRoot || cleanPath.startsWith(`${cleanRoot}/`))
+      ? cleanPath.slice(cleanRoot.length).replace(/^\/+/, "")
+      : cleanPath;
+
+  if (!relativePath) {
+    return "/";
+  }
+
+  return relativePath.replace(/\.(md|markdown)$/i, "");
+}
+
 export function fileNameWithoutMarkdownExtension(fileName: string) {
   return fileName.replace(/\.(md|markdown)$/i, "");
 }
@@ -284,6 +305,32 @@ export function findTabAcrossSplitGroups<Tab extends { id: string }>(
   }
 
   return null;
+}
+
+export function tabsAfterClose<Tab extends { id: string }>(
+  tabs: Tab[],
+  activeTabId: string,
+  closedTabId: string,
+) {
+  const closedIndex = tabs.findIndex((tab) => tab.id === closedTabId);
+
+  if (closedIndex === -1) {
+    return null;
+  }
+
+  const nextTabs = tabs.filter((tab) => tab.id !== closedTabId);
+  const wasActiveTab = closedTabId === activeTabId;
+  const nextActiveTab =
+    wasActiveTab && nextTabs.length > 0
+      ? nextTabs[Math.min(closedIndex, nextTabs.length - 1)]
+      : nextTabs.find((tab) => tab.id === activeTabId) ?? null;
+
+  return {
+    nextTabs,
+    nextActiveTab,
+    nextActiveTabId: nextActiveTab?.id ?? "",
+    wasActiveTab,
+  };
 }
 
 export function splitHasDirtyTabs<Tab extends { dirty: boolean }>(tabs: Tab[]) {

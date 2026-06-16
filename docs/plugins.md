@@ -359,6 +359,7 @@ Current limits:
 
 - Plugin manifest must be named `plugin.json`.
 - Manifest id must match the plugin directory name.
+- Manifest runtime must be `glyphary-wasm-transform@1`.
 - Plugin id and command ids must be 1-80 characters.
 - Plugin name must be 1-96 characters.
 - Plugin description is truncated to 240 characters.
@@ -370,6 +371,12 @@ Current limits:
 - Unknown runtimes, permissions, input modes, output modes, and file extensions make the plugin invalid.
 
 Invalid plugins are shown as catalog errors in Settings. They are not enabled and do not contribute commands.
+
+If an older plugin shows a missing runtime error, add this top-level field to `plugin.json`:
+
+```json
+"runtime": "glyphary-wasm-transform@1"
+```
 
 ## Security Model
 

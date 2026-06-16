@@ -65,6 +65,7 @@ import {
   defaultVaultAssetDirectory,
   defaultVaultDrawerWidth,
   displayPath,
+  displayVaultRelativePath,
   defaultTidbitPathPattern,
   emptyCalloutMarkdown,
   emptyCollapseMarkdown,
@@ -93,6 +94,7 @@ import {
   splitMetaHeader,
   splitHasDirtyTabs,
   tabIdForFile,
+  tabsAfterClose,
   weekdayLabels,
 } from "./logic";
 import type { MarkdownParts, SplitGroupId } from "./logic";
@@ -1365,6 +1367,9 @@ type TidbitSettings = {
 
 type VaultAppearanceSettings = {
   glassEffect: boolean;
+  statusBarVisible: boolean;
+  sectionCorners: "rounded" | "square";
+  workspaceMargin: "compact" | "comfortable" | "spacious";
 };
 
 type SettingsDragState = {
@@ -1685,6 +1690,9 @@ const defaultTidbitSettings: TidbitSettings = {
 };
 const defaultVaultAppearanceSettings: VaultAppearanceSettings = {
   glassEffect: false,
+  statusBarVisible: true,
+  sectionCorners: "rounded",
+  workspaceMargin: "comfortable",
 };
 const defaultCssSnippetSettings: CssSnippetSettings = {
   directory: defaultCssSnippetDirectory,
@@ -2683,8 +2691,23 @@ function sameTidbitSettings(
 function normalizeVaultAppearanceSettings(
   settings: VaultAppearanceSettings | undefined | null,
 ) {
+  const sectionCorners =
+    settings?.sectionCorners === "square" || settings?.sectionCorners === "rounded"
+      ? settings.sectionCorners
+      : defaultVaultAppearanceSettings.sectionCorners;
+  const workspaceMargin =
+    settings?.workspaceMargin === "compact" ||
+    settings?.workspaceMargin === "comfortable" ||
+    settings?.workspaceMargin === "spacious"
+      ? settings.workspaceMargin
+      : defaultVaultAppearanceSettings.workspaceMargin;
+
   return {
     glassEffect: settings?.glassEffect ?? defaultVaultAppearanceSettings.glassEffect,
+    statusBarVisible:
+      settings?.statusBarVisible ?? defaultVaultAppearanceSettings.statusBarVisible,
+    sectionCorners,
+    workspaceMargin,
   };
 }
 
@@ -2694,7 +2717,13 @@ function sameVaultAppearanceSettings(
 ) {
   return (
     normalizeVaultAppearanceSettings(left).glassEffect ===
-    normalizeVaultAppearanceSettings(right).glassEffect
+      normalizeVaultAppearanceSettings(right).glassEffect &&
+    normalizeVaultAppearanceSettings(left).statusBarVisible ===
+      normalizeVaultAppearanceSettings(right).statusBarVisible &&
+    normalizeVaultAppearanceSettings(left).sectionCorners ===
+      normalizeVaultAppearanceSettings(right).sectionCorners &&
+    normalizeVaultAppearanceSettings(left).workspaceMargin ===
+      normalizeVaultAppearanceSettings(right).workspaceMargin
   );
 }
 
@@ -2881,6 +2910,22 @@ function createEditorGroups(tab = createUntitledTab()): Record<EditorGroupId, Ed
       activeTabId: "",
     },
   };
+}
+
+function setEditorMarkdownContent(targetEditor: Editor, markdown: string) {
+  if (markdown.trim()) {
+    targetEditor.commands.setContent(markdown, { contentType: "markdown" });
+    return;
+  }
+
+  // Calendar notes and newly created files are allowed to be truly empty on
+  // disk. Tiptap still needs a valid ProseMirror document to render and focus,
+  // so empty Markdown is hydrated as one empty paragraph without changing the
+  // saved Markdown value.
+  targetEditor.commands.setContent({
+    type: "doc",
+    content: [{ type: "paragraph" }],
+  });
 }
 
 function joinVaultAssetPath(root: string, assetDirectory: string, reference: string) {
@@ -3571,11 +3616,13 @@ function ExcalidrawEmbedView(props: NodeViewProps) {
   );
   const options = props.extension.options as ExcalidrawEmbedOptions;
 
-  if (!isExcalidrawTarget(target)) {
-    return <NodeViewWrapper as="span" className="excalidraw-embed-invalid" />;
-  }
-
   useEffect(() => {
+    if (!isExcalidrawTarget(target)) {
+      setPreviewSvg("");
+      setPreviewState("error");
+      return;
+    }
+
     let cancelled = false;
     const loadPreview = () => {
       setPreviewState("loading");
@@ -3612,6 +3659,10 @@ function ExcalidrawEmbedView(props: NodeViewProps) {
       window.removeEventListener(excalidrawPreviewRefreshEvent, refreshPreview);
     };
   }, [options, target]);
+
+  if (!isExcalidrawTarget(target)) {
+    return <NodeViewWrapper as="span" className="excalidraw-embed-invalid" />;
+  }
 
   return (
     <NodeViewWrapper
@@ -4574,7 +4625,7 @@ function App() {
     if (groupId !== activeGroupIdRef.current) {
       // Loading an inactive split pane should update its editor content, but
       // must not move drawers, toolbar state, or persisted workspace focus.
-      groupEditor.commands.setContent(tab.markdown, { contentType: "markdown" });
+      setEditorMarkdownContent(groupEditor, tab.markdown);
       window.setTimeout(() => {
         hydratingEditor.current[groupId] = false;
       }, 0);
@@ -4589,12 +4640,26 @@ function App() {
     setMarkdownDraft(tab.markdownDraft);
     setDirty(tab.dirty);
     setPageNameEditing(false);
-    groupEditor.commands.setContent(tab.markdown, { contentType: "markdown" });
+    setEditorMarkdownContent(groupEditor, tab.markdown);
     void revealFileInVaultDrawer(tab.activeFile);
     syncEditorState(groupEditor);
     window.setTimeout(() => {
       hydratingEditor.current[groupId] = false;
     }, 0);
+  }
+
+  function hydrateDocumentTabAfterCommit(tab: DocumentTab, groupId = activeGroupIdRef.current) {
+    // Closing a tab removes focused DOM while Tiptap hydration mutates the
+    // editor view. Defer survivor hydration until React has committed the tab
+    // removal so WebKit never sees both operations in the same click turn.
+    window.requestAnimationFrame(() => {
+      const group = editorGroupsRef.current[groupId];
+      const activeTab = group.tabs.find((documentTab) => documentTab.id === group.activeTabId);
+
+      if (activeTab?.id === tab.id) {
+        hydrateDocumentTab(activeTab, groupId);
+      }
+    });
   }
 
   function createDocumentTabFromFile(file: OpenedFile): DocumentTab {
@@ -4673,38 +4738,37 @@ function App() {
       setActiveGroupId("primary");
       setSplitOpen(false);
       setEditorGroupsAndRef(nextGroups);
-      hydrateDocumentTab(promotedGroup.activeTab, "primary");
+      hydrateDocumentTabAfterCommit(promotedGroup.activeTab, "primary");
       persistActiveFile(promotedGroup.activeTab.activeFile);
       setStatus(`Closed ${tabTitle(tab)} and unsplit editor`);
       return;
     }
 
-    const closedIndex = tabs.findIndex((documentTab) => documentTab.id === tabId);
-    const nextTabs = tabs.filter((documentTab) => documentTab.id !== tabId);
-    const wasActiveTab = tabId === editorGroupsRef.current[groupId].activeTabId;
-    const nextActiveTabId =
-      wasActiveTab
-        ? nextTabs[Math.min(closedIndex, nextTabs.length - 1)].id
-        : editorGroupsRef.current[groupId].activeTabId;
+    const closeResult = tabsAfterClose(tabs, editorGroupsRef.current[groupId].activeTabId, tabId);
+
+    if (!closeResult || !closeResult.nextActiveTab) {
+      setStatus("Keep at least one document tab open");
+      return;
+    }
 
     setEditorGroupsAndRef({
       ...editorGroupsRef.current,
       [groupId]: {
         ...editorGroupsRef.current[groupId],
-        tabs: nextTabs,
-        activeTabId: nextActiveTabId,
+        tabs: closeResult.nextTabs,
+        activeTabId: closeResult.nextActiveTabId,
       },
     });
 
-    if (!wasActiveTab) {
+    if (!closeResult.wasActiveTab) {
       setStatus(`Closed ${tabTitle(tab)}`);
       return;
     }
 
-    const nextTab = nextTabs[Math.min(closedIndex, nextTabs.length - 1)];
-
-    hydrateDocumentTab(nextTab, groupId);
-    persistActiveFile(nextTab.activeFile);
+    activeGroupIdRef.current = groupId;
+    setActiveGroupId(groupId);
+    hydrateDocumentTabAfterCommit(closeResult.nextActiveTab, groupId);
+    persistActiveFile(closeResult.nextActiveTab.activeFile);
     setStatus(`Closed ${tabTitle(tab)}`);
   }
 
@@ -5436,7 +5500,7 @@ function App() {
     }
 
     hydratingEditor.current[activeGroupIdRef.current] = clean;
-    editor.commands.setContent(content, { contentType: "markdown" });
+    setEditorMarkdownContent(editor, content);
     setMarkdown(content);
     setMarkdownDraft(content);
     updateActiveTab({
@@ -7484,7 +7548,9 @@ function App() {
 
   function vaultDrawerSubtitle() {
     if (vaultDrawerItem === "files") {
-      return vaultRoot || "No vault selected";
+      return vaultRoot
+        ? displayVaultRelativePath(activeFile?.relativePath ?? currentDir, vaultRoot)
+        : "No vault selected";
     }
 
     if (vaultDrawerItem === "recent") {
@@ -7701,6 +7767,7 @@ function App() {
     const isActiveGroup = groupId === activeGroupId;
     const panePageName = isActiveGroup ? pageName : groupActiveTab?.pageName ?? "Untitled note";
     const paneMetaHeader = isActiveGroup ? metaHeader : groupActiveTab?.metaHeader ?? "";
+    const paneMarkdown = isActiveGroup ? markdown : groupActiveTab?.markdown ?? "";
     const paneActiveFile = isActiveGroup ? activeFile : groupActiveTab?.activeFile ?? null;
     const frontmatterPillSettings = normalizeFrontmatterPillSettings(
       vaultSettings.frontmatterPills,
@@ -7714,7 +7781,7 @@ function App() {
     // the wrong split.
     return (
       <div
-        className={isActiveGroup ? "editor-pane active-group" : "editor-pane"}
+        className={isActiveGroup ? "editor-pane-shell active-group" : "editor-pane-shell"}
         key={groupId}
         onMouseDown={() => {
           if (!isActiveGroup) {
@@ -7754,6 +7821,7 @@ function App() {
             </div>
           ))}
         </div>
+        <div className="editor-pane">
         <div className="metadata-shell" aria-label="Metadata editor">
           <div className="page-name-control">
             {pageNameEditing && isActiveGroup ? (
@@ -7862,6 +7930,12 @@ function App() {
           className="editor-surface markdown-rendered markdown-preview-view"
           editor={groupEditor}
         />
+        {!paneMarkdown.trim() ? (
+          <div className="empty-document-placeholder" aria-hidden="true">
+            Start writing...
+          </div>
+        ) : null}
+        </div>
       </div>
     );
   }
@@ -7872,6 +7946,8 @@ function App() {
     "--vault-resizer-width": vaultDrawerOpen ? `${workspaceResizeHandleWidth}px` : "0px",
     "--drawer-resizer-width": drawerOpen ? `${workspaceResizeHandleWidth}px` : "0px",
   } as CSSProperties;
+  const normalizedVaultAppearanceDraft =
+    normalizeVaultAppearanceSettings(vaultAppearanceDraft);
 
   const appShellClassName = [
     "app-shell",
@@ -7880,6 +7956,8 @@ function App() {
     themeOptionsDraft.headingAnchors ? "theme-heading-anchors" : null,
     themeOptionsDraft.richCallouts ? "theme-rich-callouts" : null,
     `callout-style-${themeCalloutDraft.style}`,
+    `section-corners-${normalizedVaultAppearanceDraft.sectionCorners}`,
+    `workspace-margin-${normalizedVaultAppearanceDraft.workspaceMargin}`,
   ]
     .filter(Boolean)
     .join(" ");
@@ -7888,6 +7966,10 @@ function App() {
     "--glyphary-callout-info-icon": `"${calloutIconGlyph(themeCalloutDraft.icons.info)}"`,
     "--glyphary-callout-tip-icon": `"${calloutIconGlyph(themeCalloutDraft.icons.tip)}"`,
     "--glyphary-callout-warning-icon": `"${calloutIconGlyph(themeCalloutDraft.icons.warning)}"`,
+    "--vault-width": `${vaultDrawerOpen ? vaultDrawerWidth : closedDrawerWidth}px`,
+    "--drawer-width": `${drawerOpen ? inspectorDrawerWidth : closedDrawerWidth}px`,
+    "--vault-resizer-width": vaultDrawerOpen ? `${workspaceResizeHandleWidth}px` : "0px",
+    "--drawer-resizer-width": drawerOpen ? `${workspaceResizeHandleWidth}px` : "0px",
   } as CSSProperties;
   const settingsCardStyle = {
     transform: `translate(${settingsOffset.x}px, ${settingsOffset.y}px)`,
@@ -7919,10 +8001,6 @@ function App() {
         ))}
       </datalist>
       <header className="titlebar">
-        <div className="file-context">
-          {!activeFile ? <span>No file open</span> : null}
-          <p>{activeFile ? activeFile.relativePath : "Open a vault file to begin"}</p>
-        </div>
         <div className="app-actions">
           {!hideWindowDocumentActions ? (
             <div className="file-menu">
@@ -8118,19 +8196,13 @@ function App() {
                       Back
                     </button>
                   ) : null}
-                  <button
-                    className="inline-action"
-                    type="button"
-                    aria-label="Close vault drawer"
-                    onClick={() => setVaultDrawerOpen(false)}
-                  >
-                    Close
-                  </button>
                 </div>
               </div>
               {vaultDrawerItem === "files" ? (
                 <>
-                  <div className="vault-path">{displayPath(currentDir)}</div>
+                  <div className="vault-path">
+                    {displayVaultRelativePath(activeFile?.relativePath ?? currentDir, vaultRoot)}
+                  </div>
                   <div className="vault-list" role="list">
                     {entries.map((entry) => (
                       <button
@@ -8814,16 +8886,77 @@ function App() {
                     </div>
                     <label className="settings-check-control">
                       <input
-                        checked={vaultAppearanceDraft.glassEffect}
+                        checked={normalizedVaultAppearanceDraft.glassEffect}
                         disabled={!vaultRoot}
                         type="checkbox"
-                        onChange={(event) =>
-                          setVaultAppearanceDraft({
-                            glassEffect: event.currentTarget.checked,
-                          })
-                        }
+                        onChange={(event) => {
+                          const glassEffect = event.currentTarget.checked;
+                          setVaultAppearanceDraft((settings) => ({
+                            ...normalizeVaultAppearanceSettings(settings),
+                            glassEffect,
+                          }));
+                        }}
                       />
                       <span>Use glass window effect</span>
+                    </label>
+                  </section>
+                  <section className="settings-section" aria-label="Layout appearance">
+                    <div className="settings-section-header">
+                      <div>
+                        <h3>Layout</h3>
+                        <p>Control chrome density and the spacing around the workspace.</p>
+                      </div>
+                    </div>
+                    <label className="settings-check-control">
+                      <input
+                        checked={normalizedVaultAppearanceDraft.statusBarVisible}
+                        disabled={!vaultRoot}
+                        type="checkbox"
+                        onChange={(event) => {
+                          const statusBarVisible = event.currentTarget.checked;
+                          setVaultAppearanceDraft((settings) => ({
+                            ...normalizeVaultAppearanceSettings(settings),
+                            statusBarVisible,
+                          }));
+                        }}
+                      />
+                      <span>Show status bar</span>
+                    </label>
+                    <label className="settings-check-control">
+                      <input
+                        checked={normalizedVaultAppearanceDraft.sectionCorners === "rounded"}
+                        disabled={!vaultRoot}
+                        type="checkbox"
+                        onChange={(event) => {
+                          const sectionCorners = event.currentTarget.checked
+                            ? "rounded"
+                            : "square";
+                          setVaultAppearanceDraft((settings) => ({
+                            ...normalizeVaultAppearanceSettings(settings),
+                            sectionCorners,
+                          }));
+                        }}
+                      />
+                      <span>Use rounded section corners</span>
+                    </label>
+                    <label className="settings-field compact-field">
+                      <span>Workspace margins</span>
+                      <select
+                        disabled={!vaultRoot}
+                        value={normalizedVaultAppearanceDraft.workspaceMargin}
+                        onChange={(event) => {
+                          const workspaceMargin = event.currentTarget
+                            .value as VaultAppearanceSettings["workspaceMargin"];
+                          setVaultAppearanceDraft((settings) => ({
+                            ...normalizeVaultAppearanceSettings(settings),
+                            workspaceMargin,
+                          }));
+                        }}
+                      >
+                        <option value="compact">Flush</option>
+                        <option value="comfortable">Comfortable</option>
+                        <option value="spacious">Roomy</option>
+                      </select>
                     </label>
                   </section>
                   <section className="settings-section" aria-label="Theme templates">
@@ -9626,9 +9759,11 @@ function App() {
           </form>
         </div>
       ) : null}
-      <footer className="statusbar" key={status}>
-        {status}
-      </footer>
+      {normalizedVaultAppearanceDraft.statusBarVisible ? (
+        <footer className="statusbar" key={status}>
+          {status}
+        </footer>
+      ) : null}
     </main>
   );
 }
