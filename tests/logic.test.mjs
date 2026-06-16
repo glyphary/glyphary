@@ -284,6 +284,43 @@ test("columns markdown containers are wired into the editor", () => {
   assert.match(css, /\.markdown-column/);
 });
 
+test("gallery markdown containers are wired into the editor", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+  const readme = readFileSync("README.md", "utf8");
+
+  assert.match(app, /function createGalleryExtension\(\)/);
+  assert.match(app, /name: "gallery"/);
+  assert.match(app, /markdownTokenName: "gallery"/);
+  assert.match(app, /data-glyphary-gallery/);
+  assert.match(app, /namedContainerOpening\(src, "gallery"\)/);
+  assert.match(app, /createGalleryExtension\(\)/);
+  assert.match(app, /function imageNodeMarkdown/);
+  assert.match(app, /function selectedGalleryImages/);
+  assert.match(app, /function wrapSelectedImagesInGallery\(\)/);
+  assert.match(app, /id: "gallery-layout"/);
+  assert.match(app, /title: "Gallery layout"/);
+  assert.match(css, /\.markdown-gallery/);
+  assert.match(readme, /::: gallery/);
+});
+
+test("editor images can be opened in a full-size preview", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+
+  assert.match(app, /type ImagePreviewState/);
+  assert.match(app, /imagePreview, setImagePreview/);
+  assert.match(app, /function openImagePreviewFromEditor/);
+  assert.match(app, /target instanceof HTMLImageElement/);
+  assert.match(app, /onDoubleClick=\{openImagePreviewFromEditor\}/);
+  assert.match(app, /closeImagePreviewOnEscape/);
+  assert.match(app, /className="image-preview-screen"/);
+  assert.match(app, /aria-label="Image preview"/);
+  assert.match(css, /\.image-preview-screen/);
+  assert.match(css, /\.image-preview-card img/);
+  assert.match(css, /max-height: calc\(100vh - 128px\)/);
+});
+
 test("callout markdown containers are wired into the editor", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const css = readFileSync("src/App.css", "utf8");
@@ -1131,6 +1168,8 @@ test("quick command palette exposes initial editor commands", () => {
   assert.match(app, /title: "Insert rich link"/);
   assert.match(app, /id: "insert-columns"/);
   assert.match(app, /title: "Insert columns"/);
+  assert.match(app, /id: "gallery-layout"/);
+  assert.match(app, /title: "Gallery layout"/);
   assert.match(app, /id: "insert-callout"/);
   assert.match(app, /title: "Insert callout"/);
   assert.match(app, /id: "insert-collapse"/);
@@ -1293,9 +1332,18 @@ test("split editor groups find an already open file across both panes", () => {
   assert.match(app, /function hydrateDocumentTabAfterCommit\(tab: DocumentTab/);
   assert.match(app, /window\.requestAnimationFrame\(\(\) => \{/);
   assert.match(app, /hydrateDocumentTabAfterCommit\(closeResult\.nextActiveTab, groupId\)/);
+  assert.match(app, /className="editor-surface-frame"/);
   assert.match(app, /className="empty-document-placeholder"/);
   assert.doesNotMatch(app, /commands\.setContent\(tab\.markdown, \{ contentType: "markdown" \}\)/);
+  assert.match(css, /\.editor-surface-frame/);
   assert.match(css, /\.empty-document-placeholder/);
+  assert.match(css, /isolation: isolate/);
+  assert.match(css, /caret-color: var\(--editor-text\)/);
+  assert.match(css, /z-index: 0/);
+  assert.match(css, /--glyphary-editor-effective-padding-x: max\(18px, var\(--glyphary-editor-padding-x\)\)/);
+  assert.match(css, /left: var\(--glyphary-editor-effective-padding-x\)/);
+  assert.doesNotMatch(css, /top: calc\(var\(--glyphary-editor-padding-y\) \+ 92px\)/);
+  assert.doesNotMatch(css, /100% - var\(--glyphary-editor-max-width\)/);
   assert.match(css, /\.app-error-screen/);
   assert.match(main, /class ErrorBoundary extends React\.Component/);
   assert.match(main, /<ErrorBoundary>/);

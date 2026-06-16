@@ -393,6 +393,11 @@ type ExcalidrawDialogState = {
   initialData: ExcalidrawSceneData;
 };
 
+type ImagePreviewState = {
+  src: string;
+  alt: string;
+};
+
 const ExcalidrawCanvas = lazy(async () => {
   const module = await import("@excalidraw/excalidraw");
 
@@ -3362,6 +3367,54 @@ function createColumnsExtension() {
   });
 }
 
+function createGalleryExtension() {
+  return Node.create({
+    name: "gallery",
+    group: "block",
+    content: "block+",
+    defining: true,
+
+    parseHTML() {
+      return [{ tag: "div[data-glyphary-gallery]" }];
+    },
+
+    renderHTML({ HTMLAttributes }) {
+      return [
+        "div",
+        mergeAttributes(HTMLAttributes, {
+          "data-glyphary-gallery": "true",
+          class: "markdown-gallery",
+        }),
+        0,
+      ];
+    },
+
+    markdownTokenName: "gallery",
+
+    markdownTokenizer: {
+      name: "gallery",
+      level: "block",
+      start: (src: string) => src.search(/^:::[^\S\n]*gallery[^\S\n]*$/m),
+      tokenize: (src: string, _tokens: MarkdownToken[], lexer: ContainerMarkdownLexer) =>
+        createMarkdownContainerToken(src, "gallery", namedContainerOpening(src, "gallery"), lexer),
+    },
+
+    parseMarkdown: (token: MarkdownToken, helpers) => {
+      const content = helpers.parseBlockChildren
+        ? helpers.parseBlockChildren(token.tokens ?? [])
+        : helpers.parseChildren(token.tokens ?? []);
+
+      return helpers.createNode("gallery", {}, content.length ? content : [emptyParagraphNode(helpers)]);
+    },
+
+    renderMarkdown: (node: JSONContent, helpers) => {
+      const body = helpers.renderChildren(node.content ?? [], "\n\n").trim();
+
+      return `::: gallery\n${body}\n:::`;
+    },
+  });
+}
+
 function createCalloutExtension() {
   return Node.create({
     name: "callout",
@@ -4075,6 +4128,29 @@ function createVaultImageExtension(
   });
 }
 
+function imageNodeMarkdown(node: ProseMirrorNode) {
+  const attrs = node.attrs ?? {};
+  const vaultTarget =
+    typeof attrs.vaultTarget === "string"
+      ? cleanVaultAssetReference(attrs.vaultTarget)
+      : null;
+
+  if (vaultTarget) {
+    return `![[${vaultTarget}]]`;
+  }
+
+  const alt = typeof attrs.alt === "string" ? attrs.alt : "";
+  const assetReference =
+    typeof attrs.assetReference === "string"
+      ? cleanVaultAssetReference(attrs.assetReference)
+      : null;
+  const src = assetReference ?? (typeof attrs.src === "string" ? attrs.src : "");
+  const title = typeof attrs.title === "string" ? attrs.title : "";
+  const titlePart = title ? ` "${title.replace(/"/g, '\\"')}"` : "";
+
+  return `![${escapeMarkdownImageText(alt)}](${escapeMarkdownUrl(src)}${titlePart})`;
+}
+
 function App() {
   // The active editor group is mirrored into these top-level document fields
   // because drawers, toolbar state, save commands, and native menu events all
@@ -4188,6 +4264,7 @@ function App() {
   const [wikiLinkPickerSelectedIndex, setWikiLinkPickerSelectedIndex] = useState(0);
   const [excalidrawDialog, setExcalidrawDialog] = useState<ExcalidrawDialogState | null>(null);
   const [excalidrawDirty, setExcalidrawDirty] = useState(false);
+  const [imagePreview, setImagePreview] = useState<ImagePreviewState | null>(null);
   const [folderContextMenu, setFolderContextMenu] = useState<FolderContextMenuState | null>(null);
   const [folderActionDialog, setFolderActionDialog] = useState<FolderActionDialogState | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -5339,6 +5416,7 @@ function App() {
         ...(editorBehavior.vimMode ? [createGlypharyVimMode(setStatus)] : []),
         createColumnExtension(),
         createColumnsExtension(),
+        createGalleryExtension(),
         createCalloutExtension(),
         createCollapseExtension(),
         createRichLinkExtension(),
@@ -6575,6 +6653,23 @@ function App() {
   }, [settingsOpen]);
 
   useEffect(() => {
+    if (!imagePreview) {
+      return;
+    }
+
+    const closeImagePreviewOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setImagePreview(null);
+      }
+    };
+
+    window.addEventListener("keydown", closeImagePreviewOnEscape);
+
+    return () => window.removeEventListener("keydown", closeImagePreviewOnEscape);
+  }, [imagePreview]);
+
+  useEffect(() => {
     if (!commandPaletteOpen) {
       return;
     }
@@ -7457,6 +7552,51 @@ function App() {
     setEditorBody(`${markdown.trimEnd()}\n\n${emptyColumnsMarkdown}`, false);
   }
 
+  function selectedGalleryImages(targetEditor: Editor) {
+    const { doc, selection } = targetEditor.state;
+    const images: string[] = [];
+    let from = selection.from;
+    let to = selection.to;
+
+    // The command should behave like a layout operation over the current
+    // selection. Expanding the replacement range to whole image nodes avoids
+    // leaving behind atom boundaries when the user selects by drag.
+    doc.nodesBetween(selection.from, selection.to, (node, pos) => {
+      if (node.type.name !== "image") {
+        return true;
+      }
+
+      images.push(imageNodeMarkdown(node));
+      from = Math.min(from, pos);
+      to = Math.max(to, pos + node.nodeSize);
+      return false;
+    });
+
+    return { images, from, to };
+  }
+
+  function wrapSelectedImagesInGallery() {
+    if (!editor) {
+      return;
+    }
+
+    const { images, from, to } = selectedGalleryImages(editor);
+
+    if (images.length === 0) {
+      setStatus("Select one or more images before creating a gallery");
+      return;
+    }
+
+    const galleryMarkdown = `::: gallery\n${images.join("\n\n")}\n:::`;
+
+    editor
+      .chain()
+      .focus()
+      .insertContentAt({ from, to }, galleryMarkdown, { contentType: "markdown" })
+      .run();
+    setStatus(`Created gallery with ${images.length} image${images.length === 1 ? "" : "s"}`);
+  }
+
   function appendCallout() {
     if (!editor) {
       return;
@@ -7874,6 +8014,12 @@ function App() {
       run: appendColumns,
     },
     {
+      id: "gallery-layout",
+      title: "Gallery layout",
+      description: "Arrange selected images into a visual gallery",
+      run: wrapSelectedImagesInGallery,
+    },
+    {
       id: "insert-callout",
       title: "Insert callout",
       description: "Add a note callout block",
@@ -8031,6 +8177,21 @@ function App() {
 
   async function openSearchResult(result: SearchResult) {
     await openFile(result.relativePath);
+  }
+
+  function openImagePreviewFromEditor(event: ReactMouseEvent<HTMLDivElement>) {
+    const target = event.target;
+
+    if (!(target instanceof HTMLImageElement) || (!target.currentSrc && !target.src)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    setImagePreview({
+      src: target.currentSrc || target.src,
+      alt: target.alt || target.title || "Image preview",
+    });
   }
 
   function workspaceWidth() {
@@ -8370,15 +8531,18 @@ function App() {
           </div>
         ) : null}
 
-        <EditorContent
-          className="editor-surface markdown-rendered markdown-preview-view"
-          editor={groupEditor}
-        />
-        {!paneMarkdown.trim() ? (
-          <div className="empty-document-placeholder" aria-hidden="true">
-            Start writing...
-          </div>
-        ) : null}
+        <div className="editor-surface-frame">
+          <EditorContent
+            className="editor-surface markdown-rendered markdown-preview-view"
+            editor={groupEditor}
+            onDoubleClick={openImagePreviewFromEditor}
+          />
+          {!paneMarkdown.trim() ? (
+            <div className="empty-document-placeholder" aria-hidden="true">
+              Start writing...
+            </div>
+          ) : null}
+        </div>
         </div>
       </div>
     );
@@ -9928,6 +10092,32 @@ function App() {
               </Suspense>
             </div>
           </section>
+        </div>
+      ) : null}
+      {imagePreview ? (
+        <div
+          className="image-preview-screen"
+          role="presentation"
+          onMouseDown={() => setImagePreview(null)}
+        >
+          <figure
+            className="image-preview-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Image preview"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              className="image-preview-close"
+              type="button"
+              aria-label="Close image preview"
+              onClick={() => setImagePreview(null)}
+            >
+              Close
+            </button>
+            <img src={imagePreview.src} alt={imagePreview.alt} />
+            {imagePreview.alt ? <figcaption>{imagePreview.alt}</figcaption> : null}
+          </figure>
         </div>
       ) : null}
       {commandPaletteOpen ? (

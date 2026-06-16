@@ -183,6 +183,7 @@ Initial commands:
 - `Insert collapse`: inserts an expandable details block.
 - `Insert columns`: inserts a two-column container.
 - `Insert Excalidraw drawing`: creates a vault drawing file and embeds it in the current note.
+- `Gallery layout`: wraps the selected image embeds in a responsive visual gallery.
 - `Insert rich link`: opens a URL dialog, fetches page metadata, and inserts a rich link card.
 
 When the cursor is inside a table, the palette lists table actions first: `Add row after`, `Delete row`, `Add column after`, `Delete column`, and `Delete table`. These contextual commands stay out of the main formatting toolbar so table-only controls do not occupy permanent space.
@@ -209,6 +210,20 @@ siteName: Example
 ```
 
 The WYSIWYG editor renders this as a rounded preview card. If metadata is missing, the URL is still inserted and shown as the title/fallback text.
+
+## Image Galleries
+
+Select one or more image embeds in the editor, open the command palette, and run `Gallery layout` to arrange them as a responsive gallery. The gallery is stored as readable Markdown:
+
+```markdown
+::: gallery
+![[Pasted image 20260613133301.png]]
+
+![[Diagram.png]]
+:::
+```
+
+Bare `![[image.png]]` embeds resolve from `_assets_/images` under the vault root.
 
 ## Excalidraw Drawings
 
