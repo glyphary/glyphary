@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import TidbitCapture from "./TidbitCapture";
 import "./App.css";
 
 type ErrorBoundaryState = {
@@ -37,10 +38,15 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
   }
 }
 
+const rootView =
+  new URLSearchParams(window.location.search).get("view") === "tidbit-capture" ? (
+    <TidbitCapture />
+  ) : (
+    <App />
+  );
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
+    <ErrorBoundary>{rootView}</ErrorBoundary>
   </React.StrictMode>,
 );

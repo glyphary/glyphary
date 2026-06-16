@@ -62,6 +62,7 @@ export const defaultVaultAssetDirectory = "_assets_";
 export const defaultFrontmatterPillHeader = "tags";
 export const defaultTidbitPathPattern =
   "__transit__/Objects/tidbit-{{date:YYYY-mm-DD-hh-mm-ss}}.md";
+export const defaultTidbitGlobalShortcut = "CommandOrControl+Shift+Space";
 export const defaultDrawerOpen = false;
 export const defaultVaultDrawerOpen = true;
 export const defaultVaultDrawerWidth = 320;

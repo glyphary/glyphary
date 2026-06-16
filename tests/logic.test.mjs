@@ -16,6 +16,7 @@ import {
   defaultVaultDrawerWidth,
   defaultVaultDrawerOpen,
   defaultVaultAssetDirectory,
+  defaultTidbitGlobalShortcut,
   defaultTidbitPathPattern,
   displayVaultRelativePath,
   emptyCalloutMarkdown,
@@ -76,6 +77,7 @@ test("date templates expand centrally for tidbit paths", () => {
     expandDateTemplate(defaultTidbitPathPattern, date),
     "__transit__/Objects/tidbit-2026-06-15-09-04-07.md",
   );
+  assert.equal(defaultTidbitGlobalShortcut, "CommandOrControl+Shift+Space");
 });
 
 test("vault paths display relative to the vault root without markdown extensions", () => {
@@ -450,7 +452,12 @@ test("vault plugins are settings-gated and run commands through safe host paths"
   assert.match(app, /type PluginManifest/);
   assert.match(app, /runtime: "glyphary-wasm-transform@1"/);
   assert.match(app, /type PluginWasmCommand/);
-  assert.match(app, /type SettingsTab = "main" \| "plugins" \| "appearance"/);
+  assert.match(app, /type SettingsTab = "main" \| "appearance" \| "plugins" \| "debug"/);
+  assert.match(app, /type DebugSettings/);
+  assert.match(app, /debug\?: DebugSettings \| null/);
+  assert.match(app, /const defaultDebugSettings: DebugSettings = \{\s*enabled: false,/);
+  assert.match(app, /function normalizeDebugSettings/);
+  assert.match(app, /function sameDebugSettings/);
   assert.match(app, /defaultPluginSettings/);
   assert.match(app, /plugins\?: PluginSettings \| null/);
   assert.match(app, /normalizePluginSettings/);
@@ -466,6 +473,9 @@ test("vault plugins are settings-gated and run commands through safe host paths"
   assert.match(app, /id: `plugin:\$\{plugin\.id\}:\$\{command\.id\}`/);
   assert.match(app, /Open a vault before running plugin commands/);
   assert.match(app, /settingsTab === "plugins"/);
+  assert.match(app, /settingsTab === "debug"/);
+  assert.match(app, /Enable debug mode/);
+  assert.match(app, /Global Shortcut Diagnostics/);
   assert.match(app, /aria-label="Plugin settings"/);
   assert.match(app, /Enable vault plugins discovered under \.glyphary\/plugins/);
   assert.match(app, /data-glyphary-plugin-style/);
@@ -603,6 +613,156 @@ test("recent files are newest-first unique and capped", () => {
   assert.equal(withNewFile.length, maxRecentFiles);
   assert.equal(withNewFile[0].relativePath, "new.md");
   assert.equal(withNewFile.at(-1)?.relativePath, "notes/note-18.md");
+});
+
+test("global tidbit capture is vault-gated and opens a lightweight editor window", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const capture = readFileSync("src/TidbitCapture.tsx", "utf8");
+  const main = readFileSync("src/main.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+  const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
+  const cargo = readFileSync("src-tauri/Cargo.toml", "utf8");
+  const capabilities = JSON.parse(readFileSync("src-tauri/capabilities/default.json", "utf8"));
+  const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+
+  assert.equal(packageJson.dependencies["@tauri-apps/plugin-global-shortcut"], "^2.3.2");
+  assert.equal(packageJson.dependencies["tauri-plugin-macos-permissions-api"], "^2.3.0");
+  assert.match(cargo, /tauri-plugin-global-shortcut = "2"/);
+  assert.match(cargo, /tauri-plugin-macos-permissions = "2\.3\.0"/);
+  assert.ok(capabilities.windows.includes("tidbit-capture"));
+  assert.ok(capabilities.permissions.includes("global-shortcut:default"));
+  assert.ok(capabilities.permissions.includes("macos-permissions:default"));
+  assert.ok(capabilities.permissions.includes("core:window:allow-close"));
+  assert.ok(capabilities.permissions.includes("core:webview:allow-create-webview-window"));
+  assert.match(backend, /global_shortcut_enabled: false/);
+  assert.match(backend, /default_tidbit_global_shortcut/);
+  assert.match(backend, /tauri_plugin_global_shortcut::Builder::new\(\)\.build\(\)/);
+  assert.match(backend, /tauri_plugin_macos_permissions::init\(\)/);
+  assert.match(backend, /struct TidbitShortcutState/);
+  assert.match(backend, /fn register_tidbit_global_shortcut/);
+  assert.match(backend, /fn unregister_tidbit_global_shortcut/);
+  assert.match(backend, /fn tidbit_global_shortcut_status/);
+  assert.match(backend, /fn test_tidbit_global_shortcut_event/);
+  assert.match(backend, /app\.global_shortcut\(\)\s*\.on_shortcut/);
+  assert.match(backend, /app\.emit\("tidbit-global-shortcut"/);
+  assert.match(backend, /register_tidbit_global_shortcut,/);
+  assert.match(backend, /unregister_tidbit_global_shortcut,/);
+  assert.match(backend, /tidbit_global_shortcut_status,/);
+  assert.match(backend, /test_tidbit_global_shortcut_event,/);
+  assert.match(app, /globalShortcutEnabled: false/);
+  assert.match(app, /globalShortcut: defaultTidbitGlobalShortcut/);
+  assert.match(app, /checkAccessibilityPermission/);
+  assert.match(app, /requestAccessibilityPermission/);
+  assert.match(app, /function requestTidbitShortcutAccessibilityPermission/);
+  assert.match(app, /function keyboardEventMatchesShortcut/);
+  assert.match(app, /void requestTidbitShortcutAccessibilityPermission\(\);/);
+  assert.match(app, /if \(!isTauri\(\) \|\| !vaultRoot \|\| !settings\.globalShortcutEnabled\)/);
+  assert.match(app, /if \(!isTauri\(\) \|\| !isRunningOnMacOs\(\)\)/);
+  assert.match(app, /Grant Glyphary Accessibility permission in macOS System Settings/);
+  assert.match(app, /listen<string>\("tidbit-global-shortcut"/);
+  assert.match(app, /Received global tidbit shortcut event/);
+  assert.match(app, /Received tidbit shortcut test event/);
+  assert.match(app, /invoke<boolean>\("register_tidbit_global_shortcut"/);
+  assert.match(app, /invoke\("unregister_tidbit_global_shortcut"\)/);
+  assert.match(app, /invoke<TidbitShortcutStatus>\("tidbit_global_shortcut_status"\)/);
+  assert.match(app, /invoke\("test_tidbit_global_shortcut_event"\)/);
+  assert.match(app, /It may already be used by macOS or another app/);
+  assert.match(app, /WebviewWindow\.getByLabel\("tidbit-capture"\)/);
+  assert.match(app, /url: `index\.html\?\$\{params\.toString\(\)\}`/);
+  assert.match(app, /view: "tidbit-capture"/);
+  assert.match(app, /tidbit-capture-created/);
+  assert.match(app, /Enable global tidbit capture shortcut/);
+  assert.match(app, /Global tidbit shortcut/);
+  assert.match(app, /settingsTab === "debug"/);
+  assert.match(app, /debugDraft\.enabled \? \(/);
+  assert.match(app, /Enable debug mode/);
+  assert.match(app, /Global Shortcut Diagnostics/);
+  assert.match(app, /Request Permission/);
+  assert.match(app, /Test Capture Event/);
+  assert.match(app, /Check Shortcut/);
+  assert.match(app, /No tidbit shortcut is registered/);
+  assert.match(app, /onClick=\{\(\) => void requestTidbitShortcutAccessibilityPermission\(\)\}/);
+  assert.match(app, /Save Settings to activate global tidbit capture/);
+  assert.match(app, /Save Settings to activate it/);
+  assert.match(app, /const pathPattern = event\.currentTarget\.value;/);
+  assert.match(app, /const globalShortcutEnabled = event\.currentTarget\.checked;/);
+  assert.match(app, /function shortcutFromKeyboardEvent/);
+  assert.match(app, /function shortcutKeyFromEvent/);
+  assert.match(app, /event\.metaKey \? "Command" : ""/);
+  assert.match(app, /event\.ctrlKey \? "Control" : ""/);
+  assert.match(app, /if \(!event\.metaKey \|\| event\.ctrlKey\)/);
+  assert.match(app, /readOnly/);
+  assert.match(app, /onKeyDown=\{\(event\) => \{/);
+  assert.match(app, /const globalShortcut = shortcutFromKeyboardEvent\(event\);/);
+  assert.match(app, /event\.preventDefault\(\);/);
+  assert.match(app, /globalShortcut: defaultTidbitGlobalShortcut/);
+  assert.match(app, /handleFocusedTidbitShortcut/);
+  assert.match(app, /keyboardEventMatchesShortcut\(event, settings\.globalShortcut\)/);
+  assert.match(app, /addEventListener\("keydown", handleFocusedTidbitShortcut, \{ capture: true \}\)/);
+  assert.match(app, /target\.closest\("\.shortcut-capture-control"\)/);
+  assert.doesNotMatch(app, /setTidbitDraft\(\(settings\) => \(\{[\s\S]{0,220}event\.currentTarget/);
+  const mainSettingsStart = app.indexOf('{settingsTab === "main" ? (');
+  const mainSettingsEnd = app.indexOf('{settingsTab === "plugins" ? (', mainSettingsStart);
+  const mainSettingsPanel = app.slice(mainSettingsStart, mainSettingsEnd);
+  const debugSettingsStart = app.indexOf('{settingsTab === "debug" ? (');
+  const debugSettingsEnd = app.indexOf('{settingsTab === "appearance" ? (', debugSettingsStart);
+  const debugSettingsPanel = app.slice(debugSettingsStart, debugSettingsEnd);
+
+  assert.ok(mainSettingsStart > -1);
+  assert.ok(mainSettingsEnd > mainSettingsStart);
+  assert.ok(debugSettingsStart > -1);
+  assert.ok(debugSettingsEnd > debugSettingsStart);
+  assert.doesNotMatch(mainSettingsPanel, /Request Permission|Test Capture Event|Check Shortcut/);
+  assert.match(debugSettingsPanel, /Request Permission/);
+  assert.match(debugSettingsPanel, /Test Capture Event/);
+  assert.match(debugSettingsPanel, /Check Shortcut/);
+  const registrationStart = app.indexOf("async function registerTidbitShortcut()");
+  const registrationEnd = app.indexOf("void registerTidbitShortcut().catch", registrationStart);
+  const registrationEffect = app.slice(registrationStart, registrationEnd);
+
+  assert.ok(registrationStart > -1);
+  assert.ok(registrationEnd > registrationStart);
+  assert.doesNotMatch(registrationEffect, /requestTidbitShortcutAccessibilityPermission/);
+  assert.doesNotMatch(registrationEffect, /checkAccessibilityPermission/);
+  assert.match(css, /\.shortcut-capture-control/);
+  assert.match(css, /\.settings-inline-actions/);
+  assert.match(css, /\.settings-inline-action/);
+  assert.match(capture, /function contextFromUrl/);
+  assert.match(capture, /readPersistedAppearance/);
+  assert.match(capture, /resolveAppearance/);
+  assert.match(capture, /read_vault_settings/);
+  assert.match(capture, /normalizeCaptureThemeTokens/);
+  assert.match(capture, /function tidbitDirectory/);
+  assert.match(capture, /function tidbitDisplayName/);
+  assert.match(capture, /function normalizeTidbitNameDraft/);
+  assert.match(capture, /function tidbitRelativePathFromName/);
+  assert.match(capture, /const \[nameEditing, setNameEditing\]/);
+  assert.match(capture, /const \[nameDraft, setNameDraft\]/);
+  assert.match(capture, /const saveRelativePath = tidbitRelativePathFromName\(relativePath, nameDraft\)/);
+  assert.match(capture, /document\.documentElement\.style\.setProperty\(token, value\)/);
+  assert.match(capture, /getCurrentWindow\(\)\.setTheme\(resolvedAppearance\)/);
+  assert.match(capture, /useEditor\(\{/);
+  assert.match(capture, /Markdown\.configure/);
+  assert.match(capture, /create_vault_markdown_file/);
+  assert.match(capture, /relative: saveRelativePath/);
+  assert.match(capture, /write_vault_file/);
+  assert.match(capture, /emitTo\("main", "tidbit-capture-created"/);
+  assert.match(capture, /event\.key === "Enter" && \(event\.metaKey \|\| event\.ctrlKey\)/);
+  assert.match(capture, /event\.key === "Escape"/);
+  assert.match(capture, /getCurrentWindow\(\)\.close\(\)/);
+  assert.match(capture, /onKeyDownCapture=\{handleKeyDown\}/);
+  assert.match(capture, /aria-label="Tidbit name"/);
+  assert.match(capture, /onDoubleClick=\{\(\) => setNameEditing\(true\)\}/);
+  assert.match(capture, /Double-click to rename before saving/);
+  assert.match(capture, /tidbitDisplayName\(saveRelativePath\)/);
+  assert.match(capture, /setStatus\(error instanceof Error \? error\.message : String\(error\)\)/);
+  assert.match(main, /view"\) === "tidbit-capture"/);
+  assert.match(main, /<TidbitCapture \/>/);
+  assert.match(css, /\.tidbit-capture/);
+  assert.match(css, /\.tidbit-capture-path/);
+  assert.match(css, /\.tidbit-capture-header input/);
+  assert.match(css, /\.tidbit-capture-editor \.tiptap/);
+  assert.match(css, /\.tidbit-capture-editor \.tiptap \{[\s\S]*max-width: var\(--glyphary-editor-max-width\)/);
 });
 
 test("vault drawer exposes files search and recent views", () => {

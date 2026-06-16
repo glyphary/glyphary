@@ -15,7 +15,12 @@ import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open } from "@tauri-apps/plugin-dialog";
+import {
+  checkAccessibilityPermission,
+  requestAccessibilityPermission,
+} from "tauri-plugin-macos-permissions-api";
 import type {
   AppState,
   BinaryFiles,
@@ -61,6 +66,7 @@ import {
   defaultFrontmatterPillHeader,
   defaultInspectorDrawerWidth,
   defaultMetaDelimiter,
+  defaultTidbitGlobalShortcut,
   defaultVaultDrawerOpen,
   defaultVaultAssetDirectory,
   defaultVaultDrawerWidth,
@@ -1361,8 +1367,19 @@ type AutosaveSettings = {
   enabled: boolean;
 };
 
+type DebugSettings = {
+  enabled: boolean;
+};
+
 type TidbitSettings = {
   pathPattern: string;
+  globalShortcutEnabled: boolean;
+  globalShortcut: string;
+};
+
+type TidbitShortcutStatus = {
+  shortcut: string | null;
+  registered: boolean;
 };
 
 type VaultAppearanceSettings = {
@@ -1388,6 +1405,7 @@ type VaultSettings = {
   tidbits?: TidbitSettings | null;
   editor?: EditorBehaviorSettings | null;
   appearance?: VaultAppearanceSettings | null;
+  debug?: DebugSettings | null;
   cssSnippets?: CssSnippetSettings | null;
   plugins?: PluginSettings | null;
   theme?: VaultThemeSettings | null;
@@ -1433,7 +1451,7 @@ type WikiLinkPickerState = {
 
 type SearchMode = "filename" | "content";
 type AppearanceMode = "auto" | "light" | "dark";
-type SettingsTab = "main" | "plugins" | "appearance";
+type SettingsTab = "main" | "appearance" | "plugins" | "debug";
 type DrawerItem = "source" | "toc" | "calendar";
 type VaultDrawerItem = "files" | "search" | "recent";
 type ResizeSide = "vault" | "drawer";
@@ -1685,8 +1703,13 @@ const defaultFileDisplaySettings: FileDisplaySettings = {
 const defaultAutosaveSettings: AutosaveSettings = {
   enabled: true,
 };
+const defaultDebugSettings: DebugSettings = {
+  enabled: false,
+};
 const defaultTidbitSettings: TidbitSettings = {
   pathPattern: defaultTidbitPathPattern,
+  globalShortcutEnabled: false,
+  globalShortcut: defaultTidbitGlobalShortcut,
 };
 const defaultVaultAppearanceSettings: VaultAppearanceSettings = {
   glassEffect: false,
@@ -2675,9 +2698,25 @@ function sameAutosaveSettings(
   return normalizeAutosaveSettings(left).enabled === normalizeAutosaveSettings(right).enabled;
 }
 
+function normalizeDebugSettings(settings: DebugSettings | undefined | null) {
+  return {
+    enabled: settings?.enabled ?? defaultDebugSettings.enabled,
+  };
+}
+
+function sameDebugSettings(
+  left: DebugSettings | undefined | null,
+  right: DebugSettings | undefined | null,
+) {
+  return normalizeDebugSettings(left).enabled === normalizeDebugSettings(right).enabled;
+}
+
 function normalizeTidbitSettings(settings: TidbitSettings | undefined | null) {
   return {
     pathPattern: settings?.pathPattern?.trim() || defaultTidbitSettings.pathPattern,
+    globalShortcutEnabled:
+      settings?.globalShortcutEnabled ?? defaultTidbitSettings.globalShortcutEnabled,
+    globalShortcut: settings?.globalShortcut?.trim() || defaultTidbitSettings.globalShortcut,
   };
 }
 
@@ -2685,7 +2724,115 @@ function sameTidbitSettings(
   left: TidbitSettings | undefined | null,
   right: TidbitSettings | undefined | null,
 ) {
-  return normalizeTidbitSettings(left).pathPattern === normalizeTidbitSettings(right).pathPattern;
+  const normalizedLeft = normalizeTidbitSettings(left);
+  const normalizedRight = normalizeTidbitSettings(right);
+
+  return (
+    normalizedLeft.pathPattern === normalizedRight.pathPattern &&
+    normalizedLeft.globalShortcutEnabled === normalizedRight.globalShortcutEnabled &&
+    normalizedLeft.globalShortcut === normalizedRight.globalShortcut
+  );
+}
+
+type ShortcutKeyboardEvent = Pick<
+  KeyboardEvent | ReactKeyboardEvent<HTMLInputElement>,
+  "altKey" | "code" | "ctrlKey" | "key" | "metaKey" | "shiftKey"
+>;
+
+function shortcutKeyFromEvent(event: ShortcutKeyboardEvent) {
+  if (["Shift", "Control", "Alt", "Meta", "CapsLock", "Tab", "Escape"].includes(event.key)) {
+    return "";
+  }
+
+  if (event.code.startsWith("Key")) {
+    return event.code.replace("Key", "").toUpperCase();
+  }
+
+  if (event.code.startsWith("Digit")) {
+    return event.code.replace("Digit", "");
+  }
+
+  if (event.code.startsWith("F") && /^F\d{1,2}$/.test(event.code)) {
+    return event.code;
+  }
+
+  const specialKeys: Record<string, string> = {
+    Backspace: "Backspace",
+    Delete: "Delete",
+    Enter: "Enter",
+    Equal: "Equal",
+    Minus: "Minus",
+    Period: "Period",
+    Slash: "Slash",
+    Space: "Space",
+  };
+
+  return specialKeys[event.code] ?? "";
+}
+
+function shortcutFromKeyboardEvent(event: ShortcutKeyboardEvent) {
+  const key = shortcutKeyFromEvent(event);
+
+  if (!key) {
+    return "";
+  }
+
+  const modifiers = isRunningOnMacOs()
+    ? [
+        event.metaKey ? "Command" : "",
+        event.ctrlKey ? "Control" : "",
+        event.altKey ? "Alt" : "",
+        event.shiftKey ? "Shift" : "",
+      ].filter(Boolean)
+    : [
+        event.metaKey || event.ctrlKey ? "CommandOrControl" : "",
+        event.altKey ? "Alt" : "",
+        event.shiftKey ? "Shift" : "",
+      ].filter(Boolean);
+
+  return [...modifiers, key].join("+");
+}
+
+function keyboardEventMatchesShortcut(event: ShortcutKeyboardEvent, shortcut: string) {
+  const parts = shortcut
+    .split("+")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const key = parts.at(-1);
+
+  if (!key || shortcutKeyFromEvent(event).toUpperCase() !== key.toUpperCase()) {
+    return false;
+  }
+
+  const modifiers = new Set(parts.slice(0, -1).map((part) => part.toUpperCase()));
+  const expectsCommandOrControl = [
+    "COMMANDORCONTROL",
+    "COMMANDORCTRL",
+    "CMDORCONTROL",
+    "CMDORCTRL",
+  ].some((modifier) => modifiers.has(modifier));
+  const expectsCommand = ["COMMAND", "CMD", "SUPER"].some((modifier) => modifiers.has(modifier));
+  const expectsControl = ["CONTROL", "CTRL"].some((modifier) => modifiers.has(modifier));
+  const expectsAlt = modifiers.has("ALT") || modifiers.has("OPTION");
+  const expectsShift = modifiers.has("SHIFT");
+
+  if (expectsCommandOrControl) {
+    if (isRunningOnMacOs()) {
+      if (!event.metaKey || event.ctrlKey) {
+        return false;
+      }
+    } else if (!event.metaKey && !event.ctrlKey) {
+      return false;
+    }
+  } else if (event.metaKey !== expectsCommand || event.ctrlKey !== expectsControl) {
+    return false;
+  }
+
+  return event.altKey === expectsAlt && event.shiftKey === expectsShift;
+}
+
+function isRunningOnMacOs() {
+  return isMacOsPlatform(window.navigator.platform, window.navigator.userAgent);
 }
 
 function normalizeVaultAppearanceSettings(
@@ -3931,6 +4078,7 @@ function App() {
     tidbits: defaultTidbitSettings,
     editor: defaultEditorBehaviorSettings,
     appearance: defaultVaultAppearanceSettings,
+    debug: defaultDebugSettings,
     cssSnippets: defaultCssSnippetSettings,
     plugins: defaultPluginSettings,
     theme: null,
@@ -3952,6 +4100,7 @@ function App() {
     useState<AutosaveSettings>(defaultAutosaveSettings);
   const [tidbitDraft, setTidbitDraft] = useState<TidbitSettings>(defaultTidbitSettings);
   const [tidbitSettings, setTidbitSettings] = useState<TidbitSettings>(defaultTidbitSettings);
+  const [debugDraft, setDebugDraft] = useState<DebugSettings>(defaultDebugSettings);
   const [vaultAppearanceDraft, setVaultAppearanceDraft] =
     useState<VaultAppearanceSettings>(defaultVaultAppearanceSettings);
   const [cssSnippetDraft, setCssSnippetDraft] =
@@ -4035,6 +4184,7 @@ function App() {
   );
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeFileRef = useRef<ActiveFile | null>(null);
+  const currentDirRef = useRef("");
   const recentFilesRef = useRef<ActiveFile[]>([]);
   const wikiLinkIndexRef = useRef<VaultIndexedFile[]>([]);
   const suppressDirectoryClickRef = useRef(false);
@@ -4057,6 +4207,10 @@ function App() {
   // render.
   const openVaultRef = useRef<() => void | Promise<void>>(() => undefined);
   const saveCurrentFileRef = useRef<() => void | Promise<void>>(() => undefined);
+  const openTidbitCaptureWindowRef = useRef<() => void | Promise<void>>(() => undefined);
+  const openCapturedTidbitRef = useRef<(file: OpenedFile) => void | Promise<void>>(
+    () => undefined,
+  );
   const resetDocumentRef = useRef<() => void>(() => undefined);
   const openWikiLinkSearchRef = useRef<() => void>(() => undefined);
   const resolveWikiLinkTargetRef = useRef<(target: string) => WikiLinkResolution>(() => ({
@@ -4086,6 +4240,7 @@ function App() {
     tidbits: defaultTidbitSettings,
     editor: defaultEditorBehaviorSettings,
     appearance: defaultVaultAppearanceSettings,
+    debug: defaultDebugSettings,
     cssSnippets: defaultCssSnippetSettings,
     plugins: defaultPluginSettings,
     theme: null,
@@ -4099,6 +4254,10 @@ function App() {
   useEffect(() => {
     activeFileRef.current = activeFile;
   }, [activeFile]);
+
+  useEffect(() => {
+    currentDirRef.current = currentDir;
+  }, [currentDir]);
 
   useEffect(() => {
     recentFilesRef.current = recentFiles;
@@ -4131,6 +4290,145 @@ function App() {
   useEffect(() => {
     vaultSettingsRef.current = vaultSettings;
   }, [vaultSettings]);
+
+  async function requestTidbitShortcutAccessibilityPermission() {
+    if (!isTauri() || !isRunningOnMacOs()) {
+      return true;
+    }
+
+    try {
+      if (await checkAccessibilityPermission()) {
+        setStatus("macOS Accessibility permission already granted for global tidbit capture");
+        return true;
+      }
+
+      await requestAccessibilityPermission();
+
+      if (await checkAccessibilityPermission()) {
+        setStatus("macOS Accessibility permission granted for global tidbit capture");
+        return true;
+      }
+
+      setStatus(
+        "Grant Glyphary Accessibility permission in macOS System Settings, then save settings again",
+      );
+      return false;
+    } catch (error) {
+      setStatus(
+        `Could not request macOS Accessibility permission: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    }
+  }
+
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+
+    let removeListener: (() => void) | null = null;
+    let cancelled = false;
+
+    void listen<OpenedFile>("tidbit-capture-created", (event) => {
+      void openCapturedTidbitRef.current(event.payload);
+    }).then((unlisten) => {
+      if (cancelled) {
+        unlisten();
+        return;
+      }
+
+      removeListener = unlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      removeListener?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+
+    let removeListener: (() => void) | null = null;
+    let cancelled = false;
+
+    void listen<string>("tidbit-global-shortcut", (event) => {
+      setStatus(
+        event.payload === "test"
+          ? "Received tidbit shortcut test event"
+          : "Received global tidbit shortcut event",
+      );
+      void openTidbitCaptureWindowRef.current();
+    }).then((unlisten) => {
+      if (cancelled) {
+        unlisten();
+        return;
+      }
+
+      removeListener = unlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      removeListener?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    const settings = normalizeTidbitSettings(tidbitSettings);
+
+    if (!isTauri() || !vaultRoot || !settings.globalShortcutEnabled) {
+      return;
+    }
+
+    let registeredShortcut: string | null = null;
+    let cancelled = false;
+
+    async function registerTidbitShortcut() {
+      const registered = await invoke<boolean>("register_tidbit_global_shortcut", {
+        shortcut: settings.globalShortcut,
+      });
+
+      if (!registered) {
+        setStatus(
+          `Could not register tidbit shortcut ${settings.globalShortcut}. It may already be used by macOS or another app.`,
+        );
+        return;
+      }
+
+      if (!cancelled) {
+        registeredShortcut = settings.globalShortcut;
+        setStatus(`Registered global tidbit shortcut ${settings.globalShortcut}`);
+      } else {
+        void invoke("unregister_tidbit_global_shortcut");
+      }
+    }
+
+    void registerTidbitShortcut().catch((error) => {
+      setStatus(
+        `Could not register tidbit shortcut ${settings.globalShortcut}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+
+    return () => {
+      cancelled = true;
+
+      if (registeredShortcut) {
+        void invoke("unregister_tidbit_global_shortcut");
+      }
+    };
+  }, [
+    vaultRoot,
+    tidbitSettings.pathPattern,
+    tidbitSettings.globalShortcut,
+    tidbitSettings.globalShortcutEnabled,
+  ]);
 
   useEffect(() => {
     const previousTokens = appliedThemeTokensRef.current;
@@ -4356,6 +4654,10 @@ function App() {
     return normalizeVaultAppearanceSettings(vaultSettings.appearance);
   }
 
+  function savedDebugSettings() {
+    return normalizeDebugSettings(vaultSettings.debug);
+  }
+
   function savedCssSnippetSettings() {
     return normalizeCssSnippetSettings(vaultSettings.cssSnippets);
   }
@@ -4373,6 +4675,7 @@ function App() {
       !sameAutosaveSettings(autosaveDraft, savedAutosaveSettings()) ||
       !sameTidbitSettings(tidbitDraft, savedTidbitSettings()) ||
       !sameVaultAppearanceSettings(vaultAppearanceDraft, savedVaultAppearanceSettings()) ||
+      !sameDebugSettings(debugDraft, savedDebugSettings()) ||
       !sameCssSnippetSettings(cssSnippetDraft, savedCssSnippetSettings()) ||
       !samePluginSettings(pluginDraft, savedPluginSettings()) ||
       selectedThemePresetIdDraft !== savedThemePresetId() ||
@@ -4401,6 +4704,7 @@ function App() {
     setAutosaveDraft(savedAutosaveSettings());
     setTidbitDraft(savedTidbitSettings());
     setVaultAppearanceDraft(savedVaultAppearanceSettings());
+    setDebugDraft(savedDebugSettings());
     setCssSnippetDraft(savedCssSnippets);
     setPluginDraft(savedPlugins);
     setSelectedThemePresetIdDraft(savedThemePresetId());
@@ -5825,6 +6129,7 @@ function App() {
           tidbits: defaultTidbitSettings,
           editor: defaultEditorBehaviorSettings,
           appearance: defaultVaultAppearanceSettings,
+          debug: defaultDebugSettings,
           cssSnippets: defaultCssSnippetSettings,
           plugins: defaultPluginSettings,
           theme: null,
@@ -5839,6 +6144,7 @@ function App() {
     const autosave = normalizeAutosaveSettings(settings.autosave);
     const tidbits = normalizeTidbitSettings(settings.tidbits);
     const vaultAppearanceSettings = normalizeVaultAppearanceSettings(settings.appearance);
+    const debug = normalizeDebugSettings(settings.debug);
     const cssSnippets = normalizeCssSnippetSettings(settings.cssSnippets);
     const plugins = normalizePluginSettings(settings.plugins);
 
@@ -5850,6 +6156,7 @@ function App() {
       tidbits,
       editor: editorSettings,
       appearance: vaultAppearanceSettings,
+      debug,
       cssSnippets,
       plugins,
       theme:
@@ -5877,6 +6184,7 @@ function App() {
     setTidbitDraft(tidbits);
     setTidbitSettings(tidbits);
     setVaultAppearanceDraft(vaultAppearanceSettings);
+    setDebugDraft(debug);
     setCssSnippetDraft(cssSnippets);
     setPluginDraft(plugins);
     setSelectedThemePresetIdDraft(themePresetId);
@@ -5915,6 +6223,7 @@ function App() {
           tidbits: normalizeTidbitSettings(tidbitDraft),
           editor: normalizeEditorBehaviorSettings(editorBehaviorDraft),
           appearance: normalizeVaultAppearanceSettings(vaultAppearanceDraft),
+          debug: normalizeDebugSettings(debugDraft),
           cssSnippets: normalizeCssSnippetSettings(cssSnippetDraft),
           plugins: normalizePluginSettings(pluginDraft),
           theme:
@@ -5940,6 +6249,7 @@ function App() {
       const autosave = normalizeAutosaveSettings(settings.autosave);
       const tidbits = normalizeTidbitSettings(settings.tidbits);
       const vaultAppearanceSettings = normalizeVaultAppearanceSettings(settings.appearance);
+      const debug = normalizeDebugSettings(settings.debug);
       const cssSnippets = normalizeCssSnippetSettings(settings.cssSnippets);
       const plugins = normalizePluginSettings(settings.plugins);
       const normalizedSettings = {
@@ -5950,6 +6260,7 @@ function App() {
         tidbits,
         editor: editorSettings,
         appearance: vaultAppearanceSettings,
+        debug,
         cssSnippets,
         plugins,
         theme:
@@ -5981,6 +6292,7 @@ function App() {
       setTidbitDraft(tidbits);
       setTidbitSettings(tidbits);
       setVaultAppearanceDraft(vaultAppearanceSettings);
+      setDebugDraft(debug);
       setCssSnippetDraft(cssSnippets);
       setPluginDraft(plugins);
       setSelectedThemePresetIdDraft(themePresetId);
@@ -6194,6 +6506,35 @@ function App() {
       window.removeEventListener("keydown", handleGlobalCommandPaletteShortcut);
     };
   }, []);
+
+  useEffect(() => {
+    const settings = normalizeTidbitSettings(tidbitSettings);
+
+    if (!settings.globalShortcutEnabled) {
+      return;
+    }
+
+    const handleFocusedTidbitShortcut = (event: KeyboardEvent) => {
+      const target = event.target;
+
+      if (
+        (target instanceof Element && target.closest(".shortcut-capture-control")) ||
+        !keyboardEventMatchesShortcut(event, settings.globalShortcut)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      void openTidbitCaptureWindowRef.current();
+    };
+
+    window.addEventListener("keydown", handleFocusedTidbitShortcut, { capture: true });
+
+    return () => {
+      window.removeEventListener("keydown", handleFocusedTidbitShortcut, { capture: true });
+    };
+  }, [tidbitSettings.globalShortcut, tidbitSettings.globalShortcutEnabled]);
 
   useEffect(() => {
     if (!settingsOpen) {
@@ -7279,6 +7620,88 @@ function App() {
       setStatus(error instanceof Error ? error.message : String(error));
     }
   }
+
+  async function openTidbitCaptureWindow() {
+    const root = vaultRootRef.current;
+    const settings = normalizeTidbitSettings(vaultSettingsRef.current.tidbits);
+
+    if (!root) {
+      setStatus("Open a vault before using global tidbit capture");
+      return;
+    }
+
+    if (!settings.globalShortcutEnabled) {
+      setStatus("Enable global tidbit capture in Settings before using its shortcut");
+      return;
+    }
+
+    try {
+      const context = {
+        root,
+        pathPattern: settings.pathPattern,
+      };
+      const existing = await WebviewWindow.getByLabel("tidbit-capture");
+
+      if (existing) {
+        await existing.emit("tidbit-capture-context", context);
+        await existing.show();
+        await existing.setFocus();
+        setStatus("Opened tidbit capture");
+        return;
+      }
+
+      const params = new URLSearchParams({
+        view: "tidbit-capture",
+        root,
+        pathPattern: settings.pathPattern,
+      });
+      const captureWindow = new WebviewWindow("tidbit-capture", {
+        url: `index.html?${params.toString()}`,
+        title: "New Tidbit",
+        width: 640,
+        height: 460,
+        minWidth: 460,
+        minHeight: 320,
+        center: true,
+        focus: true,
+        resizable: true,
+        skipTaskbar: true,
+      });
+
+      captureWindow.once("tauri://created", () => {
+        void captureWindow.emit("tidbit-capture-context", context);
+        void captureWindow.show();
+        void captureWindow.setFocus();
+        setStatus("Opened tidbit capture");
+      });
+      captureWindow.once("tauri://error", (event) => {
+        setStatus(`Could not open tidbit capture: ${String(event.payload)}`);
+      });
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function openCapturedTidbit(file: OpenedFile) {
+    const root = vaultRootRef.current;
+
+    if (!root) {
+      return;
+    }
+
+    const tab = createDocumentTabFromFile(file);
+
+    snapshotActiveTab();
+    addTabToGroup(tab);
+    hydrateDocumentTab(tab);
+    persistActiveFile(tab.activeFile);
+    addFileToWikiLinkIndex(file);
+    await loadEntries(root, currentDirRef.current);
+    setStatus(`Created tidbit ${file.relativePath}`);
+  }
+
+  openTidbitCaptureWindowRef.current = openTidbitCaptureWindow;
+  openCapturedTidbitRef.current = openCapturedTidbit;
 
   function openRichLinkDialog() {
     if (!editor) {
@@ -8683,6 +9106,15 @@ function App() {
                 >
                   Plugins
                 </button>
+                <button
+                  className={settingsTab === "debug" ? "active" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={settingsTab === "debug"}
+                  onClick={() => setSettingsTab("debug")}
+                >
+                  Debug
+                </button>
               </div>
               {settingsTab === "main" ? (
                 <div className="settings-tab-panel" role="tabpanel" aria-label="Main settings">
@@ -8715,13 +9147,79 @@ function App() {
                       <input
                         disabled={!vaultRoot}
                         value={tidbitDraft.pathPattern}
-                        onChange={(event) =>
-                          setTidbitDraft({
-                            pathPattern: event.currentTarget.value,
-                          })
-                        }
+                        onChange={(event) => {
+                          const pathPattern = event.currentTarget.value;
+
+                          setTidbitDraft((settings) => ({
+                            ...settings,
+                            pathPattern,
+                          }));
+                        }}
                         placeholder={defaultTidbitPathPattern}
                       />
+                    </label>
+                    <label className="settings-check-control">
+                      <input
+                        checked={tidbitDraft.globalShortcutEnabled}
+                        disabled={!vaultRoot}
+                        type="checkbox"
+                        onChange={(event) => {
+                          const globalShortcutEnabled = event.currentTarget.checked;
+
+                          setTidbitDraft((settings) => ({
+                            ...settings,
+                            globalShortcutEnabled,
+                          }));
+
+                          if (globalShortcutEnabled) {
+                            void requestTidbitShortcutAccessibilityPermission();
+                            setStatus("Save Settings to activate global tidbit capture");
+                          }
+                        }}
+                      />
+                      <span>Enable global tidbit capture shortcut</span>
+                    </label>
+                    <label>
+                      <span>Global tidbit shortcut</span>
+                      <div className="shortcut-capture-control">
+                        <input
+                          aria-describedby="global-tidbit-shortcut-hint"
+                          disabled={!vaultRoot || !tidbitDraft.globalShortcutEnabled}
+                          readOnly
+                          value={tidbitDraft.globalShortcut}
+                          onKeyDown={(event) => {
+                            const globalShortcut = shortcutFromKeyboardEvent(event);
+
+                            event.preventDefault();
+                            event.stopPropagation();
+
+                            if (!globalShortcut) {
+                              return;
+                            }
+
+                            setTidbitDraft((settings) => ({
+                              ...settings,
+                              globalShortcut,
+                            }));
+                          }}
+                          placeholder={defaultTidbitGlobalShortcut}
+                        />
+                        <button
+                          type="button"
+                          disabled={!vaultRoot || !tidbitDraft.globalShortcutEnabled}
+                          onClick={() =>
+                            setTidbitDraft((settings) => ({
+                              ...settings,
+                              globalShortcut: defaultTidbitGlobalShortcut,
+                            }))
+                          }
+                        >
+                          Reset
+                        </button>
+                      </div>
+                      <small id="global-tidbit-shortcut-hint">
+                        Focus the field and press the shortcut you want to use. Save Settings to activate it.
+                      </small>
                     </label>
                   </section>
                   <section className="settings-section" aria-label="Metadata settings">
@@ -8873,6 +9371,92 @@ function App() {
                       </div>
                     ) : null}
                   </section>
+                </div>
+              ) : null}
+              {settingsTab === "debug" ? (
+                <div className="settings-tab-panel" role="tabpanel" aria-label="Debug settings">
+                  <section className="settings-section" aria-label="Debug mode settings">
+                    <div className="settings-section-header">
+                      <div>
+                        <h3>Debug</h3>
+                        <p>Reveal diagnostic controls that are useful while troubleshooting the app.</p>
+                      </div>
+                    </div>
+                    <label className="settings-check-control">
+                      <input
+                        checked={debugDraft.enabled}
+                        disabled={!vaultRoot}
+                        type="checkbox"
+                        onChange={(event) =>
+                          setDebugDraft({
+                            enabled: event.currentTarget.checked,
+                          })
+                        }
+                      />
+                      <span>Enable debug mode</span>
+                    </label>
+                  </section>
+                  {debugDraft.enabled ? (
+                    <section
+                      className="settings-section"
+                      aria-label="Global tidbit shortcut diagnostics"
+                    >
+                      <div className="settings-section-header">
+                        <div>
+                          <h3>Global Shortcut Diagnostics</h3>
+                          <p>Use these controls only when macOS shortcut capture needs inspection.</p>
+                        </div>
+                      </div>
+                      <div className="settings-inline-actions">
+                        <button
+                          className="settings-inline-action"
+                          type="button"
+                          disabled={
+                            !vaultRoot ||
+                            !tidbitDraft.globalShortcutEnabled ||
+                            !isRunningOnMacOs()
+                          }
+                          onClick={() => void requestTidbitShortcutAccessibilityPermission()}
+                        >
+                          Request Permission
+                        </button>
+                        <button
+                          className="settings-inline-action"
+                          type="button"
+                          disabled={!vaultRoot || !tidbitDraft.globalShortcutEnabled || !isTauri()}
+                          onClick={() =>
+                            void invoke("test_tidbit_global_shortcut_event").catch((error) => {
+                              setStatus(error instanceof Error ? error.message : String(error));
+                            })
+                          }
+                        >
+                          Test Capture Event
+                        </button>
+                        <button
+                          className="settings-inline-action"
+                          type="button"
+                          disabled={!vaultRoot || !tidbitDraft.globalShortcutEnabled || !isTauri()}
+                          onClick={() =>
+                            void invoke<TidbitShortcutStatus>("tidbit_global_shortcut_status")
+                              .then((shortcutStatus) => {
+                                setStatus(
+                                  shortcutStatus.shortcut
+                                    ? `Tidbit shortcut ${shortcutStatus.shortcut} is ${
+                                        shortcutStatus.registered ? "registered" : "not registered"
+                                      }`
+                                    : "No tidbit shortcut is registered",
+                                );
+                              })
+                              .catch((error) => {
+                                setStatus(error instanceof Error ? error.message : String(error));
+                              })
+                          }
+                        >
+                          Check Shortcut
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
                 </div>
               ) : null}
               {settingsTab === "appearance" ? (

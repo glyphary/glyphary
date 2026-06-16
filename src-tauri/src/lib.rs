@@ -4,12 +4,14 @@ use std::{
     fs,
     path::{Component, Path, PathBuf},
     process::Command,
+    sync::Mutex,
     time::Duration,
 };
 use tauri::{
     menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
-    Emitter, Manager,
+    AppHandle, Emitter, Manager, State,
 };
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,6 +61,8 @@ struct VaultSettings {
     #[serde(default)]
     appearance: AppearanceSettings,
     #[serde(default)]
+    debug: DebugSettings,
+    #[serde(default)]
     css_snippets: CssSnippetSettings,
     #[serde(default)]
     plugins: PluginSettings,
@@ -86,9 +90,31 @@ struct AutosaveSettings {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct DebugSettings {
+    enabled: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct TidbitSettings {
     #[serde(default = "default_tidbit_path_pattern")]
     path_pattern: String,
+    #[serde(default)]
+    global_shortcut_enabled: bool,
+    #[serde(default = "default_tidbit_global_shortcut")]
+    global_shortcut: String,
+}
+
+#[derive(Default)]
+struct TidbitShortcutState {
+    registered_shortcut: Mutex<Option<String>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TidbitShortcutStatus {
+    shortcut: Option<String>,
+    registered: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Default)]
@@ -421,6 +447,10 @@ fn default_tidbit_path_pattern() -> String {
     DEFAULT_TIDBIT_PATH_PATTERN.into()
 }
 
+fn default_tidbit_global_shortcut() -> String {
+    "CommandOrControl+Shift+Space".into()
+}
+
 impl Default for VaultSettings {
     fn default() -> Self {
         Self {
@@ -431,6 +461,7 @@ impl Default for VaultSettings {
             tidbits: TidbitSettings::default(),
             editor: EditorSettings::default(),
             appearance: AppearanceSettings::default(),
+            debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
             theme: None,
@@ -453,10 +484,18 @@ impl Default for AutosaveSettings {
     }
 }
 
+impl Default for DebugSettings {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
 impl Default for TidbitSettings {
     fn default() -> Self {
         Self {
             path_pattern: DEFAULT_TIDBIT_PATH_PATTERN.into(),
+            global_shortcut_enabled: false,
+            global_shortcut: default_tidbit_global_shortcut(),
         }
     }
 }
@@ -543,6 +582,7 @@ fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, String> {
             tidbits,
             editor: settings.editor,
             appearance: settings.appearance,
+            debug: settings.debug,
             css_snippets,
             plugins,
             theme,
@@ -875,12 +915,19 @@ fn read_plugin_manifest_from_dir(
 
 fn clean_tidbit_settings(settings: TidbitSettings) -> TidbitSettings {
     let path_pattern = settings.path_pattern.trim();
+    let global_shortcut = settings.global_shortcut.trim();
 
     TidbitSettings {
         path_pattern: if path_pattern.is_empty() {
             DEFAULT_TIDBIT_PATH_PATTERN.into()
         } else {
             path_pattern.into()
+        },
+        global_shortcut_enabled: settings.global_shortcut_enabled,
+        global_shortcut: if global_shortcut.is_empty() {
+            default_tidbit_global_shortcut()
+        } else {
+            global_shortcut.into()
         },
     }
 }
@@ -2282,6 +2329,103 @@ fn write_vault_settings(root: String, settings: VaultSettings) -> Result<VaultSe
 }
 
 #[tauri::command]
+fn register_tidbit_global_shortcut(
+    app: AppHandle,
+    shortcut_state: State<'_, TidbitShortcutState>,
+    shortcut: String,
+) -> Result<bool, String> {
+    let shortcut = shortcut.trim().to_string();
+
+    if shortcut.is_empty() {
+        return Err("Global tidbit shortcut cannot be empty".into());
+    }
+
+    {
+        let mut registered_shortcut = shortcut_state
+            .registered_shortcut
+            .lock()
+            .map_err(|_| "Could not lock tidbit shortcut state".to_string())?;
+
+        if let Some(previous_shortcut) = registered_shortcut.take() {
+            if let Err(error) = app.global_shortcut().unregister(previous_shortcut.as_str()) {
+                return Err(format!(
+                    "Could not unregister previous tidbit shortcut {previous_shortcut}: {error}"
+                ));
+            }
+        }
+    }
+
+    let shortcut_for_handler = shortcut.clone();
+    app.global_shortcut()
+        .on_shortcut(shortcut.as_str(), move |app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed {
+                let _ = app.emit("tidbit-global-shortcut", &shortcut_for_handler);
+            }
+        })
+        .map_err(|error| format!("Could not register tidbit shortcut {shortcut}: {error}"))?;
+
+    let registered = app.global_shortcut().is_registered(shortcut.as_str());
+
+    if registered {
+        let mut registered_shortcut = shortcut_state
+            .registered_shortcut
+            .lock()
+            .map_err(|_| "Could not lock tidbit shortcut state".to_string())?;
+
+        registered_shortcut.replace(shortcut);
+    }
+
+    Ok(registered)
+}
+
+#[tauri::command]
+fn unregister_tidbit_global_shortcut(
+    app: AppHandle,
+    shortcut_state: State<'_, TidbitShortcutState>,
+) -> Result<(), String> {
+    let previous_shortcut = shortcut_state
+        .registered_shortcut
+        .lock()
+        .map_err(|_| "Could not lock tidbit shortcut state".to_string())?
+        .take();
+
+    if let Some(shortcut) = previous_shortcut {
+        app.global_shortcut()
+            .unregister(shortcut.as_str())
+            .map_err(|error| format!("Could not unregister tidbit shortcut {shortcut}: {error}"))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn tidbit_global_shortcut_status(
+    app: AppHandle,
+    shortcut_state: State<'_, TidbitShortcutState>,
+) -> Result<TidbitShortcutStatus, String> {
+    let shortcut = shortcut_state
+        .registered_shortcut
+        .lock()
+        .map_err(|_| "Could not lock tidbit shortcut state".to_string())?
+        .clone();
+    let registered = shortcut
+        .as_deref()
+        .map(|shortcut| app.global_shortcut().is_registered(shortcut))
+        .unwrap_or(false);
+
+    Ok(TidbitShortcutStatus {
+        shortcut,
+        registered,
+    })
+}
+
+#[tauri::command]
+fn test_tidbit_global_shortcut_event(app: AppHandle) -> Result<(), String> {
+    app.emit("tidbit-global-shortcut", "test")
+        .map_err(|error| format!("Could not emit tidbit shortcut test event: {error}"))
+}
+
+#[tauri::command]
 fn list_css_snippets(root: String, directory: String) -> Result<Vec<CssSnippetFile>, String> {
     let root = vault_root(&root)?;
     let directory = clean_relative(&directory)?;
@@ -2898,7 +3042,10 @@ pub fn run() {
             }
         })
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_macos_permissions::init())
         .plugin(tauri_plugin_opener::init())
+        .manage(TidbitShortcutState::default())
         .invoke_handler(tauri::generate_handler![
             list_vault_dir,
             list_vault_markdown_files,
@@ -2918,6 +3065,10 @@ pub fn run() {
             list_calendar_day_files,
             read_vault_settings,
             write_vault_settings,
+            register_tidbit_global_shortcut,
+            unregister_tidbit_global_shortcut,
+            tidbit_global_shortcut_status,
+            test_tidbit_global_shortcut_event,
             list_css_snippets,
             read_css_snippets,
             list_vault_plugins,
@@ -3001,6 +3152,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: None,
@@ -3038,6 +3190,7 @@ mod tests {
         assert_eq!(settings.tidbits.path_pattern, DEFAULT_TIDBIT_PATH_PATTERN);
         assert!(!settings.editor.vim_mode);
         assert!(!settings.appearance.glass_effect);
+        assert!(!settings.debug.enabled);
         assert_eq!(
             settings.css_snippets.directory,
             DEFAULT_CSS_SNIPPET_DIRECTORY
@@ -3067,9 +3220,12 @@ mod tests {
                 autosave: AutosaveSettings { enabled: false },
                 tidbits: TidbitSettings {
                     path_pattern: "Inbox/tidbit-{{date:YYYY-MM-DD-HH-mm-ss}}.md".into(),
+                    global_shortcut_enabled: true,
+                    global_shortcut: "CommandOrControl+Shift+Space".into(),
                 },
                 editor: EditorSettings { vim_mode: true },
                 appearance: AppearanceSettings { glass_effect: true },
+                debug: DebugSettings { enabled: true },
                 css_snippets: CssSnippetSettings {
                     directory: "themes/css".into(),
                     enabled: vec!["quiet.css".into(), "quiet.css".into(), "wide.css".into()],
@@ -3091,6 +3247,7 @@ mod tests {
         );
         assert!(settings.editor.vim_mode);
         assert!(settings.appearance.glass_effect);
+        assert!(settings.debug.enabled);
         assert_eq!(settings.css_snippets.directory, "themes/css");
         assert_eq!(settings.css_snippets.enabled, vec!["quiet.css", "wide.css"]);
         assert!(root.join(SETTINGS_DIRECTORY_NAME).is_dir());
@@ -3115,6 +3272,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: None,
@@ -3131,6 +3289,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: None,
@@ -3414,6 +3573,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: None,
@@ -3433,6 +3593,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: None,
@@ -3468,6 +3629,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: Some(VaultTheme {
@@ -3528,6 +3690,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: Some(VaultTheme {
@@ -3559,6 +3722,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: Some(VaultTheme {
@@ -3617,6 +3781,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: Some(VaultTheme {
@@ -3644,6 +3809,7 @@ mod tests {
                 tidbits: TidbitSettings::default(),
                 editor: EditorSettings::default(),
                 appearance: AppearanceSettings::default(),
+                debug: DebugSettings::default(),
                 css_snippets: CssSnippetSettings::default(),
                 plugins: PluginSettings::default(),
                 theme: Some(VaultTheme {
