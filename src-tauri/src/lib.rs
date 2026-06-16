@@ -213,6 +213,7 @@ struct PluginSettings {
 struct PluginManifest {
     id: String,
     name: String,
+    runtime: String,
     #[serde(default)]
     version: String,
     #[serde(default)]
@@ -314,6 +315,7 @@ const DEFAULT_TIDBIT_PATH_PATTERN: &str =
 const DEFAULT_CSS_SNIPPET_DIRECTORY: &str = "_snippets_";
 const PLUGIN_DIRECTORY: &str = ".glyphary/plugins";
 const PLUGIN_MANIFEST_FILE: &str = "plugin.json";
+const PLUGIN_RUNTIME_WASM_TRANSFORM_V1: &str = "glyphary-wasm-transform@1";
 const SETTINGS_DIRECTORY_NAME: &str = ".glyphary";
 const SETTINGS_CONFIG_FILE_NAME: &str = "config.json";
 const THEME_TOKEN_ALLOWLIST: &[&str] = &[
@@ -679,6 +681,12 @@ fn clean_plugin_manifest(
         return Err("Plugin name must be 1-96 characters".into());
     }
 
+    let runtime = manifest.runtime.trim();
+
+    if runtime != PLUGIN_RUNTIME_WASM_TRANSFORM_V1 {
+        return Err(format!("Unsupported plugin runtime: {runtime}"));
+    }
+
     let version = manifest.version.trim().chars().take(40).collect::<String>();
     let description = manifest
         .description
@@ -720,6 +728,7 @@ fn clean_plugin_manifest(
     Ok(PluginManifest {
         id,
         name,
+        runtime: runtime.into(),
         version,
         description,
         permissions,
@@ -3017,6 +3026,7 @@ mod tests {
             r#"{
   "id": "meeting_tools",
   "name": "Meeting Tools",
+  "runtime": "glyphary-wasm-transform@1",
   "version": "0.1.0",
   "permissions": ["document:write", "styles:load"],
   "styles": ["styles.css"],
@@ -3106,6 +3116,7 @@ mod tests {
             r#"{
   "id": "bad_plugin",
   "name": "Bad Plugin",
+  "runtime": "glyphary-wasm-transform@1",
   "permissions": ["network:fetch"],
   "commands": [
     {
@@ -3133,6 +3144,38 @@ mod tests {
         .expect_err("escaped plugin id should fail");
 
         assert!(escaped.contains("Plugin id"));
+
+        fs::remove_dir_all(root).expect("test root should be removed");
+    }
+
+    #[test]
+    fn rejects_unsupported_plugin_runtime() {
+        let root = test_root();
+        let plugin_dir = root.join(PLUGIN_DIRECTORY).join("future_plugin");
+        fs::create_dir_all(&plugin_dir).expect("plugin directory should exist");
+        fs::write(
+            plugin_dir.join(PLUGIN_MANIFEST_FILE),
+            r#"{
+  "id": "future_plugin",
+  "name": "Future Plugin",
+  "runtime": "glyphary-extism@1",
+  "commands": [
+    {
+      "id": "future",
+      "title": "Future",
+      "insertMarkdown": "future"
+    }
+  ]
+}"#,
+        )
+        .expect("manifest should be written");
+
+        let catalog =
+            list_vault_plugins(root.to_string_lossy().into_owned()).expect("plugins should list");
+
+        assert!(catalog.plugins.is_empty());
+        assert_eq!(catalog.errors.len(), 1);
+        assert!(catalog.errors[0].contains("Unsupported plugin runtime"));
 
         fs::remove_dir_all(root).expect("test root should be removed");
     }

@@ -441,6 +441,7 @@ Example manifest:
 {
   "id": "meeting_tools",
   "name": "Meeting Tools",
+  "runtime": "glyphary-wasm-transform@1",
   "version": "0.1.0",
   "permissions": ["document:write", "styles:load"],
   "styles": ["styles.css"],
@@ -464,6 +465,8 @@ Example manifest:
 }
 ```
 
+The `runtime` field is required. `glyphary-wasm-transform@1` identifies the current raw WASM transform ABI. Future plugin runtimes, such as an Extism-backed runtime, should use a different value so Glyphary can reject unsupported plugins cleanly.
+
 Supported command actions:
 
 - `insertMarkdown`: inserts literal Markdown at the current cursor/selection.
@@ -486,6 +489,19 @@ node examples/plugins/uppercase_selection/build-wasm.mjs
 ```
 
 Copy that directory to `<vault root>/.glyphary/plugins/uppercase_selection`, enable it in Settings, select text in the editor, and run `Uppercase Selection` from the command palette to exercise the end-to-end WASM transform path.
+
+A Rust version of the same plugin lives in `examples/plugins/uppercase_selection_rust`. It builds a plain WASM module without `wasm-bindgen` or JavaScript glue:
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo build --manifest-path examples/plugins/uppercase_selection_rust/Cargo.toml \
+  --release \
+  --target wasm32-unknown-unknown
+cp examples/plugins/uppercase_selection_rust/target/wasm32-unknown-unknown/release/glyphary_uppercase_selection_plugin.wasm \
+  examples/plugins/uppercase_selection_rust/plugin.wasm
+```
+
+Copy that directory to `<vault root>/.glyphary/plugins/uppercase_selection_rust`, enable it in Settings, select text in the editor, and run `Uppercase Selection (Rust)` from the command palette.
 
 The app also exposes an icon-only Auto/Light/Dark appearance control for quick switching.
 
@@ -584,7 +600,7 @@ Frontend unit tests cover helper behavior such as:
 - Markdown collapse container integration.
 - Rich link Markdown formatting and metadata extraction.
 - Vault plugin manifest, command, style, and WASM host wiring.
-- Sample WASM plugin ABI behavior.
+- Sample generated and Rust-built WASM plugin ABI behavior.
 - Frontmatter list extraction for display pills.
 - Vim-mode integration surface.
 - Split-pane tab lookup and pane closing behavior.

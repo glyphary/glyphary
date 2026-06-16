@@ -1186,6 +1186,7 @@ type PluginCommandManifest = {
 type PluginManifest = {
   id: string;
   name: string;
+  runtime: "glyphary-wasm-transform@1";
   version?: string;
   description?: string;
   permissions: string[];
