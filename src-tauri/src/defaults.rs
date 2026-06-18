@@ -26,6 +26,8 @@ pub(crate) const MIN_GLASS_OPACITY: f64 = 0.24;
 pub(crate) const MAX_GLASS_OPACITY: f64 = 0.9;
 pub(crate) const PLUGIN_DIRECTORY: &str = ".glyphary/plugins";
 pub(crate) const PLUGIN_MANIFEST_FILE: &str = "plugin.json";
+pub(crate) const DEFAULT_AI_BASE_URL: &str = "https://api.openai.com/v1";
+pub(crate) const DEFAULT_AI_MODEL: &str = "gpt-5.5";
 // Current v1 plugin runtime: a pure WASM transform loaded by the frontend worker.
 // Native/Extism/component runtimes should get their own manifest value.
 pub(crate) const PLUGIN_RUNTIME_WASM_TRANSFORM_V1: &str = "glyphary-wasm-transform@1";
@@ -127,6 +129,14 @@ pub(crate) fn default_tidbit_global_shortcut() -> String {
     "CommandOrControl+Shift+Space".into()
 }
 
+pub(crate) fn default_ai_base_url() -> String {
+    DEFAULT_AI_BASE_URL.into()
+}
+
+pub(crate) fn default_ai_model() -> String {
+    DEFAULT_AI_MODEL.into()
+}
+
 pub(crate) fn default_callout_style() -> String {
     "plain".into()
 }
@@ -157,6 +167,7 @@ impl Default for VaultSettings {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: None,
         }
     }
@@ -207,6 +218,17 @@ impl Default for CssSnippetSettings {
         Self {
             directory: DEFAULT_CSS_SNIPPET_DIRECTORY.into(),
             enabled: Vec::new(),
+        }
+    }
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            base_url: DEFAULT_AI_BASE_URL.into(),
+            model: DEFAULT_AI_MODEL.into(),
+            api_key: String::new(),
         }
     }
 }

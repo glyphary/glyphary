@@ -63,6 +63,25 @@ export type PluginSettings = {
   enabled: string[];
 };
 
+export type AiSettings = {
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+};
+
+export type AiTransformResponse = {
+  output: string;
+};
+
+export type AiModelListResponse = {
+  models: string[];
+};
+
+export type AiConnectionTestResponse = {
+  message: string;
+};
+
 export type PluginWasmCommand = {
   module: string;
   input: "selection" | "document";
@@ -183,6 +202,7 @@ export type VaultSettings = {
   debug?: DebugSettings | null;
   cssSnippets?: CssSnippetSettings | null;
   plugins?: PluginSettings | null;
+  ai?: AiSettings | null;
   theme?: VaultThemeSettings | null;
 };
 
@@ -229,7 +249,7 @@ export type SearchMode = "filename" | "content";
 export type TaskFilter = "incomplete" | "complete" | "all";
 export type TaskSort = "name" | "date";
 export type AppearanceMode = "auto" | "light" | "dark";
-export type SettingsTab = "main" | "appearance" | "plugins" | "debug";
+export type SettingsTab = "main" | "appearance" | "plugins" | "ai" | "debug";
 export type DrawerItem = "source" | "toc" | "calendar";
 export type VaultDrawerItem = "files" | "search" | "recent" | "tasks";
 export type ResizeSide = "vault" | "drawer";

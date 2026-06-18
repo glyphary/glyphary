@@ -31,6 +31,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
     let appearance = clean_appearance_settings(settings.appearance);
     let css_snippets = clean_css_snippet_settings(settings.css_snippets)?;
     let plugins = clean_plugin_settings(settings.plugins)?;
+    let ai = clean_ai_settings(settings.ai)?;
 
     if asset_directory.is_empty() {
         Err("Asset directory cannot be empty".into())
@@ -46,9 +47,32 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
             debug: settings.debug,
             css_snippets,
             plugins,
+            ai,
             theme,
         })
     }
+}
+pub(crate) fn clean_ai_settings(settings: AiSettings) -> Result<AiSettings, String> {
+    let base_url = settings.base_url.trim().trim_end_matches('/').to_string();
+    let parsed = reqwest::Url::parse(&base_url)
+        .map_err(|_| "AI base URL must be a valid http or https URL".to_string())?;
+
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err("AI base URL must use http or https".into());
+    }
+
+    let model = settings.model.trim();
+
+    if model.is_empty() {
+        return Err("AI model cannot be empty".into());
+    }
+
+    Ok(AiSettings {
+        enabled: settings.enabled,
+        base_url,
+        model: model.into(),
+        api_key: settings.api_key.trim().into(),
+    })
 }
 pub(crate) fn clean_appearance_settings(settings: AppearanceSettings) -> AppearanceSettings {
     let glass_opacity = if settings.glass_opacity.is_finite() {

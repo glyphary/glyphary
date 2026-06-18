@@ -49,6 +49,8 @@ export const defaultFrontmatterPillHeader = "tags";
 export const defaultTidbitPathPattern =
   "__transit__/Objects/tidbit-{{date:YYYY-mm-DD-hh-mm-ss}}.md";
 export const defaultTidbitGlobalShortcut = "CommandOrControl+Shift+Space";
+export const defaultAiBaseUrl = "https://api.openai.com/v1";
+export const defaultAiModel = "gpt-5.5";
 export const defaultDrawerOpen = false;
 export const defaultVaultDrawerOpen = true;
 export const defaultVaultDrawerWidth = 320;

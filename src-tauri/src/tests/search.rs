@@ -102,8 +102,11 @@ fn filtered_search_ignores_dot_paths_and_non_markdown_files() {
         .expect("visible markdown task should be created");
     fs::write(root.join("notes").join(".hidden.md"), "- [ ] hidden file\n")
         .expect("hidden markdown task should be created");
-    fs::write(root.join(".hidden").join("inside.md"), "- [ ] hidden directory\n")
-        .expect("hidden directory markdown task should be created");
+    fs::write(
+        root.join(".hidden").join("inside.md"),
+        "- [ ] hidden directory\n",
+    )
+    .expect("hidden directory markdown task should be created");
     fs::write(root.join("notes").join("plain.txt"), "- [ ] text task\n")
         .expect("non-markdown task should be created");
 

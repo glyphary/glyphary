@@ -88,6 +88,8 @@ import {
   minimumGlassOpacity,
   closedDrawerWidth,
   cssColorToHex,
+  defaultAiBaseUrl,
+  defaultAiSettings,
   emptyCalloutMarkdown,
   emptyCollapseMarkdown,
   emptyColumnsMarkdown,
@@ -109,6 +111,7 @@ import {
   minEditorWorkspaceWidth,
   minResizableDrawerWidth,
   monthTitle,
+  normalizeAiSettings,
   normalizeAutosaveSettings,
   normalizeCssSnippetSettings,
   normalizeDebugSettings,
@@ -125,6 +128,7 @@ import {
   remainingGroupAfterSplitPaneClose,
   resolveAppearance,
   richLinkMarkdown,
+  sameAiSettings,
   sameCalendarDate,
   sameAutosaveSettings,
   sameCssSnippetSettings,
@@ -147,6 +151,10 @@ import {
 } from "./logic";
 import type {
   ActiveFile,
+  AiConnectionTestResponse,
+  AiModelListResponse,
+  AiSettings,
+  AiTransformResponse,
   AppearanceMode,
   AutosaveSettings,
   CalloutIconName,
@@ -478,6 +486,8 @@ type CommandPaletteCommand = {
   run: () => void | Promise<void>;
 };
 
+type CommandPaletteScope = "root" | "ai" | "insert" | "table";
+
 type ExcalidrawSceneData = {
   type?: string;
   elements?: readonly ExcalidrawElement[];
@@ -494,6 +504,12 @@ type ExcalidrawDialogState = {
 type ImagePreviewState = {
   src: string;
   alt: string;
+};
+
+type AiReviewState = {
+  title: string;
+  output: string;
+  applyMode: "replace-selection" | "insert-below-selection" | "insert-at-cursor";
 };
 
 const ExcalidrawCanvas = lazy(async () => {
@@ -3582,6 +3598,7 @@ function App() {
     debug: defaultDebugSettings,
     cssSnippets: defaultCssSnippetSettings,
     plugins: defaultPluginSettings,
+    ai: defaultAiSettings,
     theme: null,
   });
   const [settingsDraft, setSettingsDraft] = useState(defaultVaultAssetDirectory);
@@ -3611,6 +3628,13 @@ function App() {
   const [pluginDraft, setPluginDraft] = useState<PluginSettings>(defaultPluginSettings);
   const [pluginCatalog, setPluginCatalog] = useState<PluginCatalog>({ plugins: [], errors: [] });
   const [pluginStyles, setPluginStyles] = useState<PluginStyleContent[]>([]);
+  const [aiDraft, setAiDraft] = useState<AiSettings>(defaultAiSettings);
+  const [aiModels, setAiModels] = useState<string[]>([]);
+  const [aiModelsLoading, setAiModelsLoading] = useState(false);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiTestStatus, setAiTestStatus] = useState<"success" | "error" | null>(null);
+  const [aiSubmitting, setAiSubmitting] = useState(false);
+  const [aiSubmittingTitle, setAiSubmittingTitle] = useState("");
   const [selectedThemePresetIdDraft, setSelectedThemePresetIdDraft] = useState<string | null>(null);
   const [themeDraft, setThemeDraft] = useState<Record<string, string>>({});
   const [themeOptionsDraft, setThemeOptionsDraft] =
@@ -3653,11 +3677,14 @@ function App() {
   const [settingsOffset, setSettingsOffset] = useState({ x: 0, y: 0 });
   const [settingsDragging, setSettingsDragging] = useState<SettingsDragState | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteScope, setCommandPaletteScope] =
+    useState<CommandPaletteScope>("root");
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteSelectedIndex, setCommandPaletteSelectedIndex] = useState(0);
   const [richLinkDialogOpen, setRichLinkDialogOpen] = useState(false);
   const [richLinkUrlDraft, setRichLinkUrlDraft] = useState("");
   const [richLinkSubmitting, setRichLinkSubmitting] = useState(false);
+  const [aiReview, setAiReview] = useState<AiReviewState | null>(null);
   const [excalidrawCreateDialogOpen, setExcalidrawCreateDialogOpen] = useState(false);
   const [excalidrawCreateNameDraft, setExcalidrawCreateNameDraft] = useState("Drawing");
   const [excalidrawCreateSubmitting, setExcalidrawCreateSubmitting] = useState(false);
@@ -3699,6 +3726,7 @@ function App() {
   const activeGroupIdRef = useRef<EditorGroupId>("primary");
   const workspaceRef = useRef<HTMLElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
+  const commandPaletteResultsRef = useRef<HTMLDivElement | null>(null);
   const wikiLinkSearchInputRef = useRef<HTMLInputElement | null>(null);
   const richLinkInputRef = useRef<HTMLInputElement | null>(null);
   const excalidrawCreateInputRef = useRef<HTMLInputElement | null>(null);
@@ -3750,6 +3778,7 @@ function App() {
     debug: defaultDebugSettings,
     cssSnippets: defaultCssSnippetSettings,
     plugins: defaultPluginSettings,
+    ai: defaultAiSettings,
     theme: null,
   });
   // Track only properties we applied from the theme builder so switching vaults
@@ -4179,6 +4208,15 @@ function App() {
     return normalizePluginSettings(vaultSettings.plugins);
   }
 
+  function savedAiSettings() {
+    return normalizeAiSettings(vaultSettings.ai);
+  }
+
+  function updateAiDraft(nextSettings: AiSettings) {
+    setAiTestStatus(null);
+    setAiDraft(nextSettings);
+  }
+
   function settingsHaveChanges() {
     return (
       settingsDraft !== vaultSettings.assetDirectory ||
@@ -4191,6 +4229,7 @@ function App() {
       !sameDebugSettings(debugDraft, savedDebugSettings()) ||
       !sameCssSnippetSettings(cssSnippetDraft, savedCssSnippetSettings()) ||
       !samePluginSettings(pluginDraft, savedPluginSettings()) ||
+      !sameAiSettings(aiDraft, savedAiSettings()) ||
       selectedThemePresetIdDraft !== savedThemePresetId() ||
       !sameThemeTokens(themeDraft, savedThemeTokens()) ||
       !sameThemeOptions(themeOptionsDraft, savedThemeOptions()) ||
@@ -4209,6 +4248,7 @@ function App() {
   function revertSettingsDraft() {
     const savedCssSnippets = savedCssSnippetSettings();
     const savedPlugins = savedPluginSettings();
+    const savedAi = savedAiSettings();
 
     setSettingsDraft(vaultSettings.assetDirectory);
     setFrontmatterPillDraft(savedFrontmatterPillSettings());
@@ -4220,6 +4260,8 @@ function App() {
     setDebugDraft(savedDebugSettings());
     setCssSnippetDraft(savedCssSnippets);
     setPluginDraft(savedPlugins);
+    setAiDraft(savedAi);
+    setAiTestStatus(null);
     setSelectedThemePresetIdDraft(savedThemePresetId());
     setThemeDraft(savedThemeTokens());
     setThemeOptionsDraft(savedThemeOptions());
@@ -5646,6 +5688,7 @@ function App() {
           debug: defaultDebugSettings,
           cssSnippets: defaultCssSnippetSettings,
           plugins: defaultPluginSettings,
+          ai: defaultAiSettings,
           theme: null,
     };
     const themeTokens = normalizeThemeTokens(settings.theme?.tokens);
@@ -5661,6 +5704,7 @@ function App() {
     const debug = normalizeDebugSettings(settings.debug);
     const cssSnippets = normalizeCssSnippetSettings(settings.cssSnippets);
     const plugins = normalizePluginSettings(settings.plugins);
+    const ai = normalizeAiSettings(settings.ai);
 
     const normalizedSettings = {
       ...settings,
@@ -5673,6 +5717,7 @@ function App() {
       debug,
       cssSnippets,
       plugins,
+      ai,
       theme:
         Object.keys(themeTokens).length > 0 ||
         !sameThemeOptions(themeOptions, defaultThemeOptions) ||
@@ -5701,6 +5746,8 @@ function App() {
     setDebugDraft(debug);
     setCssSnippetDraft(cssSnippets);
     setPluginDraft(plugins);
+    setAiDraft(ai);
+    setAiTestStatus(null);
     setSelectedThemePresetIdDraft(themePresetId);
     setThemeDraft(themeTokens);
     setThemeOptionsDraft(themeOptions);
@@ -5744,6 +5791,7 @@ function App() {
           debug: normalizeDebugSettings(debugDraft),
           cssSnippets: normalizeCssSnippetSettings(cssSnippetDraft),
           plugins: normalizePluginSettings(pluginDraft),
+          ai: normalizeAiSettings(aiDraft),
           theme:
             Object.keys(normalizeThemeTokens(themeDraft)).length > 0 ||
             !sameThemeOptions(themeOptionsDraft, defaultThemeOptions) ||
@@ -5770,6 +5818,7 @@ function App() {
       const debug = normalizeDebugSettings(settings.debug);
       const cssSnippets = normalizeCssSnippetSettings(settings.cssSnippets);
       const plugins = normalizePluginSettings(settings.plugins);
+      const ai = normalizeAiSettings(settings.ai);
       const normalizedSettings = {
         ...settings,
         frontmatterPills,
@@ -5781,6 +5830,7 @@ function App() {
         debug,
         cssSnippets,
         plugins,
+        ai,
         theme:
           Object.keys(themeTokens).length > 0 ||
           !sameThemeOptions(themeOptions, defaultThemeOptions) ||
@@ -5813,6 +5863,8 @@ function App() {
       setDebugDraft(debug);
       setCssSnippetDraft(cssSnippets);
       setPluginDraft(plugins);
+      setAiDraft(ai);
+      setAiTestStatus(null);
       setSelectedThemePresetIdDraft(themePresetId);
       setThemeDraft(themeTokens);
       setThemeOptionsDraft(themeOptions);
@@ -6016,6 +6068,7 @@ function App() {
       }
 
       event.preventDefault();
+      setCommandPaletteScope("root");
       setCommandPaletteQuery("");
       setCommandPaletteSelectedIndex(0);
       setCommandPaletteOpen(true);
@@ -6092,6 +6145,23 @@ function App() {
 
     return () => window.removeEventListener("keydown", closeImagePreviewOnEscape);
   }, [imagePreview]);
+
+  useEffect(() => {
+    if (!aiReview) {
+      return;
+    }
+
+    const closeAiReviewOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setAiReview(null);
+      }
+    };
+
+    window.addEventListener("keydown", closeAiReviewOnEscape);
+
+    return () => window.removeEventListener("keydown", closeAiReviewOnEscape);
+  }, [aiReview]);
 
   useEffect(() => {
     if (!commandPaletteOpen) {
@@ -7059,6 +7129,234 @@ function App() {
     return state.doc.textBetween(state.selection.from, state.selection.to, "\n", "\n");
   }
 
+  function currentCursorContext() {
+    if (!editor) {
+      return "";
+    }
+
+    const { doc, selection } = editor.state;
+    const before = doc.textBetween(0, selection.from, "\n", "\n").trimEnd();
+    const after = doc.textBetween(selection.to, doc.content.size, "\n", "\n").trimStart();
+
+    // The backend transform only sees a string, so cursor-sensitive commands
+    // receive an explicit boundary marker instead of relying on editor state.
+    return [
+      "Text before cursor:",
+      before || "(empty)",
+      "",
+      "[[CURSOR]]",
+      "",
+      "Text after cursor:",
+      after || "(empty)",
+    ].join("\n");
+  }
+
+  function aiModelOptions() {
+    return Array.from(
+      new Set([normalizeAiSettings(aiDraft).model, ...aiModels].filter(Boolean)),
+    );
+  }
+
+  async function refreshAiModels() {
+    const settings = normalizeAiSettings(aiDraft);
+
+    if (!settings.enabled) {
+      setStatus("Enable AI commands before fetching models");
+      return;
+    }
+
+    if (!settings.apiKey) {
+      setStatus("Add an AI API key before fetching models");
+      return;
+    }
+
+    try {
+      setAiModelsLoading(true);
+      setStatus("Fetching AI models");
+      const response = await invoke<AiModelListResponse>("list_ai_models", { settings });
+
+      setAiModels(response.models);
+      if (!response.models.includes(settings.model)) {
+        updateAiDraft({
+          ...normalizeAiSettings(aiDraft),
+          model: response.models[0] ?? settings.model,
+        });
+      }
+      setStatus(`Fetched ${response.models.length} AI models`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAiModelsLoading(false);
+    }
+  }
+
+  async function testAiConnection() {
+    const settings = normalizeAiSettings(aiDraft);
+
+    if (!settings.enabled) {
+      setStatus("Enable AI commands before testing the API");
+      setAiTestStatus("error");
+      return;
+    }
+
+    if (!settings.apiKey) {
+      setStatus("Add an AI API key before testing the API");
+      setAiTestStatus("error");
+      return;
+    }
+
+    try {
+      setAiTesting(true);
+      setAiTestStatus(null);
+      setStatus("Testing AI API");
+      const response = await invoke<AiConnectionTestResponse>("test_ai_connection", {
+        settings,
+      });
+
+      setAiTestStatus("success");
+      setStatus(response.message);
+    } catch (error) {
+      setAiTestStatus("error");
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAiTesting(false);
+    }
+  }
+
+  async function runAiTextCommand(
+    title: string,
+    instruction: string,
+    input: string,
+    applyMode: AiReviewState["applyMode"],
+  ) {
+    if (!editor) {
+      return;
+    }
+
+    if (!vaultRoot) {
+      setStatus("Open a vault before running AI commands");
+      return;
+    }
+
+    if (!input) {
+      setStatus("Provide text before running this AI command");
+      return;
+    }
+
+    const settings = savedAiSettings();
+
+    if (!settings.enabled) {
+      setStatus("Enable AI commands in Settings before using this command");
+      return;
+    }
+
+    try {
+      setAiSubmitting(true);
+      setAiSubmittingTitle(title);
+      setStatus(`Running ${title}`);
+      const response = await invoke<AiTransformResponse>("run_ai_transform", {
+        request: {
+          settings,
+          instruction,
+          input,
+        },
+      });
+
+      setAiReview({
+        title,
+        output: response.output,
+        applyMode,
+      });
+      setStatus(`Review ${title} result`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAiSubmitting(false);
+      setAiSubmittingTitle("");
+    }
+  }
+
+  async function runAiSelectionCommand(
+    title: string,
+    instruction: string,
+    applyMode: AiReviewState["applyMode"],
+  ) {
+    const input = currentSelectionText().trim();
+
+    if (!input) {
+      setStatus("Select text before running this AI command");
+      return;
+    }
+
+    await runAiTextCommand(title, instruction, input, applyMode);
+  }
+
+  async function runAiSelectionOrDocumentCommand(
+    title: string,
+    instruction: string,
+    applyMode: AiReviewState["applyMode"],
+  ) {
+    const input = (currentSelectionText().trim() || markdown.trim()).trim();
+
+    if (!input) {
+      setStatus("Write or select text before running this AI command");
+      return;
+    }
+
+    await runAiTextCommand(title, instruction, input, applyMode);
+  }
+
+  async function runAiContinueWritingCommand() {
+    const input = currentCursorContext();
+
+    await runAiTextCommand(
+      "AI: Continue writing",
+      "Continue writing from [[CURSOR]] using the surrounding note as context. Return only the Markdown text that should be inserted at the cursor. Do not repeat existing text.",
+      input,
+      "insert-at-cursor",
+    );
+  }
+
+  function replaceSelectionWithAiOutput(output: string) {
+    if (!editor) {
+      return;
+    }
+
+    editor.chain().focus().insertContent(output, { contentType: "markdown" }).run();
+    setAiReview(null);
+    setStatus("Applied AI result");
+  }
+
+  function insertAiOutputBelowSelection(output: string) {
+    if (!editor) {
+      return;
+    }
+
+    editor
+      .chain()
+      .focus()
+      .setTextSelection(editor.state.selection.to)
+      .insertContent(`\n\n${output}`, { contentType: "markdown" })
+      .run();
+    setAiReview(null);
+    setStatus("Inserted AI result");
+  }
+
+  function insertAiOutputAtCursor(output: string) {
+    if (!editor) {
+      return;
+    }
+
+    editor.chain().focus().insertContent(output, { contentType: "markdown" }).run();
+    setAiReview(null);
+    setStatus("Inserted AI result");
+  }
+
+  async function copyAiOutput(output: string) {
+    await window.navigator.clipboard.writeText(output);
+    setStatus("Copied AI result");
+  }
+
   function runWasmPluginTransform(
     pluginId: string,
     commandId: string,
@@ -7225,6 +7523,9 @@ function App() {
         root,
         pathPattern: settings.pathPattern,
       };
+      const captureAppearance = normalizeVaultAppearanceSettings(
+        vaultSettingsRef.current.appearance,
+      );
       const existing = await WebviewWindow.getByLabel("tidbit-capture");
 
       if (existing) {
@@ -7251,6 +7552,7 @@ function App() {
         focus: true,
         resizable: true,
         skipTaskbar: true,
+        transparent: captureAppearance.glassEffect,
       });
 
       captureWindow.once("tauri://created", () => {
@@ -7409,16 +7711,160 @@ function App() {
     selectedWikiLinkSearchIndex >= 0
       ? (filteredWikiLinkFiles[selectedWikiLinkSearchIndex] ?? null)
       : null;
-  const commandPaletteCommands: CommandPaletteCommand[] = [
-    // Table editing is contextual enough that the palette keeps it close to
-    // the cursor state instead of permanently crowding the formatting toolbar.
-    ...tableCommandPaletteCommands,
-    {
-      id: "create-tidbit",
-      title: "Create Tidbit",
-      description: "Create a fast note from the vault tidbit path pattern",
-      run: createTidbit,
-    },
+  const aiCommandPaletteCommands: CommandPaletteCommand[] = savedAiSettings().enabled
+    ? [
+        {
+          id: "ai-improve-writing-selection",
+          title: "AI: Improve writing",
+          description: "Clean up grammar, clarity, and flow while preserving meaning",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Improve writing",
+              "Improve the selected Markdown for grammar, clarity, and flow while preserving its meaning, tone, structure, and important details. Return only the improved Markdown.",
+              "replace-selection",
+            ),
+        },
+        {
+          id: "ai-fix-spelling-grammar-selection",
+          title: "AI: Fix spelling and grammar",
+          description: "Apply a light spelling and grammar edit to the selection",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Fix spelling and grammar",
+              "Fix spelling, punctuation, and grammar in the selected Markdown. Keep wording changes minimal and preserve the original structure. Return only the corrected Markdown.",
+              "replace-selection",
+            ),
+        },
+        {
+          id: "ai-shorten-selection",
+          title: "AI: Shorten selection",
+          description: "Compress the selected text without losing key points",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Shorten selection",
+              "Shorten the selected Markdown while preserving the essential meaning and important details. Return only the shortened Markdown.",
+              "replace-selection",
+            ),
+        },
+        {
+          id: "ai-expand-selection",
+          title: "AI: Expand selection",
+          description: "Elaborate terse notes into fuller Markdown prose",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Expand selection",
+              "Expand the selected Markdown into clearer, fuller writing. Preserve the original meaning, avoid inventing unsupported facts, and return only the expanded Markdown.",
+              "replace-selection",
+            ),
+        },
+        {
+          id: "ai-tone-formal-selection",
+          title: "AI: Make selection more formal",
+          description: "Rewrite the selection in a more formal tone",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Make selection more formal",
+              "Rewrite the selected Markdown in a more formal tone while preserving meaning, structure, and important details. Return only the rewritten Markdown.",
+              "replace-selection",
+            ),
+        },
+        {
+          id: "ai-tone-casual-selection",
+          title: "AI: Make selection more casual",
+          description: "Rewrite the selection in a more casual tone",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Make selection more casual",
+              "Rewrite the selected Markdown in a more casual, natural tone while preserving meaning, structure, and important details. Return only the rewritten Markdown.",
+              "replace-selection",
+            ),
+        },
+        {
+          id: "ai-tone-direct-selection",
+          title: "AI: Make selection more direct",
+          description: "Rewrite the selection to be clearer and more direct",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Make selection more direct",
+              "Rewrite the selected Markdown to be more direct and concise while preserving meaning and important details. Return only the rewritten Markdown.",
+              "replace-selection",
+            ),
+        },
+        {
+          id: "ai-tone-polished-selection",
+          title: "AI: Polish selection",
+          description: "Rewrite the selection with a more polished tone",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Polish selection",
+              "Rewrite the selected Markdown with a polished, professional tone while preserving meaning, structure, and important details. Return only the rewritten Markdown.",
+              "replace-selection",
+            ),
+        },
+        {
+          id: "ai-summarize-selection",
+          title: "AI: Summarize selection",
+          description: "Create a concise Markdown summary of the selected text",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Summarize selection",
+              "Summarize the selected Markdown concisely. Use Markdown bullets if that makes the result easier to scan.",
+              "insert-below-selection",
+            ),
+        },
+        {
+          id: "ai-extract-tasks-selection",
+          title: "AI: Extract tasks from selection",
+          description: "Turn the selected text into Markdown task items",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Extract tasks from selection",
+              "Extract concrete action items from the selected Markdown. Return only Markdown task list items using '- [ ]'.",
+              "insert-below-selection",
+            ),
+        },
+        {
+          id: "ai-create-outline-selection",
+          title: "AI: Create outline",
+          description: "Turn the selected text into Markdown headings and bullets",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Create outline",
+              "Turn the selected Markdown into a useful outline with Markdown headings and bullets. Preserve important ideas and ordering. Return only the outline.",
+              "insert-below-selection",
+            ),
+        },
+        {
+          id: "ai-generate-title",
+          title: "AI: Generate title",
+          description: "Suggest a concise title from the selection or current note",
+          run: () =>
+            runAiSelectionOrDocumentCommand(
+              "AI: Generate title",
+              "Suggest one concise, specific title for this note or selected Markdown. Return only the title text with no quotes, prefix, or explanation.",
+              "insert-below-selection",
+            ),
+        },
+        {
+          id: "ai-continue-writing",
+          title: "AI: Continue writing",
+          description: "Continue from the cursor using the surrounding note as context",
+          run: runAiContinueWritingCommand,
+        },
+        {
+          id: "ai-explain-selection",
+          title: "AI: Explain selection",
+          description: "Explain the selected concept in simpler terms",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Explain selection",
+              "Explain the selected Markdown in simpler terms for a reader who is new to the topic. Preserve important nuance and return only Markdown.",
+              "insert-below-selection",
+            ),
+        },
+      ]
+    : [];
+  const insertCommandPaletteCommands: CommandPaletteCommand[] = [
     {
       id: "insert-rich-link",
       title: "Insert rich link",
@@ -7461,23 +7907,124 @@ function App() {
       description: "Add a rendered table of contents block",
       run: appendTableOfContentsBlock,
     },
+  ];
+  const commandPaletteCommands: CommandPaletteCommand[] = [
+    // Table editing is contextual enough that the palette keeps it close to
+    // the cursor state instead of permanently crowding the formatting toolbar.
+    ...(tableCommandPaletteCommands.length > 0
+      ? [
+          {
+            id: "table-menu",
+            title: "Table ...",
+            description: "Open table editing commands",
+            run: () => {
+              setCommandPaletteScope("table");
+              setCommandPaletteQuery("");
+              setCommandPaletteSelectedIndex(0);
+              window.setTimeout(() => commandPaletteInputRef.current?.focus(), 0);
+            },
+          },
+        ]
+      : []),
+    {
+      id: "create-tidbit",
+      title: "Create Tidbit",
+      description: "Create a fast note from the vault tidbit path pattern",
+      run: createTidbit,
+    },
+    ...(aiCommandPaletteCommands.length > 0
+      ? [
+          {
+            id: "ai-menu",
+            title: "AI ...",
+            description: "Open AI writing commands",
+            run: () => {
+              setCommandPaletteScope("ai");
+              setCommandPaletteQuery("");
+              setCommandPaletteSelectedIndex(0);
+              window.setTimeout(() => commandPaletteInputRef.current?.focus(), 0);
+            },
+          },
+        ]
+      : []),
+    {
+      id: "insert-menu",
+      title: "Insert ...",
+      description: "Open insert commands",
+      run: () => {
+        setCommandPaletteScope("insert");
+        setCommandPaletteQuery("");
+        setCommandPaletteSelectedIndex(0);
+        window.setTimeout(() => commandPaletteInputRef.current?.focus(), 0);
+      },
+    },
     ...pluginCommandPaletteCommands,
   ];
+  const activeCommandPaletteCommands =
+    commandPaletteScope === "ai"
+      ? aiCommandPaletteCommands
+      : commandPaletteScope === "insert"
+        ? insertCommandPaletteCommands
+        : commandPaletteScope === "table"
+          ? tableCommandPaletteCommands
+          : commandPaletteCommands;
+  const commandPaletteScopeTitle =
+    commandPaletteScope === "ai"
+      ? "AI commands"
+      : commandPaletteScope === "insert"
+        ? "Insert commands"
+        : commandPaletteScope === "table"
+          ? "Table commands"
+          : "";
+  const commandPalettePlaceholder =
+    commandPaletteScope === "ai"
+      ? "Type an AI command..."
+      : commandPaletteScope === "insert"
+        ? "Type an insert command..."
+        : commandPaletteScope === "table"
+          ? "Type a table command..."
+          : "Type a command...";
   const normalizedCommandPaletteQuery = commandPaletteQuery.trim().toLowerCase();
   const filteredCommandPaletteCommands = normalizedCommandPaletteQuery
-    ? commandPaletteCommands.filter((command) =>
+    ? activeCommandPaletteCommands.filter((command) =>
         `${command.title} ${command.description}`.toLowerCase().includes(
           normalizedCommandPaletteQuery,
         ),
       )
-    : commandPaletteCommands;
+    : activeCommandPaletteCommands;
   const selectedCommandPaletteCommand =
     filteredCommandPaletteCommands[
       Math.min(commandPaletteSelectedIndex, filteredCommandPaletteCommands.length - 1)
     ] ?? null;
 
+  useEffect(() => {
+    if (!commandPaletteOpen) {
+      return;
+    }
+
+    setCommandPaletteSelectedIndex((index) =>
+      Math.min(index, Math.max(filteredCommandPaletteCommands.length - 1, 0)),
+    );
+  }, [commandPaletteOpen, filteredCommandPaletteCommands.length]);
+
+  useEffect(() => {
+    if (!commandPaletteOpen || !selectedCommandPaletteCommand) {
+      return;
+    }
+
+    const results = commandPaletteResultsRef.current;
+    const activeOption = document.getElementById(
+      `command-palette-${selectedCommandPaletteCommand.id}`,
+    );
+
+    if (results?.contains(activeOption)) {
+      activeOption?.scrollIntoView({ block: "nearest" });
+    }
+  }, [commandPaletteOpen, commandPaletteSelectedIndex, selectedCommandPaletteCommand]);
+
   function closeCommandPalette() {
     setCommandPaletteOpen(false);
+    setCommandPaletteScope("root");
     setCommandPaletteQuery("");
     setCommandPaletteSelectedIndex(0);
   }
@@ -7485,7 +8032,25 @@ function App() {
   function handleCommandPaletteKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
+      if (commandPaletteScope !== "root") {
+        setCommandPaletteScope("root");
+        setCommandPaletteQuery("");
+        setCommandPaletteSelectedIndex(0);
+        return;
+      }
+
       closeCommandPalette();
+      return;
+    }
+
+    if (
+      event.key === "Backspace" &&
+      commandPaletteScope !== "root" &&
+      commandPaletteQuery.length === 0
+    ) {
+      event.preventDefault();
+      setCommandPaletteScope("root");
+      setCommandPaletteSelectedIndex(0);
       return;
     }
 
@@ -7512,13 +8077,23 @@ function App() {
   }
 
   async function runCommandPaletteCommand(command: CommandPaletteCommand) {
-    await command.run();
+    if (
+      command.id === "ai-menu" ||
+      command.id === "insert-menu" ||
+      command.id === "table-menu"
+    ) {
+      await command.run();
+      return;
+    }
+
     closeCommandPalette();
+    await command.run();
     setEditorFocused(true);
     if (
       command.id !== "insert-rich-link" &&
       command.id !== "insert-excalidraw" &&
-      command.id !== "create-tidbit"
+      command.id !== "create-tidbit" &&
+      !command.id.startsWith("ai-")
     ) {
       setStatus(command.title);
     }
@@ -8956,6 +9531,15 @@ function App() {
                   Plugins
                 </button>
                 <button
+                  className={settingsTab === "ai" ? "active" : ""}
+                  type="button"
+                  role="tab"
+                  aria-selected={settingsTab === "ai"}
+                  onClick={() => setSettingsTab("ai")}
+                >
+                  AI
+                </button>
+                <button
                   className={settingsTab === "debug" ? "active" : ""}
                   type="button"
                   role="tab"
@@ -9219,6 +9803,137 @@ function App() {
                         ))}
                       </div>
                     ) : null}
+                  </section>
+                </div>
+              ) : null}
+              {settingsTab === "ai" ? (
+                <div className="settings-tab-panel" role="tabpanel" aria-label="AI settings">
+                  <section className="settings-section" aria-label="AI provider settings">
+                    <div className="settings-section-header">
+                      <div>
+                        <h3>AI</h3>
+                        <p>Connect Glyphary to an OpenAI-compatible backend with your own key.</p>
+                      </div>
+                    </div>
+                    <label className="settings-check-control">
+                      <input
+                        checked={aiDraft.enabled}
+                        disabled={!vaultRoot}
+                        type="checkbox"
+                        onChange={(event) => {
+                          const enabled = event.currentTarget.checked;
+
+                          updateAiDraft({
+                            ...normalizeAiSettings(aiDraft),
+                            enabled,
+                          });
+                        }}
+                      />
+                      <span>Enable AI commands</span>
+                    </label>
+                    <label>
+                      <span>Base URL</span>
+                      <input
+                        disabled={!vaultRoot || !aiDraft.enabled}
+                        value={aiDraft.baseUrl}
+                        onChange={(event) => {
+                          const baseUrl = event.currentTarget.value;
+
+                          updateAiDraft({
+                            ...normalizeAiSettings(aiDraft),
+                            baseUrl,
+                          });
+                        }}
+                        placeholder={defaultAiBaseUrl}
+                      />
+                    </label>
+                    <label>
+                      <span>Model</span>
+                      <select
+                        disabled={!vaultRoot || !aiDraft.enabled}
+                        value={aiDraft.model}
+                        onChange={(event) => {
+                          const model = event.currentTarget.value;
+
+                          updateAiDraft({
+                            ...normalizeAiSettings(aiDraft),
+                            model,
+                          });
+                        }}
+                      >
+                        {aiModelOptions().map((model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>API key</span>
+                      <input
+                        disabled={!vaultRoot || !aiDraft.enabled}
+                        type="password"
+                        value={aiDraft.apiKey}
+                        onChange={(event) => {
+                          const apiKey = event.currentTarget.value;
+
+                          updateAiDraft({
+                            ...normalizeAiSettings(aiDraft),
+                            apiKey,
+                          });
+                        }}
+                        placeholder="sk-..."
+                      />
+                      <small>The key is saved in this vault's .glyphary/config.json.</small>
+                    </label>
+                    <div className="settings-inline-actions">
+                      <button
+                        className="settings-inline-action"
+                        disabled={
+                          !vaultRoot ||
+                          !aiDraft.enabled ||
+                          !normalizeAiSettings(aiDraft).apiKey ||
+                          aiModelsLoading
+                        }
+                        type="button"
+                        onClick={() => void refreshAiModels()}
+                      >
+                        {aiModelsLoading ? "Refreshing..." : "Refresh Models"}
+                      </button>
+                      <button
+                        className="settings-inline-action"
+                        disabled={
+                          !vaultRoot ||
+                          !aiDraft.enabled ||
+                          !normalizeAiSettings(aiDraft).apiKey ||
+                          aiTesting
+                        }
+                        type="button"
+                        onClick={() => void testAiConnection()}
+                      >
+                        {aiTesting ? "Testing..." : "Test API"}
+                      </button>
+                      <span
+                        className={`ai-test-indicator${
+                          aiTestStatus ? ` ${aiTestStatus}` : ""
+                        }`}
+                        aria-label={
+                          aiTestStatus === "success"
+                            ? "AI API test passed"
+                            : aiTestStatus === "error"
+                              ? "AI API test failed"
+                              : "AI API not tested"
+                        }
+                        role="status"
+                        title={
+                          aiTestStatus === "success"
+                            ? "AI API test passed"
+                            : aiTestStatus === "error"
+                              ? "AI API test failed"
+                              : "AI API not tested"
+                        }
+                      />
+                    </div>
                   </section>
                 </div>
               ) : null}
@@ -9812,6 +10527,93 @@ function App() {
           </figure>
         </div>
       ) : null}
+      {aiReview ? (
+        <div
+          className="ai-review-screen"
+          role="presentation"
+          onMouseDown={() => setAiReview(null)}
+        >
+          <section
+            className="ai-review-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Review AI result"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <h2>{aiReview.title}</h2>
+                <span>Review before applying to the current note.</span>
+              </div>
+              <button
+                className="inline-action"
+                type="button"
+                onClick={() => setAiReview(null)}
+              >
+                Cancel
+              </button>
+            </header>
+            <textarea readOnly value={aiReview.output} />
+            <footer>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={() => void copyAiOutput(aiReview.output)}
+              >
+                Copy
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={() =>
+                  aiReview.applyMode === "insert-at-cursor"
+                    ? insertAiOutputAtCursor(aiReview.output)
+                    : insertAiOutputBelowSelection(aiReview.output)
+                }
+              >
+                {aiReview.applyMode === "insert-at-cursor" ? "Insert at Cursor" : "Insert Below"}
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={() => {
+                  if (aiReview.applyMode === "replace-selection") {
+                    replaceSelectionWithAiOutput(aiReview.output);
+                    return;
+                  }
+
+                  if (aiReview.applyMode === "insert-at-cursor") {
+                    insertAiOutputAtCursor(aiReview.output);
+                    return;
+                  }
+
+                  insertAiOutputBelowSelection(aiReview.output);
+                }}
+              >
+                {aiReview.applyMode === "replace-selection"
+                  ? "Replace Selection"
+                  : "Insert Result"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+      {aiSubmitting ? (
+        <div className="ai-progress-screen" role="presentation">
+          <section
+            className="ai-progress-card"
+            role="status"
+            aria-live="polite"
+            aria-label="AI command in progress"
+          >
+            <span className="ai-progress-spinner" aria-hidden="true" />
+            <div>
+              <h2>{aiSubmittingTitle || "AI command"}</h2>
+              <p>Waiting for AI response...</p>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {commandPaletteOpen ? (
         <div
           className="command-palette-screen"
@@ -9826,6 +10628,22 @@ function App() {
             onKeyDown={handleCommandPaletteKeyDown}
             onMouseDown={(event) => event.stopPropagation()}
           >
+            {commandPaletteScope !== "root" ? (
+              <div className="command-palette-scopebar">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCommandPaletteScope("root");
+                    setCommandPaletteQuery("");
+                    setCommandPaletteSelectedIndex(0);
+                    commandPaletteInputRef.current?.focus();
+                  }}
+                >
+                  Back
+                </button>
+                <span>{commandPaletteScopeTitle}</span>
+              </div>
+            ) : null}
             <input
               ref={commandPaletteInputRef}
               aria-activedescendant={
@@ -9837,7 +10655,7 @@ function App() {
               aria-controls="command-palette-results"
               aria-label="Quick command"
               autoComplete="off"
-              placeholder="Type a command..."
+              placeholder={commandPalettePlaceholder}
               role="combobox"
               spellCheck="false"
               value={commandPaletteQuery}
@@ -9847,6 +10665,7 @@ function App() {
               }}
             />
             <div
+              ref={commandPaletteResultsRef}
               className="command-palette-results"
               id="command-palette-results"
               role="listbox"

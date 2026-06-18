@@ -13,7 +13,7 @@
 //!   and settings helpers.
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     fs,
     path::{Component, Path, PathBuf},
     sync::Mutex,
@@ -28,6 +28,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 // Tauri's command macro emits helper macros beside each command. Keeping
 // command-bearing modules imported with `macro_use` lets `generate_handler!`
 // register those commands from this central app-wiring file.
+#[macro_use]
+mod ai;
 #[macro_use]
 mod assets;
 mod defaults;
@@ -53,6 +55,7 @@ mod vault;
 #[macro_use]
 mod windowing;
 
+use ai::*;
 use assets::*;
 use calendar::*;
 use defaults::*;
@@ -259,7 +262,10 @@ pub fn run() {
             set_window_glass_effect,
             save_vault_asset,
             search_vault,
-            fetch_rich_link_metadata
+            fetch_rich_link_metadata,
+            list_ai_models,
+            test_ai_connection,
+            run_ai_transform
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -16,12 +16,15 @@
  */
 
 import {
+  defaultAiBaseUrl,
+  defaultAiModel,
   defaultFrontmatterPillHeader,
   defaultTidbitGlobalShortcut,
   defaultTidbitPathPattern,
 } from "./defaults.js";
 import { isMacOsPlatform } from "./platform.js";
 import type {
+  AiSettings,
   AppearanceMode,
   AutosaveSettings,
   CssSnippetSettings,
@@ -86,6 +89,13 @@ export const defaultCssSnippetSettings: CssSnippetSettings = {
 
 export const defaultPluginSettings: PluginSettings = {
   enabled: [],
+};
+
+export const defaultAiSettings: AiSettings = {
+  enabled: false,
+  baseUrl: defaultAiBaseUrl,
+  model: defaultAiModel,
+  apiKey: "",
 };
 
 export function readPersistedWorkspace() {
@@ -462,6 +472,30 @@ export function samePluginSettings(
   return (
     normalizedLeft.enabled.length === normalizedRight.enabled.length &&
     normalizedLeft.enabled.every((id, index) => id === normalizedRight.enabled[index])
+  );
+}
+
+export function normalizeAiSettings(settings: AiSettings | undefined | null) {
+  return {
+    enabled: settings?.enabled ?? defaultAiSettings.enabled,
+    baseUrl: settings?.baseUrl?.trim().replace(/\/+$/, "") || defaultAiSettings.baseUrl,
+    model: settings?.model?.trim() || defaultAiSettings.model,
+    apiKey: settings?.apiKey?.trim() || "",
+  };
+}
+
+export function sameAiSettings(
+  left: AiSettings | undefined | null,
+  right: AiSettings | undefined | null,
+) {
+  const normalizedLeft = normalizeAiSettings(left);
+  const normalizedRight = normalizeAiSettings(right);
+
+  return (
+    normalizedLeft.enabled === normalizedRight.enabled &&
+    normalizedLeft.baseUrl === normalizedRight.baseUrl &&
+    normalizedLeft.model === normalizedRight.model &&
+    normalizedLeft.apiKey === normalizedRight.apiKey
   );
 }
 

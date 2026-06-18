@@ -66,6 +66,8 @@ pub(crate) struct VaultSettings {
     pub(crate) css_snippets: CssSnippetSettings,
     #[serde(default)]
     pub(crate) plugins: PluginSettings,
+    #[serde(default)]
+    pub(crate) ai: AiSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) theme: Option<VaultTheme>,
 }
@@ -220,6 +222,45 @@ pub(crate) struct CssSnippetContent {
 pub(crate) struct PluginSettings {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) enabled: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiSettings {
+    #[serde(default)]
+    pub(crate) enabled: bool,
+    #[serde(default = "crate::defaults::default_ai_base_url")]
+    pub(crate) base_url: String,
+    #[serde(default = "crate::defaults::default_ai_model")]
+    pub(crate) model: String,
+    #[serde(default)]
+    pub(crate) api_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiTransformRequest {
+    pub(crate) settings: AiSettings,
+    pub(crate) instruction: String,
+    pub(crate) input: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiTransformResponse {
+    pub(crate) output: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiModelListResponse {
+    pub(crate) models: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiConnectionTestResponse {
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

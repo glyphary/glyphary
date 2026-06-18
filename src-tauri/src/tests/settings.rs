@@ -57,6 +57,7 @@ fn hides_dotfiles_unless_vault_settings_enable_them() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: None,
         },
     )
@@ -100,7 +101,47 @@ fn reads_default_vault_settings_when_missing() {
     );
     assert!(settings.css_snippets.enabled.is_empty());
     assert!(settings.plugins.enabled.is_empty());
+    assert!(!settings.ai.enabled);
+    assert_eq!(settings.ai.base_url, DEFAULT_AI_BASE_URL);
+    assert_eq!(settings.ai.model, DEFAULT_AI_MODEL);
+    assert!(settings.ai.api_key.is_empty());
     assert!(settings.theme.is_none());
+
+    fs::remove_dir_all(root).expect("test root should be removed");
+}
+
+#[test]
+fn writes_ai_settings_for_openai_compatible_backends() {
+    let root = test_root();
+
+    let settings = write_vault_settings(
+        root.to_string_lossy().into_owned(),
+        VaultSettings {
+            asset_directory: DEFAULT_ASSET_DIRECTORY.into(),
+            frontmatter_pills: FrontmatterPillSettings::default(),
+            files: FileDisplaySettings::default(),
+            autosave: AutosaveSettings::default(),
+            tidbits: TidbitSettings::default(),
+            editor: EditorSettings::default(),
+            appearance: AppearanceSettings::default(),
+            debug: DebugSettings::default(),
+            css_snippets: CssSnippetSettings::default(),
+            plugins: PluginSettings::default(),
+            ai: AiSettings {
+                enabled: true,
+                base_url: " https://llm.example.com/v1/ ".into(),
+                model: " local-model ".into(),
+                api_key: " secret ".into(),
+            },
+            theme: None,
+        },
+    )
+    .expect("AI settings should write");
+
+    assert!(settings.ai.enabled);
+    assert_eq!(settings.ai.base_url, "https://llm.example.com/v1");
+    assert_eq!(settings.ai.model, "local-model");
+    assert_eq!(settings.ai.api_key, "secret");
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }
@@ -137,6 +178,7 @@ fn writes_vault_settings_file() {
                 enabled: vec!["quiet.css".into(), "quiet.css".into(), "wide.css".into()],
             },
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: None,
         },
     )
@@ -185,6 +227,7 @@ fn clamps_glass_opacity_settings() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: None,
         },
     )
@@ -212,6 +255,7 @@ fn rejects_invalid_vault_settings_asset_directories() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: None,
         },
     )
@@ -229,6 +273,7 @@ fn rejects_invalid_vault_settings_asset_directories() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: None,
         },
     )
@@ -260,6 +305,7 @@ fn rejects_invalid_frontmatter_pill_headers() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: None,
         },
     )
@@ -280,6 +326,7 @@ fn rejects_invalid_frontmatter_pill_headers() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: None,
         },
     )
@@ -316,6 +363,7 @@ fn writes_vault_theme_tokens() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: Some(VaultTheme {
                 preset_id: Some("field-notes".into()),
                 callouts: VaultThemeCallouts::default(),
@@ -377,6 +425,7 @@ fn rejects_unsupported_vault_theme_tokens() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: Some(VaultTheme {
                 preset_id: None,
                 callouts: VaultThemeCallouts::default(),
@@ -409,6 +458,7 @@ fn writes_vault_theme_options_without_tokens() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: Some(VaultTheme {
                 preset_id: None,
                 callouts: VaultThemeCallouts {
@@ -468,6 +518,7 @@ fn rejects_unsupported_vault_callout_settings() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: Some(VaultTheme {
                 preset_id: None,
                 callouts: VaultThemeCallouts {
@@ -496,6 +547,7 @@ fn rejects_unsupported_vault_callout_settings() {
             debug: DebugSettings::default(),
             css_snippets: CssSnippetSettings::default(),
             plugins: PluginSettings::default(),
+            ai: AiSettings::default(),
             theme: Some(VaultTheme {
                 preset_id: None,
                 callouts: VaultThemeCallouts {

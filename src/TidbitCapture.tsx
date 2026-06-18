@@ -9,6 +9,8 @@ import { Markdown } from "@tiptap/markdown";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { TaskList } from "@tiptap/extension-task-list";
 import { defaultTidbitPathPattern, expandDateTemplate } from "./logic";
+import { normalizeVaultAppearanceSettings } from "./lib/settings";
+import type { VaultAppearanceSettings } from "./lib/app-types";
 
 type AppearanceMode = "auto" | "light" | "dark";
 
@@ -24,6 +26,10 @@ type TidbitCaptureContext = {
 };
 
 type VaultSettings = {
+  appearance?: {
+    glassEffect?: boolean | null;
+    glassOpacity?: number | null;
+  } | null;
   theme?: {
     tokens?: Record<string, string> | null;
   } | null;
@@ -87,6 +93,21 @@ function applyCaptureAppearance(appearance: AppearanceMode) {
   }
 
   void getCurrentWindow().setTheme(resolvedAppearance);
+}
+
+function applyCaptureGlassSettings(settings: VaultSettings["appearance"] | undefined | null) {
+  // The Rust settings payload only persists the glass fields today. The shared
+  // normalizer still supplies defaults for the broader appearance shape used by
+  // the main window settings panel.
+  const appearance = normalizeVaultAppearanceSettings(
+    settings as VaultAppearanceSettings | null | undefined,
+  );
+
+  document.documentElement.dataset.windowGlass = appearance.glassEffect ? "enabled" : "disabled";
+  document.documentElement.style.setProperty(
+    "--glyphary-glass-opacity",
+    String(appearance.glassOpacity),
+  );
 }
 
 function tidbitDirectory(relativePath: string) {
@@ -224,6 +245,8 @@ export default function TidbitCapture() {
         if (cancelled) {
           return;
         }
+
+        applyCaptureGlassSettings(settings.appearance);
 
         for (const [token, value] of Object.entries(tokens)) {
           document.documentElement.style.setProperty(token, value);

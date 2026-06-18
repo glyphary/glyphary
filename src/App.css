@@ -273,6 +273,11 @@ body {
   backdrop-filter: blur(34px) saturate(1.26);
 }
 
+:root[data-window-glass="enabled"] .tidbit-capture {
+  background: var(--glass-app-overlay);
+  backdrop-filter: blur(34px) saturate(1.26);
+}
+
 :root[data-window-glass="enabled"] .workspace,
 :root[data-window-glass="enabled"] .editor-groups,
 :root[data-window-glass="enabled"] .editor-pane-shell,
@@ -285,12 +290,22 @@ body {
 :root[data-window-glass="enabled"] .editor-pane,
 :root[data-window-glass="enabled"] .drawer-pane,
 :root[data-window-glass="enabled"] .vault-pane,
-:root[data-window-glass="enabled"] .settings-card,
 :root[data-window-glass="enabled"] .command-palette-card,
 :root[data-window-glass="enabled"] .rich-link-dialog-card {
   border-color: var(--glass-border-overlay);
   background: var(--glass-surface-overlay);
   backdrop-filter: blur(22px) saturate(1.16);
+}
+
+:root[data-window-glass="enabled"] .settings-screen {
+  background: color-mix(in srgb, var(--app-bg) 78%, transparent);
+  backdrop-filter: blur(12px) saturate(1.08);
+}
+
+:root[data-window-glass="enabled"] .settings-card {
+  border-color: var(--border);
+  background: var(--surface);
+  backdrop-filter: none;
 }
 
 :root[data-window-glass="enabled"] .document-tabs,
@@ -310,6 +325,11 @@ body {
   background: var(--glass-muted-overlay);
 }
 
+:root[data-window-glass="enabled"] .tidbit-capture-header,
+:root[data-window-glass="enabled"] .tidbit-capture-footer {
+  background: var(--glass-muted-overlay);
+}
+
 :root[data-window-glass="enabled"] .editor-surface-frame,
 :root[data-window-glass="enabled"] .markdown-import textarea,
 :root[data-window-glass="enabled"] .drawer-pane pre,
@@ -321,11 +341,18 @@ body {
 :root[data-window-glass="enabled"] .metadata-shell textarea,
 :root[data-window-glass="enabled"] .vault-search input,
 :root[data-window-glass="enabled"] .task-list-tools input,
-:root[data-window-glass="enabled"] .task-list-tools select {
+:root[data-window-glass="enabled"] .task-list-tools select,
+:root[data-window-glass="enabled"] .tidbit-capture-editor,
+:root[data-window-glass="enabled"] .tidbit-capture-header input {
   background: var(--glass-inner-overlay);
 }
 
+:root[data-window-glass="enabled"] .tidbit-capture-editor .tiptap {
+  background: transparent;
+}
+
 :root[data-window-glass="enabled"] .secondary-action,
+:root[data-window-glass="enabled"] .primary-action,
 :root[data-window-glass="enabled"] .inline-action,
 :root[data-window-glass="enabled"] .tool-button,
 :root[data-window-glass="enabled"] .appearance-control,
@@ -334,7 +361,8 @@ body {
 :root[data-window-glass="enabled"] .search-options button,
 :root[data-window-glass="enabled"] .task-options button,
 :root[data-window-glass="enabled"] .shortcut-capture-control button,
-:root[data-window-glass="enabled"] .settings-inline-action {
+:root[data-window-glass="enabled"] .settings-inline-action,
+:root[data-window-glass="enabled"] .tidbit-capture-actions button {
   border-color: var(--glass-border-overlay);
   background: var(--glass-control-overlay);
 }
@@ -544,6 +572,7 @@ h2 {
   margin: 0;
 }
 
+.primary-action,
 .secondary-action,
 .tool-button,
 .inline-action,
@@ -569,6 +598,16 @@ h2 {
   font-weight: 700;
 }
 
+.primary-action {
+  min-width: 118px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
 .icon-action {
   display: inline-grid;
   place-items: center;
@@ -588,6 +627,7 @@ h2 {
   stroke-width: 1.9;
 }
 
+.primary-action:disabled,
 .secondary-action:disabled,
 .inline-action:disabled {
   cursor: not-allowed;
@@ -595,6 +635,7 @@ h2 {
   transform: none;
 }
 
+.primary-action:hover,
 .secondary-action:hover,
 .tool-button:hover,
 .inline-action:hover {
@@ -1276,6 +1317,7 @@ body.workspace-resizing * {
 .section-corners-square .vault-pane,
 .section-corners-square .document-tabs,
 .section-corners-square .settings-card,
+.section-corners-square .ai-review-card,
 .section-corners-square .rich-link-dialog-card,
 .section-corners-square .excalidraw-dialog-card,
 .section-corners-square .excalidraw-create-dialog-card {
@@ -3079,6 +3121,7 @@ body.workspace-resizing * {
   display: flex;
   width: fit-content;
   max-width: 100%;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
 }
@@ -3099,6 +3142,24 @@ body.workspace-resizing * {
 .settings-inline-action:disabled {
   cursor: default;
   opacity: 0.55;
+}
+
+.ai-test-indicator {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--surface-muted);
+}
+
+.ai-test-indicator.success {
+  border-color: color-mix(in srgb, #2f8f50 62%, var(--border-strong));
+  background: #2f8f50;
+}
+
+.ai-test-indicator.error {
+  border-color: color-mix(in srgb, #b83c32 66%, var(--border-strong));
+  background: #b83c32;
 }
 
 .settings-tabs {
@@ -3440,6 +3501,118 @@ body.workspace-resizing * {
   justify-content: flex-end;
 }
 
+.ai-review-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 73;
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  background: color-mix(in srgb, var(--app-bg) 58%, transparent);
+  padding: 12vh 20px 20px;
+  animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
+}
+
+.ai-review-card {
+  display: grid;
+  width: min(720px, 100%);
+  max-height: min(72vh, 680px);
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 22px 60px var(--shadow-strong);
+  padding: 16px;
+}
+
+.ai-review-card header,
+.ai-review-card footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-review-card footer {
+  justify-content: flex-end;
+}
+
+.ai-review-card h2 {
+  color: var(--heading);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.ai-review-card header span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.ai-review-card textarea {
+  min-height: 220px;
+  max-height: 48vh;
+  resize: vertical;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  outline: none;
+  padding: 12px;
+}
+
+.ai-progress-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 74;
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  pointer-events: none;
+  padding: 14vh 20px 20px;
+}
+
+.ai-progress-card {
+  display: flex;
+  width: min(420px, 100%);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 18px 48px var(--shadow-strong);
+  color: var(--text);
+  padding: 14px 16px;
+  animation: glyphary-pop-in var(--motion-duration-fast) var(--motion-ease);
+}
+
+.ai-progress-card h2 {
+  margin: 0;
+  color: var(--heading);
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
+.ai-progress-card p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.ai-progress-spinner {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: glyphary-spin 0.85s linear infinite;
+}
+
 .command-palette-screen {
   position: fixed;
   inset: 0;
@@ -3460,6 +3633,34 @@ body.workspace-resizing * {
   background: var(--surface);
   box-shadow: 0 22px 60px var(--shadow-strong);
   animation: glyphary-pop-in var(--motion-duration-base) var(--motion-ease);
+}
+
+.command-palette-scopebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-muted);
+  color: var(--muted);
+  padding: 8px 10px;
+}
+
+.command-palette-scopebar button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--heading);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 900;
+  padding: 5px 8px;
+}
+
+.command-palette-scopebar span {
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .command-palette-card input {
@@ -4212,6 +4413,12 @@ body.workspace-resizing * {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes glyphary-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
