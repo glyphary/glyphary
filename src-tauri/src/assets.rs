@@ -3,13 +3,14 @@
 //! Responsibilities:
 //! - Allow the current vault asset directory through Tauri's asset protocol.
 //! - Persist pasted or dropped binary assets into the configured vault folder.
+//! - Import approved remote images into the same vault image storage path.
 //!
 //! Contracts:
 //! - Asset paths must remain vault-relative and validated through `paths`.
 //! - Saved assets must never overwrite an existing file; collision suffixes are
 //!   part of the markdown-visible filename.
 //! - This module stores bytes only. Markdown insertion remains a frontend
-//!   concern because it depends on the active editor selection.
+//!   concern because it depends on the active editor selection and review step.
 use super::*;
 
 #[tauri::command]
@@ -29,6 +30,15 @@ pub(crate) fn allow_vault_assets(
 }
 #[tauri::command]
 pub(crate) fn save_vault_asset(
+    root: String,
+    asset_directory: String,
+    file_name: String,
+    bytes: Vec<u8>,
+) -> Result<SavedAsset, String> {
+    save_vault_asset_bytes(root, asset_directory, file_name, bytes)
+}
+
+fn save_vault_asset_bytes(
     root: String,
     asset_directory: String,
     file_name: String,
@@ -62,4 +72,54 @@ pub(crate) fn save_vault_asset(
         file_name: stored_name,
         relative_path: relative_string(&root, &path)?,
     })
+}
+
+#[tauri::command]
+pub(crate) async fn import_remote_vault_image_asset(
+    root: String,
+    asset_directory: String,
+    file_name: String,
+    url: String,
+) -> Result<SavedAsset, String> {
+    let parsed = reqwest::Url::parse(url.trim())
+        .map_err(|_| "Remote image URL must be valid".to_string())?;
+
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err("Remote image URL must use http or https".into());
+    }
+
+    let response = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|err| format!("Could not create remote image client: {err}"))?
+        .get(parsed)
+        .send()
+        .await
+        .map_err(|err| format!("Could not fetch remote image: {err}"))?;
+    let status = response.status();
+
+    if !status.is_success() {
+        return Err(format!("Remote image server returned {status}"));
+    }
+
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+
+    if !content_type.starts_with("image/") {
+        return Err("Remote URL did not return an image".into());
+    }
+
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|err| format!("Could not read remote image: {err}"))?;
+
+    if bytes.len() > MAX_ASSET_BYTES {
+        return Err("Remote image is larger than 50 MB".into());
+    }
+
+    save_vault_asset_bytes(root, asset_directory, file_name, bytes.to_vec())
 }

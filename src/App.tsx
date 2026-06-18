@@ -156,6 +156,8 @@ import type {
   ActiveFile,
   AiConnectionTestResponse,
   AiModelListResponse,
+  AiPageBuilderAssetRequest,
+  AiPageBuilderResponse,
   AiSettings,
   AiTransformResponse,
   AppearanceMode,
@@ -773,6 +775,13 @@ type AiReviewState = {
   output: string;
   applyMode: "replace-selection" | "insert-below-selection" | "insert-at-cursor";
 };
+
+type AiPageBuilderAssetReviewState = {
+  markdown: string;
+  assets: AiPageBuilderAssetRequest[];
+};
+
+const aiPageBuilderMarkdownContextLimit = 12000;
 
 const ExcalidrawCanvas = lazy(async () => {
   const module = await import("@excalidraw/excalidraw");
@@ -4268,6 +4277,11 @@ function App() {
   const [richLinkUrlDraft, setRichLinkUrlDraft] = useState("");
   const [richLinkSubmitting, setRichLinkSubmitting] = useState(false);
   const [aiReview, setAiReview] = useState<AiReviewState | null>(null);
+  const [aiPageBuilderOpen, setAiPageBuilderOpen] = useState(false);
+  const [aiPageBuilderPrompt, setAiPageBuilderPrompt] = useState("");
+  const [aiPageBuilderAssetReview, setAiPageBuilderAssetReview] =
+    useState<AiPageBuilderAssetReviewState | null>(null);
+  const [aiPageBuilderImportingAssets, setAiPageBuilderImportingAssets] = useState(false);
   const [excalidrawCreateDialogOpen, setExcalidrawCreateDialogOpen] = useState(false);
   const [excalidrawCreateNameDraft, setExcalidrawCreateNameDraft] = useState("Drawing");
   const [excalidrawCreateSubmitting, setExcalidrawCreateSubmitting] = useState(false);
@@ -6758,6 +6772,41 @@ function App() {
   }, [aiReview]);
 
   useEffect(() => {
+    if (!aiPageBuilderOpen) {
+      return;
+    }
+
+    const closeAiPageBuilderOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setAiPageBuilderOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", closeAiPageBuilderOnEscape);
+
+    return () => window.removeEventListener("keydown", closeAiPageBuilderOnEscape);
+  }, [aiPageBuilderOpen]);
+
+  useEffect(() => {
+    if (!aiPageBuilderAssetReview) {
+      return;
+    }
+
+    const closeAiPageBuilderAssetReviewOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setAiPageBuilderAssetReview(null);
+      }
+    };
+
+    window.addEventListener("keydown", closeAiPageBuilderAssetReviewOnEscape);
+
+    return () =>
+      window.removeEventListener("keydown", closeAiPageBuilderAssetReviewOnEscape);
+  }, [aiPageBuilderAssetReview]);
+
+  useEffect(() => {
     if (!commandPaletteOpen) {
       return;
     }
@@ -7836,24 +7885,24 @@ function App() {
     applyMode: AiReviewState["applyMode"],
   ) {
     if (!editor) {
-      return;
+      return false;
     }
 
     if (!vaultRoot) {
       setStatus("Open a vault before running AI commands");
-      return;
+      return false;
     }
 
     if (!input) {
       setStatus("Provide text before running this AI command");
-      return;
+      return false;
     }
 
     const settings = savedAiSettings();
 
     if (!settings.enabled) {
       setStatus("Enable AI commands in Settings before using this command");
-      return;
+      return false;
     }
 
     try {
@@ -7870,12 +7919,14 @@ function App() {
 
       setAiReview({
         title,
-        output: response.output,
+        output: normalizeAiMarkdownForApply(response.output),
         applyMode,
       });
       setStatus(`Review ${title} result`);
+      return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+      return false;
     } finally {
       setAiSubmitting(false);
       setAiSubmittingTitle("");
@@ -7923,12 +7974,328 @@ function App() {
     );
   }
 
+  function stripJsonCodeFence(value: string) {
+    const trimmed = value.trim();
+    const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+
+    return fenced ? fenced[1].trim() : trimmed;
+  }
+
+  function parseAiPageBuilderResponse(output: string): AiPageBuilderResponse {
+    try {
+      const parsed = JSON.parse(stripJsonCodeFence(output)) as Partial<AiPageBuilderResponse>;
+      const markdown = typeof parsed.markdown === "string" ? parsed.markdown.trim() : "";
+      const assets = Array.isArray(parsed.assets)
+        ? parsed.assets
+            .map((asset, index) => ({
+              id:
+                typeof asset?.id === "string" && asset.id.trim()
+                  ? asset.id.trim()
+                  : `asset-${index + 1}`,
+              label:
+                typeof asset?.label === "string" && asset.label.trim()
+                  ? asset.label.trim()
+                  : `Asset ${index + 1}`,
+              suggestedName:
+                typeof asset?.suggestedName === "string" && asset.suggestedName.trim()
+                  ? asset.suggestedName.trim()
+                  : `AI asset ${index + 1}.png`,
+              url: typeof asset?.url === "string" && asset.url.trim() ? asset.url.trim() : null,
+              domain:
+                typeof asset?.domain === "string" && asset.domain.trim()
+                  ? asset.domain.trim()
+                  : null,
+            }))
+            .filter((asset) => asset.id && asset.suggestedName)
+        : [];
+
+      if (markdown) {
+        return { markdown, assets };
+      }
+    } catch {
+      // Older or noncompliant providers may ignore the JSON format request.
+      // Treat their response as plain Markdown so the builder still remains usable.
+    }
+
+    return {
+      markdown: output.trim(),
+      assets: [],
+    };
+  }
+
+  function pageBuilderAssetDomain(asset: AiPageBuilderAssetRequest) {
+    const value = asset.domain?.trim();
+
+    if (!value) {
+      return "";
+    }
+
+    try {
+      return new URL(value.includes("://") ? value : `https://${value}`).hostname;
+    } catch {
+      return value.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim();
+    }
+  }
+
+  function pageBuilderAssetCandidateUrls(asset: AiPageBuilderAssetRequest) {
+    const urls = new Set<string>();
+
+    if (asset.url?.trim()) {
+      urls.add(asset.url.trim());
+    }
+
+    const domain = pageBuilderAssetDomain(asset);
+
+    if (domain) {
+      urls.add(`https://logo.clearbit.com/${encodeURIComponent(domain)}`);
+      urls.add(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=256`);
+    }
+
+    return Array.from(urls);
+  }
+
+  function replaceAiPageBuilderAssetPlaceholders(
+    markdown: string,
+    replacements: Map<string, SavedAsset>,
+  ) {
+    const replacedMarkdown = Array.from(replacements.entries()).reduce(
+      (nextMarkdown, [id, saved]) => {
+        const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const vaultImageMarkdown = `![[${saved.fileName}]]`;
+
+        // Models often put asset placeholders in normal image markdown, e.g.
+        // `![Logo]({{asset:logo}})`. A vault image token is already complete
+        // image syntax, so replace the whole wrapper instead of creating the
+        // invalid nested form `![Logo](![[logo.png]])`.
+        return nextMarkdown
+          .replace(
+            new RegExp(
+              `!\\[[^\\]\\n]*\\]\\(\\s*\\{\\{asset:${escapedId}\\}\\}\\s*\\)`,
+              "g",
+            ),
+            vaultImageMarkdown,
+          )
+          .replace(new RegExp(`\\{\\{asset:${escapedId}\\}\\}`, "g"), vaultImageMarkdown);
+      },
+      markdown,
+    );
+
+    return normalizeAiMarkdownForApply(replacedMarkdown);
+  }
+
+  function normalizeMalformedVaultImageMarkdown(markdown: string) {
+    return markdown.replace(
+      /!\[[^\]\n]*\]\(\s*([^)]+?)\s*\)/g,
+      (match, rawHref: string) => {
+        let decodedHref = rawHref.trim();
+
+        try {
+          decodedHref = decodeURIComponent(decodedHref);
+        } catch {
+          return match;
+        }
+
+        const nestedVaultImage = decodedHref.match(/^!\[\[([^\]\n]+)\]\]$/);
+
+        if (!nestedVaultImage) {
+          return match;
+        }
+
+        const vaultTarget = cleanVaultAssetReference(nestedVaultImage[1]);
+
+        return vaultTarget ? `![[${vaultTarget}]]` : match;
+      },
+    );
+  }
+
+  function normalizeAiMarkdownForApply(markdown: string) {
+    // Keep malformed AI-generated vault image markdown out of saved notes.
+    // `![Alt](![[image.png]])` may be easy for a model to produce, but the
+    // portable vault-image form is the standalone Obsidian/Glyphary token.
+    return normalizeMalformedVaultImageMarkdown(markdown);
+  }
+
+  function openAiPageBuilder() {
+    if (!editor) {
+      return;
+    }
+
+    if (!vaultRoot) {
+      setStatus("Open a vault before using AI Page Builder");
+      return;
+    }
+
+    if (!savedAiSettings().enabled) {
+      setStatus("Enable AI commands in Settings before using AI Page Builder");
+      return;
+    }
+
+    setAiPageBuilderPrompt("");
+    setAiPageBuilderOpen(true);
+  }
+
+  function aiPageBuilderContext(request: string) {
+    const selectedText = currentSelectionText().trim();
+    const markdownExcerpt =
+      markdown.length > aiPageBuilderMarkdownContextLimit
+        ? `${markdown.slice(0, aiPageBuilderMarkdownContextLimit)}\n\n[...note truncated...]`
+        : markdown;
+
+    // The builder prompt is intentionally explicit about Glyphary's block
+    // dialect. That makes generated sections usable in the editor instead of
+    // generic Markdown that loses callouts, columns, galleries, or HTML blocks.
+    return [
+      "User request:",
+      request.trim(),
+      "",
+      "Current note:",
+      `Title: ${pageNameRef.current || "Untitled note"}`,
+      `Vault-relative file: ${activeFileRef.current?.relativePath ?? "(unsaved note)"}`,
+      "",
+      "Frontmatter:",
+      metaHeaderRef.current.trim() || "(none)",
+      "",
+      "Selected text:",
+      selectedText || "(none)",
+      "",
+      "Cursor context:",
+      currentCursorContext(),
+      "",
+      "Current Markdown excerpt:",
+      markdownExcerpt.trim() || "(empty)",
+    ].join("\n");
+  }
+
+  async function runAiPageBuilder() {
+    const request = aiPageBuilderPrompt.trim();
+
+    if (!request) {
+      setStatus("Describe what AI Page Builder should create");
+      return;
+    }
+
+    const settings = savedAiSettings();
+
+    if (!settings.enabled) {
+      setStatus("Enable AI commands in Settings before using AI Page Builder");
+      return;
+    }
+
+    try {
+      setAiSubmitting(true);
+      setAiSubmittingTitle("AI: Page Builder");
+      setStatus("Running AI: Page Builder");
+      const response = await invoke<AiTransformResponse>("run_ai_transform", {
+        request: {
+          settings,
+          instruction: [
+            "Build a useful Glyphary page section from the user's request and page context.",
+            "Return only valid JSON with this shape: {\"markdown\":\"...\",\"assets\":[{\"id\":\"stable-placeholder-id\",\"label\":\"Human label\",\"suggestedName\":\"file-name.png\",\"url\":\"https://... optional direct image URL\",\"domain\":\"example.com optional brand domain\"}]}",
+            "In markdown, reference every generated asset with a placeholder exactly like {{asset:stable-placeholder-id}}. Glyphary will replace those placeholders after importing approved assets.",
+            "Prefer Glyphary-native Markdown blocks when they fit: ::: callout, ::: columns, ::: gallery, ::: collapse, ```toc, Markdown tables, task lists, wikilinks like [[Page Name]], and vault images like ![[image.png]].",
+            "Use raw HTML only when Markdown or Glyphary block syntax cannot express the requested layout.",
+            "When using raw HTML, do not include scripts, iframes, event handlers, external stylesheets, data URLs, or remote executable content.",
+            "If the user asks for logos or remote images, add asset entries instead of inventing local file paths. Prefer a direct image URL when known; otherwise include the brand domain.",
+            "Do not wrap the JSON in a code fence.",
+            "If the request is underspecified, choose a practical structure and keep the result editable.",
+          ].join("\n"),
+          input: aiPageBuilderContext(request),
+        },
+      });
+      const builderResponse = parseAiPageBuilderResponse(response.output);
+
+      if (builderResponse.assets.length > 0) {
+        setAiPageBuilderAssetReview(builderResponse);
+        setStatus(`Review ${builderResponse.assets.length} requested asset import`);
+      } else {
+        setAiReview({
+          title: "AI: Page Builder",
+          output: normalizeAiMarkdownForApply(builderResponse.markdown),
+          applyMode: "insert-at-cursor",
+        });
+        setStatus("Review AI: Page Builder result");
+      }
+
+      setAiPageBuilderOpen(false);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAiSubmitting(false);
+      setAiSubmittingTitle("");
+    }
+  }
+
+  async function importAiPageBuilderAssets() {
+    if (!vaultRootRef.current || !aiPageBuilderAssetReview) {
+      return;
+    }
+
+    try {
+      setAiPageBuilderImportingAssets(true);
+      setStatus("Importing AI Page Builder assets");
+      const replacements = new Map<string, SavedAsset>();
+
+      for (const asset of aiPageBuilderAssetReview.assets) {
+        const candidateUrls = pageBuilderAssetCandidateUrls(asset);
+        let saved: SavedAsset | null = null;
+        let lastError = "No image URL or brand domain was provided";
+
+        // Brand logo resolution is intentionally best-effort and explicit:
+        // direct URLs win, domain logo services are fallbacks, and failures keep
+        // the placeholder out of the document instead of silently inserting a
+        // broken local image reference.
+        for (const url of candidateUrls) {
+          try {
+            saved = await invoke<SavedAsset>("import_remote_vault_image_asset", {
+              root: vaultRootRef.current,
+              assetDirectory: defaultVaultImageDirectory,
+              fileName: asset.suggestedName,
+              url,
+            });
+            break;
+          } catch (error) {
+            lastError = error instanceof Error ? error.message : String(error);
+          }
+        }
+
+        if (!saved) {
+          throw new Error(`Could not import ${asset.label}: ${lastError}`);
+        }
+
+        replacements.set(asset.id, saved);
+      }
+
+      setAiReview({
+        title: "AI: Page Builder",
+        output: replaceAiPageBuilderAssetPlaceholders(
+          aiPageBuilderAssetReview.markdown,
+          replacements,
+        ),
+        applyMode: "insert-at-cursor",
+      });
+      setAiPageBuilderAssetReview(null);
+      setStatus(
+        `Imported ${replacements.size} AI Page Builder asset${
+          replacements.size === 1 ? "" : "s"
+        }`,
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAiPageBuilderImportingAssets(false);
+    }
+  }
+
   function replaceSelectionWithAiOutput(output: string) {
     if (!editor) {
       return;
     }
 
-    editor.chain().focus().insertContent(output, { contentType: "markdown" }).run();
+    editor
+      .chain()
+      .focus()
+      .insertContent(normalizeAiMarkdownForApply(output), { contentType: "markdown" })
+      .run();
     setAiReview(null);
     setStatus("Applied AI result");
   }
@@ -7942,7 +8309,7 @@ function App() {
       .chain()
       .focus()
       .setTextSelection(editor.state.selection.to)
-      .insertContent(`\n\n${output}`, { contentType: "markdown" })
+      .insertContent(`\n\n${normalizeAiMarkdownForApply(output)}`, { contentType: "markdown" })
       .run();
     setAiReview(null);
     setStatus("Inserted AI result");
@@ -7953,7 +8320,11 @@ function App() {
       return;
     }
 
-    editor.chain().focus().insertContent(output, { contentType: "markdown" }).run();
+    editor
+      .chain()
+      .focus()
+      .insertContent(normalizeAiMarkdownForApply(output), { contentType: "markdown" })
+      .run();
     setAiReview(null);
     setStatus("Inserted AI result");
   }
@@ -8324,6 +8695,12 @@ function App() {
   // explicitly saved for this vault.
   const aiCommandPaletteCommands: CommandPaletteCommand[] = savedAiSettings().enabled
     ? [
+        {
+          id: "ai-page-builder",
+          title: "AI: Page Builder",
+          description: "Build a note section from a prompt and current context",
+          run: openAiPageBuilder,
+        },
         {
           id: "ai-improve-writing-selection",
           title: "AI: Improve writing",
@@ -11156,6 +11533,126 @@ function App() {
           </figure>
         </div>
       ) : null}
+      {aiPageBuilderOpen ? (
+        <div
+          className="ai-builder-screen"
+          role="presentation"
+          onMouseDown={() => setAiPageBuilderOpen(false)}
+        >
+          <section
+            className="ai-builder-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="AI Page Builder"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <h2>AI Page Builder</h2>
+                <span>Describe the section to generate for this note.</span>
+              </div>
+              <button
+                className="inline-action"
+                type="button"
+                onClick={() => setAiPageBuilderOpen(false)}
+              >
+                Cancel
+              </button>
+            </header>
+            <textarea
+              autoFocus
+              value={aiPageBuilderPrompt}
+              placeholder="Build a two-column comparison with a warning callout..."
+              onChange={(event) => {
+                const { value } = event.currentTarget;
+
+                setAiPageBuilderPrompt(value);
+              }}
+            />
+            <footer>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={() => setAiPageBuilderOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={!aiPageBuilderPrompt.trim() || aiSubmitting}
+                onClick={() => void runAiPageBuilder()}
+              >
+                Build
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
+      {aiPageBuilderAssetReview ? (
+        <div
+          className="ai-builder-asset-screen"
+          role="presentation"
+          onMouseDown={() => setAiPageBuilderAssetReview(null)}
+        >
+          <section
+            className="ai-builder-asset-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Review AI Page Builder assets"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <h2>Review Assets</h2>
+                <span>Remote images will be saved into {defaultVaultImageDirectory}.</span>
+              </div>
+              <button
+                className="inline-action"
+                type="button"
+                onClick={() => setAiPageBuilderAssetReview(null)}
+              >
+                Cancel
+              </button>
+            </header>
+            <div className="ai-builder-asset-list">
+              {aiPageBuilderAssetReview.assets.map((asset) => {
+                const candidateUrls = pageBuilderAssetCandidateUrls(asset);
+
+                return (
+                  <article className="ai-builder-asset-item" key={asset.id}>
+                    <div>
+                      <strong>{asset.label}</strong>
+                      <span>{asset.suggestedName}</span>
+                    </div>
+                    <small>
+                      {candidateUrls[0] ??
+                        (asset.domain ? `domain: ${asset.domain}` : "No source provided")}
+                    </small>
+                  </article>
+                );
+              })}
+            </div>
+            <footer>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={() => setAiPageBuilderAssetReview(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={aiPageBuilderImportingAssets}
+                onClick={() => void importAiPageBuilderAssets()}
+              >
+                {aiPageBuilderImportingAssets ? "Importing..." : "Import Assets"}
+              </button>
+            </footer>
+          </section>
+        </div>
+      ) : null}
       {aiReview ? (
         <div
           className="ai-review-screen"
@@ -11194,35 +11691,28 @@ function App() {
               <button
                 className="secondary-action"
                 type="button"
-                onClick={() =>
-                  aiReview.applyMode === "insert-at-cursor"
-                    ? insertAiOutputAtCursor(aiReview.output)
-                    : insertAiOutputBelowSelection(aiReview.output)
-                }
+                onClick={() => insertAiOutputBelowSelection(aiReview.output)}
               >
-                {aiReview.applyMode === "insert-at-cursor" ? "Insert at Cursor" : "Insert Below"}
+                Insert Below
               </button>
-              <button
-                className="secondary-action"
-                type="button"
-                onClick={() => {
-                  if (aiReview.applyMode === "replace-selection") {
-                    replaceSelectionWithAiOutput(aiReview.output);
-                    return;
-                  }
-
-                  if (aiReview.applyMode === "insert-at-cursor") {
-                    insertAiOutputAtCursor(aiReview.output);
-                    return;
-                  }
-
-                  insertAiOutputBelowSelection(aiReview.output);
-                }}
-              >
-                {aiReview.applyMode === "replace-selection"
-                  ? "Replace Selection"
-                  : "Insert Result"}
-              </button>
+              {aiReview.applyMode === "replace-selection" ? (
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={() => replaceSelectionWithAiOutput(aiReview.output)}
+                >
+                  Replace Selection
+                </button>
+              ) : null}
+              {aiReview.applyMode === "insert-at-cursor" ? (
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={() => insertAiOutputAtCursor(aiReview.output)}
+                >
+                  Insert at Cursor
+                </button>
+              ) : null}
             </footer>
           </section>
         </div>

@@ -74,6 +74,19 @@ export type AiTransformResponse = {
   output: string;
 };
 
+export type AiPageBuilderAssetRequest = {
+  id: string;
+  label: string;
+  suggestedName: string;
+  url?: string | null;
+  domain?: string | null;
+};
+
+export type AiPageBuilderResponse = {
+  markdown: string;
+  assets: AiPageBuilderAssetRequest[];
+};
+
 export type AiModelListResponse = {
   models: string[];
 };

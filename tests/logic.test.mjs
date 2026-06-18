@@ -153,6 +153,8 @@ test("local vault image references are accepted while URLs and path escapes are 
     cleanVaultAssetReference("Pasted%20image%2020220413143858.png"),
     "Pasted image 20220413143858.png",
   );
+  assert.equal(cleanVaultAssetReference("![[vllm-logo.png]]"), null);
+  assert.equal(cleanVaultAssetReference("!%5B%5Bvllm-logo.png%5D%5D"), null);
   assert.equal(cleanVaultAssetReference("https://example.com/image.png"), null);
   assert.equal(cleanVaultAssetReference("https%3A%2F%2Fexample.com%2Fimage.png"), null);
   assert.equal(cleanVaultAssetReference("../image.png"), null);
@@ -1557,6 +1559,8 @@ test("AI commands use vault settings and review output before editing", () => {
   const modelsBackend = readFileSync("src-tauri/src/models.rs", "utf8");
 
   assert.match(appTypes, /export type AiSettings/);
+  assert.match(appTypes, /export type AiPageBuilderAssetRequest/);
+  assert.match(appTypes, /export type AiPageBuilderResponse/);
   assert.match(appTypes, /export type AiModelListResponse/);
   assert.match(appTypes, /export type AiConnectionTestResponse/);
   assert.match(appTypes, /ai\?: AiSettings \| null/);
@@ -1587,6 +1591,10 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(app, /const \[aiTestStatus, setAiTestStatus\]/);
   assert.match(app, /const \[aiSubmitting, setAiSubmitting\]/);
   assert.match(app, /const \[aiSubmittingTitle, setAiSubmittingTitle\]/);
+  assert.match(app, /const \[aiPageBuilderOpen, setAiPageBuilderOpen\]/);
+  assert.match(app, /const \[aiPageBuilderPrompt, setAiPageBuilderPrompt\]/);
+  assert.match(app, /const \[aiPageBuilderAssetReview, setAiPageBuilderAssetReview\]/);
+  assert.match(app, /const \[aiPageBuilderImportingAssets, setAiPageBuilderImportingAssets\]/);
   assert.match(app, /setAiTestStatus\("success"\)/);
   assert.match(app, /setAiTestStatus\("error"\)/);
   assert.match(app, /className=\{`ai-test-indicator/);
@@ -1597,6 +1605,8 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(app, /<select[\s\S]*value=\{aiDraft\.model\}/);
   assert.doesNotMatch(app, /id: "ai-reword-selection"/);
   assert.doesNotMatch(app, /AI: Reword selection/);
+  assert.match(app, /id: "ai-page-builder"/);
+  assert.match(app, /AI: Page Builder/);
   assert.match(app, /id: "ai-improve-writing-selection"/);
   assert.match(app, /AI: Improve writing/);
   assert.match(app, /id: "ai-fix-spelling-grammar-selection"/);
@@ -1622,6 +1632,29 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(app, /Enable AI commands in Settings before using this command/);
   assert.match(app, /const settings = savedAiSettings\(\)/);
   assert.match(app, /function currentCursorContext/);
+  assert.match(app, /function openAiPageBuilder/);
+  assert.match(app, /function stripJsonCodeFence/);
+  assert.match(app, /function parseAiPageBuilderResponse/);
+  assert.match(app, /function pageBuilderAssetCandidateUrls/);
+  assert.match(app, /function replaceAiPageBuilderAssetPlaceholders/);
+  assert.match(app, /function normalizeMalformedVaultImageMarkdown/);
+  assert.match(app, /function normalizeAiMarkdownForApply/);
+  assert.match(app, /invalid nested form `!\[Logo\]\(!\[\[logo\.png\]\]\)`/);
+  assert.match(app, /const vaultImageMarkdown = `!\[\[\$\{saved\.fileName\}\]\]`/);
+  assert.match(app, /normalizeAiMarkdownForApply\(response\.output\)/);
+  assert.match(app, /normalizeAiMarkdownForApply\(builderResponse\.markdown\)/);
+  assert.match(app, /async function importAiPageBuilderAssets/);
+  assert.match(app, /function aiPageBuilderContext/);
+  assert.match(app, /async function runAiPageBuilder/);
+  assert.match(app, /aiPageBuilderMarkdownContextLimit/);
+  assert.match(app, /Return only valid JSON with this shape/);
+  assert.match(app, /\{\{asset:stable-placeholder-id\}\}/);
+  assert.match(app, /logo\.clearbit\.com/);
+  assert.match(app, /google\.com\/s2\/favicons/);
+  assert.match(app, /Glyphary-native Markdown blocks/);
+  assert.match(app, /::: callout/);
+  assert.match(app, /::: columns/);
+  assert.match(app, /Use raw HTML only when Markdown or Glyphary block syntax cannot express/);
   assert.match(app, /async function runAiTextCommand/);
   assert.match(app, /runAiSelectionCommand/);
   assert.match(app, /runAiSelectionOrDocumentCommand/);
@@ -1631,12 +1664,24 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(app, /invoke<AiTransformResponse>\("run_ai_transform"/);
   assert.match(app, /className="ai-progress-screen"/);
   assert.match(app, /Waiting for AI response/);
+  assert.match(app, /className="ai-builder-screen"/);
+  assert.match(app, /className="ai-builder-card"/);
+  assert.match(app, /className="ai-builder-asset-screen"/);
+  assert.match(app, /className="ai-builder-asset-card"/);
+  assert.match(app, /className="ai-builder-asset-list"/);
+  assert.match(app, /aria-label="AI Page Builder"/);
+  assert.match(app, /aria-label="Review AI Page Builder assets"/);
+  assert.match(app, /closeAiPageBuilderOnEscape/);
+  assert.match(app, /closeAiPageBuilderAssetReviewOnEscape/);
+  assert.match(app, /invoke<SavedAsset>\("import_remote_vault_image_asset"/);
+  assert.match(app, /setAiPageBuilderOpen\(false\)/);
   assert.match(app, /className="ai-review-screen"/);
   assert.match(app, /closeAiReviewOnEscape/);
   assert.match(app, /window\.addEventListener\("keydown", closeAiReviewOnEscape\)/);
   assert.match(app, /Replace Selection/);
   assert.match(app, /Insert Below/);
   assert.match(app, /Insert at Cursor/);
+  assert.doesNotMatch(app, /Insert Result/);
   const aiReviewStart = app.indexOf('className="ai-review-card"');
   const aiReviewEnd = app.indexOf("{aiSubmitting ? (", aiReviewStart);
   const aiReviewDialog = app.slice(aiReviewStart, aiReviewEnd);
@@ -1644,6 +1689,9 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.ok(aiReviewStart > -1);
   assert.ok(aiReviewEnd > aiReviewStart);
   assert.doesNotMatch(aiReviewDialog, /className="primary-action"/);
+  assert.match(css, /\.ai-builder-card/);
+  assert.match(css, /\.ai-builder-asset-card/);
+  assert.match(css, /\.ai-builder-asset-list/);
   assert.match(css, /\.ai-review-card/);
   assert.match(css, /\.ai-progress-card/);
   assert.match(css, /\.ai-progress-spinner/);
@@ -1658,7 +1706,15 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(aiBackend, /ai_endpoint_url/);
   assert.match(aiBackend, /pub\(crate\) async fn list_ai_models/);
   assert.match(aiBackend, /pub\(crate\) async fn test_ai_connection/);
+  assert.match(aiBackend, /requested content/);
   assert.match(aiBackend, /\.get\(ai_endpoint_url\(&settings\.base_url, "models"\)\?\)/);
+  assert.match(backend, /import_remote_vault_image_asset,/);
+  const assetsBackend = readFileSync("src-tauri/src/assets.rs", "utf8");
+
+  assert.match(assetsBackend, /pub\(crate\) async fn import_remote_vault_image_asset/);
+  assert.match(assetsBackend, /Remote image URL must use http or https/);
+  assert.match(assetsBackend, /CONTENT_TYPE/);
+  assert.match(assetsBackend, /content_type\.starts_with\("image\/"\)/);
   const testConnectionStart = aiBackend.indexOf("pub(crate) async fn test_ai_connection");
   const testConnectionEnd = aiBackend.indexOf("#[tauri::command]", testConnectionStart + 1);
   const testConnectionBody = aiBackend.slice(testConnectionStart, testConnectionEnd);

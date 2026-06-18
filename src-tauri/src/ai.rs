@@ -178,7 +178,7 @@ pub(crate) async fn run_ai_transform(
         "messages": [
             {
                 "role": "system",
-                "content": "You are an editor inside Glyphary. Return only the requested Markdown text, without commentary or code fences unless the user asks for code."
+                "content": "You are an editor inside Glyphary. Return only the requested content, without commentary or code fences unless the user asks for code."
             },
             {
                 "role": "user",

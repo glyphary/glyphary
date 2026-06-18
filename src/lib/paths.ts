@@ -73,6 +73,10 @@ export function cleanVaultAssetReference(value: string) {
     return null;
   }
 
+  if (/^!\[\[[^\]\n]+\]\]$/.test(decoded)) {
+    return null;
+  }
+
   const parts = decoded.split(/[\\/]+/).filter(Boolean);
 
   if (parts.length === 0 || parts.some((part) => part === "." || part === "..")) {

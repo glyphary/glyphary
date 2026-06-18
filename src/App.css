@@ -3649,7 +3649,9 @@ body.workspace-resizing * {
   justify-content: flex-end;
 }
 
-.ai-review-screen {
+.ai-review-screen,
+.ai-builder-screen,
+.ai-builder-asset-screen {
   position: fixed;
   inset: 0;
   z-index: 73;
@@ -3661,7 +3663,9 @@ body.workspace-resizing * {
   animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
 }
 
-.ai-review-card {
+.ai-review-card,
+.ai-builder-card,
+.ai-builder-asset-card {
   display: grid;
   width: min(720px, 100%);
   max-height: min(72vh, 680px);
@@ -3674,30 +3678,41 @@ body.workspace-resizing * {
 }
 
 .ai-review-card header,
-.ai-review-card footer {
+.ai-review-card footer,
+.ai-builder-card header,
+.ai-builder-card footer,
+.ai-builder-asset-card header,
+.ai-builder-asset-card footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
-.ai-review-card footer {
+.ai-review-card footer,
+.ai-builder-card footer,
+.ai-builder-asset-card footer {
   justify-content: flex-end;
 }
 
-.ai-review-card h2 {
+.ai-review-card h2,
+.ai-builder-card h2,
+.ai-builder-asset-card h2 {
   color: var(--heading);
   font-size: 1rem;
   line-height: 1.2;
 }
 
-.ai-review-card header span {
+.ai-review-card header span,
+.ai-builder-card header span,
+.ai-builder-asset-card header span {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 700;
 }
 
-.ai-review-card textarea {
+.ai-review-card textarea,
+.ai-builder-card textarea {
   min-height: 220px;
   max-height: 48vh;
   resize: vertical;
@@ -3710,6 +3725,56 @@ body.workspace-resizing * {
   line-height: 1.5;
   outline: none;
   padding: 12px;
+}
+
+.ai-builder-card textarea {
+  min-height: 260px;
+}
+
+.ai-builder-asset-list {
+  display: grid;
+  max-height: min(42vh, 360px);
+  gap: 8px;
+  overflow: auto;
+}
+
+.ai-builder-asset-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+.ai-builder-asset-item div {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-builder-asset-item strong,
+.ai-builder-asset-item span,
+.ai-builder-asset-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-builder-asset-item strong {
+  color: var(--heading);
+  font-size: 0.88rem;
+}
+
+.ai-builder-asset-item span,
+.ai-builder-asset-item small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
 }
 
 .ai-progress-screen {

@@ -261,6 +261,7 @@ pub fn run() {
             allow_vault_assets,
             set_window_glass_effect,
             save_vault_asset,
+            import_remote_vault_image_asset,
             search_vault,
             fetch_rich_link_metadata,
             list_ai_models,
