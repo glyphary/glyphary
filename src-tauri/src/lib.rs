@@ -31,6 +31,8 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 #[macro_use]
 mod ai;
 #[macro_use]
+mod ai_history;
+#[macro_use]
 mod assets;
 mod defaults;
 #[macro_use]
@@ -56,6 +58,7 @@ mod vault;
 mod windowing;
 
 use ai::*;
+use ai_history::*;
 use assets::*;
 use calendar::*;
 use defaults::*;
@@ -266,7 +269,9 @@ pub fn run() {
             fetch_rich_link_metadata,
             list_ai_models,
             test_ai_connection,
-            run_ai_transform
+            run_ai_transform,
+            read_ai_builder_history,
+            write_ai_builder_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

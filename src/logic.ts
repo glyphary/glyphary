@@ -11,6 +11,7 @@
  */
 
 export * from "./lib/assets.js";
+export * from "./lib/ai-builder.js";
 export * from "./lib/app-types.js";
 export * from "./lib/calendar.js";
 export * from "./lib/dates.js";

@@ -25,6 +25,7 @@ import {
   emptyColumnsMarkdown,
   emptyHtmlBlockMarkdown,
   emptyTableMarkdown,
+  aiBuilderVaultQueries,
   excalidrawFileNameForTitle,
   expandDateFormat,
   expandDateTemplate,
@@ -80,6 +81,16 @@ test("date templates expand centrally for tidbit paths", () => {
     "__transit__/Objects/tidbit-2026-06-15-09-04-07.md",
   );
   assert.equal(defaultTidbitGlobalShortcut, "CommandOrControl+Shift+Space");
+});
+
+test("AI Builder extracts focused vault search terms from reference prompts", () => {
+  assert.deepEqual(
+    aiBuilderVaultQueries("Build a table with links to all the pages that reference opensips in this vault"),
+    ["opensips"],
+  );
+  assert.deepEqual(aiBuilderVaultQueries("Summarize all pages pertaining to opensips."), [
+    "opensips",
+  ]);
 });
 
 test("vault paths display relative to the vault root without markdown extensions", () => {
@@ -293,6 +304,7 @@ test("block-widget boundaries expose an editable insertion point", () => {
   assert.match(app, /"excalidrawEmbed"/);
   assert.match(app, /"gallery"/);
   assert.match(app, /function supportsBlockBoundaryInsert/);
+  assert.match(app, /isAiBuilderMarkerComment\(node\.attrs\.rawHtml\)/);
   assert.match(app, /function selectedTopLevelWidgetBlock/);
   assert.match(app, /selection instanceof NodeSelection && supportsBlockBoundaryInsert\(selection\.node\)/);
   assert.match(app, /selection\.\$from\.node\(1\)/);
@@ -445,6 +457,7 @@ test("html blocks are preserved as sanitized editable source blocks", () => {
   assert.match(app, /function sanitizeHtmlBlock/);
   assert.match(app, /blockedHtmlPreviewSelector/);
   assert.match(app, /safeHtmlAttributeValue/);
+  assert.match(app, /function isAiBuilderMarkerComment/);
   assert.match(app, /function HtmlBlockNodeView/);
   assert.match(emptyHtmlBlockMarkdown, /^<div>/);
   assert.match(app, /selected, updateAttributes/);
@@ -456,6 +469,7 @@ test("html blocks are preserved as sanitized editable source blocks", () => {
   assert.match(app, /dangerouslySetInnerHTML=\{\{ __html: sanitizeHtmlBlock\(rawHtml\) \}\}/);
   assert.match(app, /selected \? \(/);
   assert.match(app, /aria-label="HTML block source"/);
+  assert.match(app, /markdown-html-block-hidden/);
   assert.match(app, /ReactNodeViewRenderer\(HtmlBlockNodeView\)/);
   assert.match(app, /createHtmlBlockExtension\(\)/);
   assert.match(app, /function insertHtmlBlock\(\)/);
@@ -623,6 +637,7 @@ test("frontend pure logic is split into documented helper modules", () => {
   }
 
   assert.match(barrel, /Compatibility barrel for pure frontend logic/);
+  assert.match(barrel, /export \* from "\.\/lib\/ai-builder\.js"/);
   assert.match(barrel, /export \* from "\.\/lib\/markdown\.js"/);
   assert.match(barrel, /export \* from "\.\/lib\/tabs\.js"/);
   assert.doesNotMatch(barrel, /function splitMetaHeader/);
@@ -665,11 +680,38 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /Open A Vault/);
   assert.match(manualHtml, /File And Folder Actions/);
   assert.match(manualHtml, /Command Palette/);
+  assert.match(manualHtml, /AI Actions/);
+  assert.match(manualHtml, /OpenAI-compatible backend/);
+  assert.match(manualHtml, /Refresh Models/);
+  assert.match(manualHtml, /Test API/);
+  assert.match(manualHtml, /Improve writing/);
+  assert.match(manualHtml, /Fix spelling and grammar/);
+  assert.match(manualHtml, /Replace Selection/);
+  assert.match(manualHtml, /Insert Below/);
+  assert.match(manualHtml, /AI Builder/);
+  assert.match(manualHtml, /\.\/assets\/screenshots\/ai-builder\.png/);
+  assert.match(manualHtml, /Summarize all pages pertaining to opensips/);
+  assert.match(manualHtml, /local bounded retrieval/);
+  assert.match(manualHtml, /does not send the whole vault/);
   assert.match(manualHtml, /Metadata And Frontmatter/);
   assert.match(manualHtml, /Markdown Features/);
   assert.match(manualHtml, /Excalidraw drawings/);
   assert.match(manualHtml, /Tidbits/);
   assert.match(manualHtml, /Global tidbit capture/);
+  assert.match(manualHtml, /Tasks scans visible Markdown files/);
+  assert.match(manualHtml, /same grep crates that power ripgrep-style matching/);
+  assert.match(manualHtml, /HTML blocks/);
+  assert.match(manualHtml, /renders a sanitized preview/);
+  assert.match(manualHtml, /AI Builder keeps a per-file conversation history/);
+  assert.match(manualHtml, /Generated images and assets/);
+  assert.match(manualHtml, /Double-click an image/);
+  assert.match(
+    manualHtml,
+    /asks for accessibility permission only when this\s+feature is enabled/,
+  );
+  assert.match(manualHtml, /Settings tabs/);
+  assert.match(manualHtml, /glass opacity/);
+  assert.match(manualHtml, /Optional editor treatments/);
   assert.match(manualHtml, /Theme Builder groups/);
   assert.match(manualHtml, /CSS snippets/);
   assert.match(manualHtml, /Minimal manifest/);
@@ -687,7 +729,7 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /_assets_\/drawings/);
   assert.match(manualHtml, /_assets_\/images/);
   assert.match(manualHtml, /_snippets_/);
-  assert.match(manualHtml, /not for rendering live embedded HTML inside the note/);
+  assert.doesNotMatch(manualHtml, /not for rendering live embedded HTML inside the note/);
   assert.doesNotMatch(manualHtml, /\.\.\/docs-site\/assets/);
   assert.match(manualTheming, /Glyphary Theming Reference/);
   assert.match(manualTheming, /Loading Snippets/);
@@ -1551,14 +1593,20 @@ test("quick command palette exposes initial editor commands", () => {
 test("AI commands use vault settings and review output before editing", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
+  const aiBuilderModule = readFileSync("src/lib/ai-builder.ts", "utf8");
   const settings = readFileSync("src/lib/settings.ts", "utf8");
   const defaults = readFileSync("src/lib/defaults.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
   const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
   const aiBackend = readFileSync("src-tauri/src/ai.rs", "utf8");
+  const aiHistoryBackend = readFileSync("src-tauri/src/ai_history.rs", "utf8");
   const modelsBackend = readFileSync("src-tauri/src/models.rs", "utf8");
 
   assert.match(appTypes, /export type AiSettings/);
+  assert.match(appTypes, /export type AiBuilderHistoryStore/);
+  assert.match(appTypes, /export type AiBuilderHistoryTurn/);
+  assert.match(appTypes, /superseded\?: boolean/);
+  assert.match(appTypes, /replacedByTurnId\?: string \| null/);
   assert.match(appTypes, /export type AiPageBuilderAssetRequest/);
   assert.match(appTypes, /export type AiPageBuilderResponse/);
   assert.match(appTypes, /export type AiModelListResponse/);
@@ -1595,6 +1643,7 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(app, /const \[aiPageBuilderPrompt, setAiPageBuilderPrompt\]/);
   assert.match(app, /const \[aiPageBuilderAssetReview, setAiPageBuilderAssetReview\]/);
   assert.match(app, /const \[aiPageBuilderImportingAssets, setAiPageBuilderImportingAssets\]/);
+  assert.match(app, /const \[aiBuilderHistory, setAiBuilderHistory\]/);
   assert.match(app, /setAiTestStatus\("success"\)/);
   assert.match(app, /setAiTestStatus\("error"\)/);
   assert.match(app, /className=\{`ai-test-indicator/);
@@ -1637,12 +1686,52 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(app, /function parseAiPageBuilderResponse/);
   assert.match(app, /function pageBuilderAssetCandidateUrls/);
   assert.match(app, /function replaceAiPageBuilderAssetPlaceholders/);
+  assert.match(app, /maxAiBuilderHistoryTurnsPerFile/);
+  assert.match(app, /maxAiBuilderPromptHistoryTurns/);
+  assert.match(aiBuilderModule, /maxAiBuilderVaultQueries/);
+  assert.match(aiBuilderModule, /maxAiBuilderVaultFiles/);
+  assert.match(aiBuilderModule, /maxAiBuilderVaultFileChars/);
+  assert.match(app, /function aiBuilderHistoryContext/);
+  assert.match(app, /async function loadAiBuilderHistory/);
+  assert.match(app, /function persistAiBuilderHistory/);
+  assert.match(app, /function upsertAiBuilderHistoryTurn/);
+  assert.match(app, /function updateAiBuilderHistoryTurn/);
+  assert.match(app, /function moveAiBuilderHistoryKey/);
+  assert.match(app, /function clearActiveAiBuilderHistory/);
+  assert.match(app, /function wrapAiBuilderMarkdown/);
+  assert.match(app, /function hasAiBuilderMarkedBlock/);
+  assert.match(app, /function latestReplaceableAiBuilderTurn/);
+  assert.match(app, /function replaceAiBuilderMarkedBlock/);
+  assert.match(app, /glyphary-ai-builder:start/);
+  assert.match(app, /glyphary-ai-builder:end/);
+  assert.match(app, /aiBuilderReplaceTurnId/);
+  assert.match(app, /setAiPageBuilderReplaceTurnId\(latestReplaceableAiBuilderTurn\(\)\?\.id \?\? null\)/);
+  assert.match(aiBuilderModule, /AI Builder prompt-context helpers/);
+  assert.match(aiBuilderModule, /export function aiBuilderPromptRequestsVaultContext/);
+  assert.match(aiBuilderModule, /export function aiBuilderPromptRequestsTaskContext/);
+  assert.match(aiBuilderModule, /export function aiBuilderVaultQueries/);
+  assert.match(aiBuilderModule, /export function aiBuilderVaultContextText/);
+  assert.match(aiBuilderModule, /export function aiBuilderEffectiveTaskQueries/);
+  assert.match(app, /async function aiBuilderSearchVaultNotes/);
+  assert.match(app, /async function aiBuilderSearchVaultTasks/);
+  assert.match(app, /async function aiBuilderVaultContext/);
+  assert.match(app, /invoke<SearchResult\[\]>\("search_vault"/);
+  assert.match(app, /invoke<OpenedFile>\("read_vault_file"/);
   assert.match(app, /function normalizeMalformedVaultImageMarkdown/);
   assert.match(app, /function normalizeAiMarkdownForApply/);
   assert.match(app, /invalid nested form `!\[Logo\]\(!\[\[logo\.png\]\]\)`/);
   assert.match(app, /const vaultImageMarkdown = `!\[\[\$\{saved\.fileName\}\]\]`/);
   assert.match(app, /normalizeAiMarkdownForApply\(response\.output\)/);
   assert.match(app, /normalizeAiMarkdownForApply\(builderResponse\.markdown\)/);
+  assert.match(app, /Recent AI Builder conversation for this file/);
+  assert.match(app, /Replacement target/);
+  assert.match(app, /Vault retrieval context/);
+  assert.match(app, /Gathering vault context for AI: Page Builder/);
+  assert.match(app, /Cite source notes with \[\[Note Name\]\] links/);
+  assert.match(app, /upsertAiBuilderHistoryTurn\(historyKey, turn\)/);
+  assert.match(app, /superseded: true/);
+  assert.match(app, /replacedByTurnId: review\.aiBuilderTurnId/);
+  assert.match(app, /applied: true/);
   assert.match(app, /async function importAiPageBuilderAssets/);
   assert.match(app, /function aiPageBuilderContext/);
   assert.match(app, /async function runAiPageBuilder/);
@@ -1669,7 +1758,13 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(app, /className="ai-builder-asset-screen"/);
   assert.match(app, /className="ai-builder-asset-card"/);
   assert.match(app, /className="ai-builder-asset-list"/);
+  assert.match(app, /className="ai-builder-history"/);
+  assert.match(app, /className="ai-builder-history-list"/);
+  assert.match(app, /Replace Previous/);
+  assert.match(app, /aiReview\.applyMode === "insert-at-cursor" && !aiReview\.aiBuilderReplaceTurnId/);
+  assert.match(app, /Replaced/);
   assert.match(app, /aria-label="AI Page Builder"/);
+  assert.match(app, /aria-label="AI Builder history"/);
   assert.match(app, /aria-label="Review AI Page Builder assets"/);
   assert.match(app, /closeAiPageBuilderOnEscape/);
   assert.match(app, /closeAiPageBuilderAssetReviewOnEscape/);
@@ -1690,12 +1785,19 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.ok(aiReviewEnd > aiReviewStart);
   assert.doesNotMatch(aiReviewDialog, /className="primary-action"/);
   assert.match(css, /\.ai-builder-card/);
+  assert.match(css, /\.ai-builder-history/);
+  assert.match(css, /\.ai-builder-history-list/);
+  assert.match(css, /\.ai-builder-history-item\.selected/);
+  assert.match(css, /\.ai-builder-replace-note/);
   assert.match(css, /\.ai-builder-asset-card/);
   assert.match(css, /\.ai-builder-asset-list/);
   assert.match(css, /\.ai-review-card/);
   assert.match(css, /\.ai-progress-card/);
   assert.match(css, /\.ai-progress-spinner/);
+  assert.match(css, /transform-origin: 50% 50%/);
   assert.match(css, /@keyframes glyphary-spin/);
+  assert.match(css, /from \{\s*transform: rotate\(0deg\);/);
+  assert.match(css, /\.ai-progress-spinner \{\s*animation: glyphary-spin 0\.85s linear infinite !important;/);
   assert.match(css, /\.ai-test-indicator/);
   assert.match(css, /\.ai-test-indicator\.success/);
   assert.match(css, /\.ai-test-indicator\.error/);
@@ -1703,12 +1805,22 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(modelsBackend, /pub\(crate\) struct AiModelListResponse/);
   assert.match(modelsBackend, /pub\(crate\) struct AiConnectionTestResponse/);
   assert.match(modelsBackend, /pub\(crate\) struct AiTransformRequest/);
+  assert.match(modelsBackend, /pub\(crate\) struct AiBuilderHistoryStore/);
+  assert.match(modelsBackend, /pub\(crate\) struct AiBuilderHistoryTurn/);
+  assert.match(modelsBackend, /pub\(crate\) superseded: bool/);
+  assert.match(modelsBackend, /pub\(crate\) replaced_by_turn_id: Option<String>/);
   assert.match(aiBackend, /ai_endpoint_url/);
   assert.match(aiBackend, /pub\(crate\) async fn list_ai_models/);
   assert.match(aiBackend, /pub\(crate\) async fn test_ai_connection/);
   assert.match(aiBackend, /requested content/);
   assert.match(aiBackend, /\.get\(ai_endpoint_url\(&settings\.base_url, "models"\)\?\)/);
   assert.match(backend, /import_remote_vault_image_asset,/);
+  assert.match(backend, /read_ai_builder_history,/);
+  assert.match(backend, /write_ai_builder_history/);
+  assert.match(aiHistoryBackend, /AI Builder history persistence/);
+  assert.match(aiHistoryBackend, /AI_BUILDER_HISTORY_FILE_NAME/);
+  assert.match(aiHistoryBackend, /pub\(crate\) fn read_ai_builder_history/);
+  assert.match(aiHistoryBackend, /pub\(crate\) fn write_ai_builder_history/);
   const assetsBackend = readFileSync("src-tauri/src/assets.rs", "utf8");
 
   assert.match(assetsBackend, /pub\(crate\) async fn import_remote_vault_image_asset/);

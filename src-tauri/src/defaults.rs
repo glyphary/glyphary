@@ -33,6 +33,7 @@ pub(crate) const DEFAULT_AI_MODEL: &str = "gpt-5.5";
 pub(crate) const PLUGIN_RUNTIME_WASM_TRANSFORM_V1: &str = "glyphary-wasm-transform@1";
 pub(crate) const SETTINGS_DIRECTORY_NAME: &str = ".glyphary";
 pub(crate) const SETTINGS_CONFIG_FILE_NAME: &str = "config.json";
+pub(crate) const AI_BUILDER_HISTORY_FILE_NAME: &str = "ai-builder-history.json";
 pub(crate) const THEME_TOKEN_ALLOWLIST: &[&str] = &[
     "--glyphary-accent",
     "--glyphary-accent-text",

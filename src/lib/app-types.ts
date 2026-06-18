@@ -87,6 +87,28 @@ export type AiPageBuilderResponse = {
   assets: AiPageBuilderAssetRequest[];
 };
 
+export type AiBuilderHistoryAsset = {
+  id: string;
+  label: string;
+  fileName: string;
+  relativePath: string;
+};
+
+export type AiBuilderHistoryTurn = {
+  id: string;
+  prompt: string;
+  markdown: string;
+  assets: AiBuilderHistoryAsset[];
+  timestampMs: number;
+  applied: boolean;
+  superseded?: boolean;
+  replacedByTurnId?: string | null;
+};
+
+export type AiBuilderHistoryStore = {
+  entries: Record<string, AiBuilderHistoryTurn[]>;
+};
+
 export type AiModelListResponse = {
   models: string[];
 };

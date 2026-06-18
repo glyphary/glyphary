@@ -2307,6 +2307,10 @@ body.workspace-resizing * {
   padding: 0.7rem;
 }
 
+.editor-surface .markdown-html-block-hidden {
+  display: none;
+}
+
 .editor-surface .markdown-html-block.ProseMirror-selectednode {
   border-color: var(--focus);
   box-shadow: 0 0 0 2px var(--selection);
@@ -3731,6 +3735,91 @@ body.workspace-resizing * {
   min-height: 260px;
 }
 
+.ai-builder-history {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  padding: 10px;
+}
+
+.ai-builder-history-header,
+.ai-builder-history-item div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ai-builder-history-header span {
+  color: var(--muted-strong);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.ai-builder-history-list {
+  display: grid;
+  max-height: 180px;
+  gap: 8px;
+  overflow: auto;
+}
+
+.ai-builder-history-item {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.ai-builder-history-item.selected {
+  border-color: var(--accent);
+  border-radius: 6px;
+  outline: 1px solid var(--accent);
+  padding: 8px;
+}
+
+.ai-builder-history-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.ai-builder-history-item strong,
+.ai-builder-history-item p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ai-builder-history-item strong {
+  color: var(--heading);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.ai-builder-history-item span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.ai-builder-history-item p {
+  display: -webkit-box;
+  margin: 0;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.ai-builder-replace-note {
+  margin: 0;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
 .ai-builder-asset-list {
   display: grid;
   max-height: min(42vh, 360px);
@@ -3817,13 +3906,16 @@ body.workspace-resizing * {
 }
 
 .ai-progress-spinner {
+  display: block;
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
   border: 2px solid var(--border-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
+  transform-origin: 50% 50%;
   animation: glyphary-spin 0.85s linear infinite;
+  will-change: transform;
 }
 
 .command-palette-screen {
@@ -4630,6 +4722,9 @@ body.workspace-resizing * {
 }
 
 @keyframes glyphary-spin {
+  from {
+    transform: rotate(0deg);
+  }
   to {
     transform: rotate(360deg);
   }
@@ -4643,6 +4738,10 @@ body.workspace-resizing * {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 1ms !important;
+  }
+
+  .ai-progress-spinner {
+    animation: glyphary-spin 0.85s linear infinite !important;
   }
 }
 

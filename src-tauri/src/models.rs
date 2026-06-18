@@ -251,6 +251,39 @@ pub(crate) struct AiTransformResponse {
     pub(crate) output: String,
 }
 
+#[derive(Debug, Deserialize, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiBuilderHistoryStore {
+    #[serde(default)]
+    pub(crate) entries: HashMap<String, Vec<AiBuilderHistoryTurn>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiBuilderHistoryTurn {
+    pub(crate) id: String,
+    pub(crate) prompt: String,
+    pub(crate) markdown: String,
+    #[serde(default)]
+    pub(crate) assets: Vec<AiBuilderHistoryAsset>,
+    pub(crate) timestamp_ms: i64,
+    #[serde(default)]
+    pub(crate) applied: bool,
+    #[serde(default)]
+    pub(crate) superseded: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) replaced_by_turn_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AiBuilderHistoryAsset {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    pub(crate) file_name: String,
+    pub(crate) relative_path: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct AiModelListResponse {

@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod ai;
+mod ai_history;
 mod assets;
 mod calendar;
 mod plugins;

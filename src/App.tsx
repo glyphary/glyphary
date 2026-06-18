@@ -56,6 +56,11 @@ import { createLowlight } from "lowlight";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import {
+  aiBuilderEffectiveTaskQueries,
+  aiBuilderPromptRequestsTaskContext,
+  aiBuilderPromptRequestsVaultContext,
+  aiBuilderVaultContextText,
+  aiBuilderVaultQueries,
   calendarDateKey,
   calendarDayRelativePath,
   calendarDayTitle,
@@ -111,6 +116,10 @@ import {
   isSupportedImageFile,
   keyboardEventMatchesShortcut,
   markdownHeadings,
+  maxAiBuilderVaultFileChars,
+  maxAiBuilderVaultFiles,
+  maxAiBuilderVaultSnippetsPerFile,
+  maxAiBuilderVaultTasks,
   minEditorWorkspaceWidth,
   minResizableDrawerWidth,
   monthTitle,
@@ -154,6 +163,9 @@ import {
 } from "./logic";
 import type {
   ActiveFile,
+  AiBuilderHistoryAsset,
+  AiBuilderHistoryStore,
+  AiBuilderHistoryTurn,
   AiConnectionTestResponse,
   AiModelListResponse,
   AiPageBuilderAssetRequest,
@@ -335,6 +347,17 @@ const blockBoundaryInsertNodeNames = new Set([
 ]);
 
 function supportsBlockBoundaryInsert(node: ProseMirrorNode) {
+  // AI Builder markers are stored as hidden HTML comments so follow-up prompts
+  // can replace generated regions. They are anchors, not visible widgets, so
+  // they must not receive the margin + insertion controls.
+  if (
+    node.type.name === "htmlBlock" &&
+    typeof node.attrs.rawHtml === "string" &&
+    isAiBuilderMarkerComment(node.attrs.rawHtml)
+  ) {
+    return false;
+  }
+
   return blockBoundaryInsertNodeNames.has(node.type.name);
 }
 
@@ -774,14 +797,22 @@ type AiReviewState = {
   title: string;
   output: string;
   applyMode: "replace-selection" | "insert-below-selection" | "insert-at-cursor";
+  aiBuilderHistoryKey?: string;
+  aiBuilderTurnId?: string;
+  aiBuilderReplaceTurnId?: string;
 };
 
 type AiPageBuilderAssetReviewState = {
+  prompt: string;
+  historyKey: string;
+  replaceTurnId?: string;
   markdown: string;
   assets: AiPageBuilderAssetRequest[];
 };
 
 const aiPageBuilderMarkdownContextLimit = 12000;
+const maxAiBuilderHistoryTurnsPerFile = 20;
+const maxAiBuilderPromptHistoryTurns = 5;
 
 const ExcalidrawCanvas = lazy(async () => {
   const module = await import("@excalidraw/excalidraw");
@@ -3094,6 +3125,10 @@ function htmlBlockMarkdownToken(src: string) {
   };
 }
 
+function isAiBuilderMarkerComment(rawHtml: string) {
+  return /^<!--\s*glyphary-ai-builder:(?:start|end)\s+[^>]+-->$/.test(rawHtml.trim());
+}
+
 function safeHtmlAttributeValue(name: string, value: string) {
   if (/^on/i.test(name) || name.toLowerCase() === "srcdoc") {
     return false;
@@ -3145,6 +3180,18 @@ function sanitizeHtmlBlock(rawHtml: string) {
 
 function HtmlBlockNodeView({ node, selected, updateAttributes }: NodeViewProps) {
   const rawHtml = typeof node.attrs.rawHtml === "string" ? node.attrs.rawHtml : "";
+
+  if (isAiBuilderMarkerComment(rawHtml)) {
+    // AI Builder markers are invisible replacement anchors. Keeping them in
+    // the document preserves clean follow-up replacement without displaying
+    // implementation comments as editable HTML widgets.
+    return (
+      <NodeViewWrapper
+        className="markdown-html-block markdown-html-block-hidden"
+        contentEditable={false}
+      />
+    );
+  }
 
   return (
     <NodeViewWrapper className="markdown-html-block" contentEditable={false}>
@@ -4279,9 +4326,15 @@ function App() {
   const [aiReview, setAiReview] = useState<AiReviewState | null>(null);
   const [aiPageBuilderOpen, setAiPageBuilderOpen] = useState(false);
   const [aiPageBuilderPrompt, setAiPageBuilderPrompt] = useState("");
+  const [aiPageBuilderReplaceTurnId, setAiPageBuilderReplaceTurnId] = useState<string | null>(
+    null,
+  );
   const [aiPageBuilderAssetReview, setAiPageBuilderAssetReview] =
     useState<AiPageBuilderAssetReviewState | null>(null);
   const [aiPageBuilderImportingAssets, setAiPageBuilderImportingAssets] = useState(false);
+  const [aiBuilderHistory, setAiBuilderHistory] = useState<AiBuilderHistoryStore>({
+    entries: {},
+  });
   const [excalidrawCreateDialogOpen, setExcalidrawCreateDialogOpen] = useState(false);
   const [excalidrawCreateNameDraft, setExcalidrawCreateNameDraft] = useState("Drawing");
   const [excalidrawCreateSubmitting, setExcalidrawCreateSubmitting] = useState(false);
@@ -4317,6 +4370,7 @@ function App() {
   const activeFileRef = useRef<ActiveFile | null>(null);
   const currentDirRef = useRef("");
   const recentFilesRef = useRef<ActiveFile[]>([]);
+  const aiBuilderHistoryRef = useRef<AiBuilderHistoryStore>({ entries: {} });
   const wikiLinkIndexRef = useRef<VaultIndexedFile[]>([]);
   const suppressDirectoryClickRef = useRef(false);
   const editorGroupsRef = useRef<Record<EditorGroupId, EditorGroupState>>(editorGroups);
@@ -4397,6 +4451,10 @@ function App() {
   useEffect(() => {
     recentFilesRef.current = recentFiles;
   }, [recentFiles]);
+
+  useEffect(() => {
+    aiBuilderHistoryRef.current = aiBuilderHistory;
+  }, [aiBuilderHistory]);
 
   useEffect(() => {
     editorGroupsRef.current = editorGroups;
@@ -5721,6 +5779,7 @@ function App() {
         recentFilesRef.current = workspace.recentFiles;
         setRecentFiles(workspace.recentFiles);
         await loadVaultSettings(workspace.vaultRoot);
+        await loadAiBuilderHistory(workspace.vaultRoot);
         setCurrentDir(workspace.currentDir);
         setSearchQuery("");
         setSearchResults([]);
@@ -5990,6 +6049,347 @@ function App() {
           : "Unsaved changes in untitled note",
       );
     }
+  }
+
+  function aiBuilderHistoryKeyForFile(file: ActiveFile | null) {
+    return file?.relativePath ?? null;
+  }
+
+  function activeAiBuilderHistoryKey() {
+    return aiBuilderHistoryKeyForFile(activeFileRef.current);
+  }
+
+  function activeAiBuilderHistoryTurns() {
+    const key = activeAiBuilderHistoryKey();
+
+    return key ? (aiBuilderHistory.entries[key] ?? []) : [];
+  }
+
+  function aiBuilderHistoryContext() {
+    const turns = activeAiBuilderHistoryTurns().slice(0, maxAiBuilderPromptHistoryTurns);
+
+    if (turns.length === 0) {
+      return "(none)";
+    }
+
+    return turns
+      .map((turn, index) =>
+        [
+          `Turn ${turns.length - index}:`,
+          `User: ${turn.prompt}`,
+          "Assistant markdown:",
+          turn.markdown,
+        ].join("\n"),
+      )
+      .join("\n\n");
+  }
+
+  function selectedAiBuilderReplacementTurn() {
+    if (!aiPageBuilderReplaceTurnId) {
+      return null;
+    }
+
+    return (
+      activeAiBuilderHistoryTurns().find((turn) => turn.id === aiPageBuilderReplaceTurnId) ?? null
+    );
+  }
+
+  function aiBuilderMarkedBlockPattern(turnId: string) {
+    const escapedTurnId = escapeRegExp(turnId);
+
+    return new RegExp(
+      `<!--\\s*glyphary-ai-builder:start\\s+${escapedTurnId}\\s*-->[\\s\\S]*?<!--\\s*glyphary-ai-builder:end\\s+${escapedTurnId}\\s*-->`,
+    );
+  }
+
+  function hasAiBuilderMarkedBlock(turnId: string) {
+    return aiBuilderMarkedBlockPattern(turnId).test(markdown);
+  }
+
+  function latestReplaceableAiBuilderTurn() {
+    return (
+      activeAiBuilderHistoryTurns().find(
+        (turn) => turn.applied && !turn.superseded && hasAiBuilderMarkedBlock(turn.id),
+      ) ?? null
+    );
+  }
+
+  function clearActiveAiBuilderHistory() {
+    const key = activeAiBuilderHistoryKey();
+
+    if (!key) {
+      setStatus("Open a saved vault file before clearing AI Builder history");
+      return;
+    }
+
+    const nextHistory = {
+      entries: {
+        ...aiBuilderHistoryRef.current.entries,
+        [key]: [],
+      },
+    };
+
+    persistAiBuilderHistory(nextHistory);
+    setAiPageBuilderReplaceTurnId(null);
+    setStatus("Cleared AI Builder history for this file");
+  }
+
+  async function loadAiBuilderHistory(root: string) {
+    try {
+      const history = await invoke<AiBuilderHistoryStore>("read_ai_builder_history", { root });
+      const normalized = { entries: history.entries ?? {} };
+
+      aiBuilderHistoryRef.current = normalized;
+      setAiBuilderHistory(normalized);
+    } catch (error) {
+      aiBuilderHistoryRef.current = { entries: {} };
+      setAiBuilderHistory({ entries: {} });
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function persistAiBuilderHistory(nextHistory: AiBuilderHistoryStore) {
+    const root = vaultRootRef.current;
+
+    if (!root) {
+      return;
+    }
+
+    aiBuilderHistoryRef.current = nextHistory;
+    setAiBuilderHistory(nextHistory);
+    void invoke<AiBuilderHistoryStore>("write_ai_builder_history", {
+      root,
+      history: nextHistory,
+    }).catch((error) => {
+      setStatus(error instanceof Error ? error.message : String(error));
+    });
+  }
+
+  function upsertAiBuilderHistoryTurn(key: string, turn: AiBuilderHistoryTurn) {
+    const current = aiBuilderHistoryRef.current;
+    const currentTurns = current.entries[key] ?? [];
+    const nextTurns = [turn, ...currentTurns.filter((entry) => entry.id !== turn.id)].slice(
+      0,
+      maxAiBuilderHistoryTurnsPerFile,
+    );
+    const nextHistory = {
+      entries: {
+        ...current.entries,
+        [key]: nextTurns,
+      },
+    };
+
+    persistAiBuilderHistory(nextHistory);
+  }
+
+  function updateAiBuilderHistoryTurn(
+    key: string,
+    turnId: string,
+    patch: Partial<AiBuilderHistoryTurn>,
+  ) {
+    const current = aiBuilderHistoryRef.current;
+    const currentTurns = current.entries[key] ?? [];
+    const nextTurns = currentTurns.map((turn) =>
+      turn.id === turnId ? { ...turn, ...patch } : turn,
+    );
+    const nextHistory = {
+      entries: {
+        ...current.entries,
+        [key]: nextTurns,
+      },
+    };
+
+    persistAiBuilderHistory(nextHistory);
+  }
+
+  function moveAiBuilderHistoryKey(previousKey: string, nextKey: string) {
+    if (previousKey === nextKey) {
+      return;
+    }
+
+    const current = aiBuilderHistoryRef.current;
+    const previousTurns = current.entries[previousKey] ?? [];
+
+    if (previousTurns.length === 0) {
+      return;
+    }
+
+    persistAiBuilderHistory({
+      entries: {
+        ...current.entries,
+        [previousKey]: [],
+        [nextKey]: previousTurns,
+      },
+    });
+  }
+
+  function createAiBuilderHistoryTurn(
+    prompt: string,
+    markdown: string,
+    assets: AiBuilderHistoryAsset[] = [],
+  ): AiBuilderHistoryTurn {
+    const timestampMs = Date.now();
+
+    return {
+      id: `ai-builder-${timestampMs}-${Math.random().toString(36).slice(2, 8)}`,
+      prompt,
+      markdown,
+      assets,
+      timestampMs,
+      applied: false,
+    };
+  }
+
+  function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function aiBuilderStartMarker(turnId: string) {
+    return `<!-- glyphary-ai-builder:start ${turnId} -->`;
+  }
+
+  function aiBuilderEndMarker(turnId: string) {
+    return `<!-- glyphary-ai-builder:end ${turnId} -->`;
+  }
+
+  function wrapAiBuilderMarkdown(turnId: string, output: string) {
+    // Plain HTML comments give us invisible anchors in rendered Markdown while
+    // remaining portable source text for Obsidian-style tools and sync.
+    const normalized = normalizeAiMarkdownForApply(output).trim();
+
+    return `${aiBuilderStartMarker(turnId)}\n\n${normalized}\n\n${aiBuilderEndMarker(turnId)}`;
+  }
+
+  function replaceAiBuilderMarkedBlock(
+    sourceMarkdown: string,
+    replaceTurnId: string,
+    nextTurnId: string,
+    output: string,
+  ) {
+    const pattern = aiBuilderMarkedBlockPattern(replaceTurnId);
+
+    if (!pattern.test(sourceMarkdown)) {
+      return null;
+    }
+
+    return sourceMarkdown.replace(pattern, wrapAiBuilderMarkdown(nextTurnId, output));
+  }
+
+  function aiReviewOutputForInsertion(review: AiReviewState, output: string) {
+    if (!review.aiBuilderTurnId) {
+      return normalizeAiMarkdownForApply(output);
+    }
+
+    return wrapAiBuilderMarkdown(review.aiBuilderTurnId, output);
+  }
+
+  function markAiBuilderReviewApplied(review: AiReviewState, replaced: boolean) {
+    if (!review.aiBuilderHistoryKey || !review.aiBuilderTurnId) {
+      return;
+    }
+
+    updateAiBuilderHistoryTurn(review.aiBuilderHistoryKey, review.aiBuilderTurnId, {
+      applied: true,
+    });
+
+    if (replaced && review.aiBuilderReplaceTurnId) {
+      updateAiBuilderHistoryTurn(review.aiBuilderHistoryKey, review.aiBuilderReplaceTurnId, {
+        superseded: true,
+        replacedByTurnId: review.aiBuilderTurnId,
+      });
+    }
+  }
+
+  async function aiBuilderSearchVaultNotes(request: string) {
+    if (!vaultRootRef.current || !aiBuilderPromptRequestsVaultContext(request)) {
+      return [];
+    }
+
+    const queries = aiBuilderVaultQueries(request);
+    const groupedResults = new Map<string, SearchResult[]>();
+
+    // The model never receives arbitrary vault access. Glyphary first performs
+    // bounded local searches, then sends only the matching snippets/excerpts.
+    for (const query of queries) {
+      const results = await invoke<SearchResult[]>("search_vault", {
+        root: vaultRootRef.current,
+        query: escapeRegExp(query),
+        includeContent: true,
+        markdownOnly: true,
+        excludeDotPaths: true,
+      });
+
+      for (const result of results) {
+        const current = groupedResults.get(result.relativePath) ?? [];
+
+        if (current.length < maxAiBuilderVaultSnippetsPerFile) {
+          current.push(result);
+        }
+
+        groupedResults.set(result.relativePath, current);
+      }
+    }
+
+    const files = Array.from(groupedResults.entries()).slice(0, maxAiBuilderVaultFiles);
+
+    return Promise.all(
+      files.map(async ([relativePath, snippets]) => {
+        const file = await invoke<OpenedFile>("read_vault_file", {
+          root: vaultRootRef.current,
+          relative: relativePath,
+        });
+        const parts = splitMetaHeader(file.content);
+
+        return {
+          relativePath,
+          snippets,
+          excerpt: parts.body.trim().slice(0, maxAiBuilderVaultFileChars),
+        };
+      }),
+    );
+  }
+
+  async function aiBuilderSearchVaultTasks(request: string, queries: string[]) {
+    if (!vaultRootRef.current || !aiBuilderPromptRequestsTaskContext(request)) {
+      return [];
+    }
+
+    const results = await invoke<SearchResult[]>("search_vault", {
+      root: vaultRootRef.current,
+      query: taskSearchPattern("incomplete"),
+      includeContent: true,
+      markdownOnly: true,
+      excludeDotPaths: true,
+    });
+    const loweredQueries = aiBuilderEffectiveTaskQueries(queries);
+
+    return results
+      .filter((result) => result.isContentMatch)
+      .filter((result) => {
+        if (loweredQueries.length === 0) {
+          return true;
+        }
+
+        const searchable = `${result.relativePath} ${result.lineText ?? ""}`.toLowerCase();
+
+        return loweredQueries.some((query) => searchable.includes(query));
+      })
+      .slice(0, maxAiBuilderVaultTasks);
+  }
+
+  async function aiBuilderVaultContext(request: string) {
+    const queries = aiBuilderVaultQueries(request);
+    const [notes, tasks] = await Promise.all([
+      aiBuilderSearchVaultNotes(request),
+      aiBuilderSearchVaultTasks(request, queries),
+    ]);
+
+    return aiBuilderVaultContextText(
+      queries,
+      notes,
+      tasks,
+      aiBuilderPromptRequestsVaultContext(request),
+    );
   }
 
   function persistWorkspace(next: Partial<PersistedWorkspace>) {
@@ -6546,6 +6946,7 @@ function App() {
       setEditorGroupsAndRef(nextGroups);
       persistActiveFile(file);
       replaceFileInWikiLinkIndex(previousRelativePath, file);
+      moveAiBuilderHistoryKey(previousRelativePath, file.relativePath);
       await loadEntries(vaultRoot, currentDir);
     }
 
@@ -6627,6 +7028,7 @@ function App() {
       recentFilesRef.current = [];
       setRecentFiles([]);
       await loadVaultSettings(selected);
+      await loadAiBuilderHistory(selected);
       setCurrentDir("");
       const tab = createUntitledTab();
 
@@ -8131,10 +8533,15 @@ function App() {
     }
 
     setAiPageBuilderPrompt("");
+    setAiPageBuilderReplaceTurnId(latestReplaceableAiBuilderTurn()?.id ?? null);
     setAiPageBuilderOpen(true);
   }
 
-  function aiPageBuilderContext(request: string) {
+  function aiPageBuilderContext(
+    request: string,
+    replacementTurn: AiBuilderHistoryTurn | null,
+    vaultContext: string,
+  ) {
     const selectedText = currentSelectionText().trim();
     const markdownExcerpt =
       markdown.length > aiPageBuilderMarkdownContextLimit
@@ -8157,6 +8564,22 @@ function App() {
       "",
       "Selected text:",
       selectedText || "(none)",
+      "",
+      "Recent AI Builder conversation for this file:",
+      aiBuilderHistoryContext(),
+      "",
+      "Replacement target:",
+      replacementTurn
+        ? [
+            `Turn id: ${replacementTurn.id}`,
+            `Original request: ${replacementTurn.prompt}`,
+            "Previously applied markdown:",
+            replacementTurn.markdown,
+          ].join("\n")
+        : "(none)",
+      "",
+      "Vault retrieval context:",
+      vaultContext,
       "",
       "Cursor context:",
       currentCursorContext(),
@@ -8182,8 +8605,13 @@ function App() {
     }
 
     try {
+      const historyKey = activeAiBuilderHistoryKey();
+      const replacementTurn = selectedAiBuilderReplacementTurn();
+      const replaceTurnId = replacementTurn?.id ?? null;
       setAiSubmitting(true);
       setAiSubmittingTitle("AI: Page Builder");
+      setStatus("Gathering vault context for AI: Page Builder");
+      const vaultContext = await aiBuilderVaultContext(request);
       setStatus("Running AI: Page Builder");
       const response = await invoke<AiTransformResponse>("run_ai_transform", {
         request: {
@@ -8198,20 +8626,40 @@ function App() {
             "If the user asks for logos or remote images, add asset entries instead of inventing local file paths. Prefer a direct image URL when known; otherwise include the brand domain.",
             "Do not wrap the JSON in a code fence.",
             "If the request is underspecified, choose a practical structure and keep the result editable.",
+            "If a replacement target is provided, produce the complete replacement for that prior block, not a patch or diff.",
+            "If vault retrieval context is provided, use it as source material for summaries, task tables, and cross-note answers. Cite source notes with [[Note Name]] links and do not imply a vault-wide search was exhaustive beyond the provided local results.",
           ].join("\n"),
-          input: aiPageBuilderContext(request),
+          input: aiPageBuilderContext(request, replacementTurn, vaultContext),
         },
       });
       const builderResponse = parseAiPageBuilderResponse(response.output);
+      const normalizedMarkdown = normalizeAiMarkdownForApply(builderResponse.markdown);
 
       if (builderResponse.assets.length > 0) {
-        setAiPageBuilderAssetReview(builderResponse);
+        setAiPageBuilderAssetReview({
+          ...builderResponse,
+          prompt: request,
+          historyKey: historyKey ?? "",
+          replaceTurnId: replaceTurnId ?? undefined,
+          markdown: normalizedMarkdown,
+        });
         setStatus(`Review ${builderResponse.assets.length} requested asset import`);
       } else {
+        const turn = historyKey
+          ? createAiBuilderHistoryTurn(request, normalizedMarkdown)
+          : null;
+
+        if (historyKey && turn) {
+          upsertAiBuilderHistoryTurn(historyKey, turn);
+        }
+
         setAiReview({
           title: "AI: Page Builder",
-          output: normalizeAiMarkdownForApply(builderResponse.markdown),
+          output: normalizedMarkdown,
           applyMode: "insert-at-cursor",
+          aiBuilderHistoryKey: historyKey ?? undefined,
+          aiBuilderTurnId: turn?.id,
+          aiBuilderReplaceTurnId: replaceTurnId ?? undefined,
         });
         setStatus("Review AI: Page Builder result");
       }
@@ -8234,6 +8682,7 @@ function App() {
       setAiPageBuilderImportingAssets(true);
       setStatus("Importing AI Page Builder assets");
       const replacements = new Map<string, SavedAsset>();
+      const importedAssets: AiBuilderHistoryAsset[] = [];
 
       for (const asset of aiPageBuilderAssetReview.assets) {
         const candidateUrls = pageBuilderAssetCandidateUrls(asset);
@@ -8263,15 +8712,33 @@ function App() {
         }
 
         replacements.set(asset.id, saved);
+        importedAssets.push({
+          id: asset.id,
+          label: asset.label,
+          fileName: saved.fileName,
+          relativePath: saved.relativePath,
+        });
+      }
+      const output = replaceAiPageBuilderAssetPlaceholders(
+        aiPageBuilderAssetReview.markdown,
+        replacements,
+      );
+      const historyKey = aiPageBuilderAssetReview.historyKey || null;
+      const turn = historyKey
+        ? createAiBuilderHistoryTurn(aiPageBuilderAssetReview.prompt, output, importedAssets)
+        : null;
+
+      if (historyKey && turn) {
+        upsertAiBuilderHistoryTurn(historyKey, turn);
       }
 
       setAiReview({
         title: "AI: Page Builder",
-        output: replaceAiPageBuilderAssetPlaceholders(
-          aiPageBuilderAssetReview.markdown,
-          replacements,
-        ),
+        output,
         applyMode: "insert-at-cursor",
+        aiBuilderHistoryKey: historyKey ?? undefined,
+        aiBuilderTurnId: turn?.id,
+        aiBuilderReplaceTurnId: aiPageBuilderAssetReview.replaceTurnId,
       });
       setAiPageBuilderAssetReview(null);
       setStatus(
@@ -8291,11 +8758,19 @@ function App() {
       return;
     }
 
+    const review = aiReview;
+    const content = review
+      ? aiReviewOutputForInsertion(review, output)
+      : normalizeAiMarkdownForApply(output);
+
     editor
       .chain()
       .focus()
-      .insertContent(normalizeAiMarkdownForApply(output), { contentType: "markdown" })
+      .insertContent(content, { contentType: "markdown" })
       .run();
+    if (review) {
+      markAiBuilderReviewApplied(review, false);
+    }
     setAiReview(null);
     setStatus("Applied AI result");
   }
@@ -8305,12 +8780,20 @@ function App() {
       return;
     }
 
+    const review = aiReview;
+    const content = review
+      ? aiReviewOutputForInsertion(review, output)
+      : normalizeAiMarkdownForApply(output);
+
     editor
       .chain()
       .focus()
       .setTextSelection(editor.state.selection.to)
-      .insertContent(`\n\n${normalizeAiMarkdownForApply(output)}`, { contentType: "markdown" })
+      .insertContent(`\n\n${content}`, { contentType: "markdown" })
       .run();
+    if (review) {
+      markAiBuilderReviewApplied(review, false);
+    }
     setAiReview(null);
     setStatus("Inserted AI result");
   }
@@ -8320,13 +8803,53 @@ function App() {
       return;
     }
 
+    const review = aiReview;
+    const content = review
+      ? aiReviewOutputForInsertion(review, output)
+      : normalizeAiMarkdownForApply(output);
+
     editor
       .chain()
       .focus()
-      .insertContent(normalizeAiMarkdownForApply(output), { contentType: "markdown" })
+      .insertContent(content, { contentType: "markdown" })
       .run();
+    if (review) {
+      markAiBuilderReviewApplied(review, false);
+    }
     setAiReview(null);
     setStatus("Inserted AI result");
+  }
+
+  function replacePreviousAiBuilderOutput(review: AiReviewState) {
+    if (!editor || !review.aiBuilderReplaceTurnId || !review.aiBuilderTurnId) {
+      return;
+    }
+
+    const nextMarkdown = replaceAiBuilderMarkedBlock(
+      editor.getMarkdown(),
+      review.aiBuilderReplaceTurnId,
+      review.aiBuilderTurnId,
+      review.output,
+    );
+
+    if (!nextMarkdown) {
+      editor
+        .chain()
+        .focus()
+        .insertContent(aiReviewOutputForInsertion(review, review.output), {
+          contentType: "markdown",
+        })
+        .run();
+      markAiBuilderReviewApplied(review, false);
+      setAiReview(null);
+      setStatus("Could not find previous AI Builder block; inserted result at cursor");
+      return;
+    }
+
+    setEditorBody(nextMarkdown, false);
+    markAiBuilderReviewApplied(review, true);
+    setAiReview(null);
+    setStatus("Replaced AI Builder result");
   }
 
   async function copyAiOutput(output: string) {
@@ -9704,6 +10227,7 @@ function App() {
   const settingsCardStyle = {
     transform: `translate(${settingsOffset.x}px, ${settingsOffset.y}px)`,
   } as CSSProperties;
+  const aiBuilderHistoryTurns = activeAiBuilderHistoryTurns();
 
   return (
     <main className={appShellClassName} style={appShellStyle}>
@@ -11559,6 +12083,56 @@ function App() {
                 Cancel
               </button>
             </header>
+            {aiBuilderHistoryTurns.length > 0 ? (
+              <section className="ai-builder-history" aria-label="AI Builder history">
+                <div className="ai-builder-history-header">
+                  <span>History</span>
+                  <button
+                    className="inline-action"
+                    type="button"
+                    onClick={clearActiveAiBuilderHistory}
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="ai-builder-history-list">
+                  {aiBuilderHistoryTurns.map((turn) => (
+                    <article
+                      className={`ai-builder-history-item${
+                        aiPageBuilderReplaceTurnId === turn.id ? " selected" : ""
+                      }`}
+                      key={turn.id}
+                    >
+                      <div>
+                        <strong>{turn.prompt}</strong>
+                        <span>
+                          {turn.superseded ? "Replaced" : turn.applied ? "Inserted" : "Generated"}
+                        </span>
+                      </div>
+                      <p>{turn.markdown}</p>
+                      {turn.applied && !turn.superseded ? (
+                        <button
+                          className="inline-action"
+                          type="button"
+                          onClick={() =>
+                            setAiPageBuilderReplaceTurnId(
+                              aiPageBuilderReplaceTurnId === turn.id ? null : turn.id,
+                            )
+                          }
+                        >
+                          {aiPageBuilderReplaceTurnId === turn.id ? "Replacing" : "Replace"}
+                        </button>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+            {selectedAiBuilderReplacementTurn() ? (
+              <p className="ai-builder-replace-note">
+                The next result will replace the selected AI Builder block.
+              </p>
+            ) : null}
             <textarea
               autoFocus
               value={aiPageBuilderPrompt}
@@ -11691,9 +12265,13 @@ function App() {
               <button
                 className="secondary-action"
                 type="button"
-                onClick={() => insertAiOutputBelowSelection(aiReview.output)}
+                onClick={() =>
+                  aiReview.aiBuilderReplaceTurnId
+                    ? replacePreviousAiBuilderOutput(aiReview)
+                    : insertAiOutputBelowSelection(aiReview.output)
+                }
               >
-                Insert Below
+                {aiReview.aiBuilderReplaceTurnId ? "Replace Previous" : "Insert Below"}
               </button>
               {aiReview.applyMode === "replace-selection" ? (
                 <button
@@ -11704,7 +12282,7 @@ function App() {
                   Replace Selection
                 </button>
               ) : null}
-              {aiReview.applyMode === "insert-at-cursor" ? (
+              {aiReview.applyMode === "insert-at-cursor" && !aiReview.aiBuilderReplaceTurnId ? (
                 <button
                   className="secondary-action"
                   type="button"
