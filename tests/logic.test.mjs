@@ -1725,13 +1725,18 @@ test("command save shortcut is wrapped in the webview", () => {
 
   assert.match(app, /handleGlobalSaveShortcut/);
   assert.match(app, /handleGlobalCommandPaletteShortcut/);
+  assert.match(app, /handleGlobalCloseTabShortcut/);
   assert.match(app, /event\.key\.toLowerCase\(\) !== "s"/);
   assert.match(app, /event\.key\.toLowerCase\(\) !== "p"/);
+  assert.match(app, /event\.key\.toLowerCase\(\) !== "w"/);
   assert.match(app, /!event\.metaKey && !event\.ctrlKey/);
+  assert.match(app, /!event\.metaKey \|\| event\.ctrlKey \|\| event\.altKey \|\| event\.shiftKey/);
   assert.match(app, /void saveCurrentFileRef\.current\(\)/);
+  assert.match(app, /closeActiveDocumentTabRef\.current\(\)/);
   assert.match(app, /setCommandPaletteOpen\(true\)/);
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalSaveShortcut\)/);
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalCommandPaletteShortcut\)/);
+  assert.match(app, /window\.addEventListener\("keydown", handleGlobalCloseTabShortcut, \{ capture: true \}\)/);
 });
 
 test("renaming a page title immediately saves the active file", () => {

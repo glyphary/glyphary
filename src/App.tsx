@@ -4327,6 +4327,7 @@ function App() {
   // render.
   const openVaultRef = useRef<() => void | Promise<void>>(() => undefined);
   const saveCurrentFileRef = useRef<() => void | Promise<void>>(() => undefined);
+  const closeActiveDocumentTabRef = useRef<() => void>(() => undefined);
   const openTidbitCaptureWindowRef = useRef<() => void | Promise<void>>(() => undefined);
   const openCapturedTidbitRef = useRef<(file: OpenedFile) => void | Promise<void>>(
     () => undefined,
@@ -7043,6 +7044,14 @@ function App() {
 
   openVaultRef.current = openVault;
   saveCurrentFileRef.current = saveCurrentFile;
+  closeActiveDocumentTabRef.current = () => {
+    const groupId = activeGroupIdRef.current;
+    const activeTabId = editorGroupsRef.current[groupId]?.activeTabId;
+
+    if (activeTabId) {
+      closeDocumentTab(activeTabId, groupId);
+    }
+  };
 
   useEffect(() => {
     const handleGlobalSaveShortcut = (event: KeyboardEvent) => {
@@ -7072,13 +7081,27 @@ function App() {
       setCommandPaletteSelectedIndex(0);
       setCommandPaletteOpen(true);
     };
+    const handleGlobalCloseTabShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key.toLowerCase() !== "w") {
+        return;
+      }
+
+      if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+        return;
+      }
+
+      event.preventDefault();
+      closeActiveDocumentTabRef.current();
+    };
 
     window.addEventListener("keydown", handleGlobalSaveShortcut);
     window.addEventListener("keydown", handleGlobalCommandPaletteShortcut);
+    window.addEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
 
     return () => {
       window.removeEventListener("keydown", handleGlobalSaveShortcut);
       window.removeEventListener("keydown", handleGlobalCommandPaletteShortcut);
+      window.removeEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
     };
   }, []);
 

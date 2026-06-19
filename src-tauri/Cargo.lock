@@ -3802,7 +3802,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-app"
-version = "0.1.0"
+version = "1.0.0-beta.1"
 dependencies = [
  "grep",
  "reqwest 0.12.28",
