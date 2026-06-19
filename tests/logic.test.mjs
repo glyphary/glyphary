@@ -253,6 +253,9 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.equal(config.app.windows[0].theme, "Dark");
   assert.equal(config.app.windows[0].transparent, true);
   assert.equal(windowsConfig.app.windows[0].transparent, false);
+  assert.ok(config.bundle.icon.includes("icons/icon.ico"));
+  assert.equal(config.bundle.windows.nsis.installerIcon, "icons/icon.ico");
+  assert.equal(config.bundle.windows.nsis.uninstallerIcon, "icons/icon.ico");
   assert.notEqual(config.app.windows[0].hiddenTitle, true);
 });
 

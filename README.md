@@ -94,10 +94,11 @@ through follow-up prompts.
 Glyphary supports light, dark, and auto modes, theme templates, approved CSS
 snippets, a theme builder, and basic Obsidian-style theme compatibility.
 
-## Releasing
+## For Devs
 
 ```
-make prod-app && make run-app && make windows
+make prod-app && make run-app
+make ship-dmg && make windows
 ```
 
 ## Learn More
