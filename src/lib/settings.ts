@@ -170,6 +170,14 @@ export function writePersistedAppearance(appearance: AppearanceMode) {
   window.localStorage.setItem(appearanceStorageKey, appearance);
 }
 
+function sameNormalizedSettings<Settings, Normalized>(
+  normalize: (settings: Settings | undefined | null) => Normalized,
+  left: Settings | undefined | null,
+  right: Settings | undefined | null,
+) {
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+}
+
 export function normalizeFrontmatterPillSettings(
   settings: FrontmatterPillSettings | undefined | null,
 ) {
@@ -184,13 +192,7 @@ export function sameFrontmatterPillSettings(
   left: FrontmatterPillSettings | undefined | null,
   right: FrontmatterPillSettings | undefined | null,
 ) {
-  const normalizedLeft = normalizeFrontmatterPillSettings(left);
-  const normalizedRight = normalizeFrontmatterPillSettings(right);
-
-  return (
-    normalizedLeft.enabled === normalizedRight.enabled &&
-    normalizedLeft.headerName === normalizedRight.headerName
-  );
+  return sameNormalizedSettings(normalizeFrontmatterPillSettings, left, right);
 }
 
 export function normalizeEditorBehaviorSettings(
@@ -205,10 +207,7 @@ export function sameEditorBehaviorSettings(
   left: EditorBehaviorSettings | undefined | null,
   right: EditorBehaviorSettings | undefined | null,
 ) {
-  return (
-    normalizeEditorBehaviorSettings(left).vimMode ===
-    normalizeEditorBehaviorSettings(right).vimMode
-  );
+  return sameNormalizedSettings(normalizeEditorBehaviorSettings, left, right);
 }
 
 export function normalizeFileDisplaySettings(settings: FileDisplaySettings | undefined | null) {
@@ -221,10 +220,7 @@ export function sameFileDisplaySettings(
   left: FileDisplaySettings | undefined | null,
   right: FileDisplaySettings | undefined | null,
 ) {
-  return (
-    normalizeFileDisplaySettings(left).showDotfiles ===
-    normalizeFileDisplaySettings(right).showDotfiles
-  );
+  return sameNormalizedSettings(normalizeFileDisplaySettings, left, right);
 }
 
 export function normalizeAutosaveSettings(settings: AutosaveSettings | undefined | null) {
@@ -237,7 +233,7 @@ export function sameAutosaveSettings(
   left: AutosaveSettings | undefined | null,
   right: AutosaveSettings | undefined | null,
 ) {
-  return normalizeAutosaveSettings(left).enabled === normalizeAutosaveSettings(right).enabled;
+  return sameNormalizedSettings(normalizeAutosaveSettings, left, right);
 }
 
 export function normalizeDebugSettings(settings: DebugSettings | undefined | null) {
@@ -250,7 +246,7 @@ export function sameDebugSettings(
   left: DebugSettings | undefined | null,
   right: DebugSettings | undefined | null,
 ) {
-  return normalizeDebugSettings(left).enabled === normalizeDebugSettings(right).enabled;
+  return sameNormalizedSettings(normalizeDebugSettings, left, right);
 }
 
 export function normalizeTidbitSettings(settings: TidbitSettings | undefined | null) {
@@ -266,14 +262,7 @@ export function sameTidbitSettings(
   left: TidbitSettings | undefined | null,
   right: TidbitSettings | undefined | null,
 ) {
-  const normalizedLeft = normalizeTidbitSettings(left);
-  const normalizedRight = normalizeTidbitSettings(right);
-
-  return (
-    normalizedLeft.pathPattern === normalizedRight.pathPattern &&
-    normalizedLeft.globalShortcutEnabled === normalizedRight.globalShortcutEnabled &&
-    normalizedLeft.globalShortcut === normalizedRight.globalShortcut
-  );
+  return sameNormalizedSettings(normalizeTidbitSettings, left, right);
 }
 
 export type ShortcutKeyboardEvent = Pick<
@@ -409,16 +398,7 @@ export function sameVaultAppearanceSettings(
   left: VaultAppearanceSettings | undefined | null,
   right: VaultAppearanceSettings | undefined | null,
 ) {
-  const normalizedLeft = normalizeVaultAppearanceSettings(left);
-  const normalizedRight = normalizeVaultAppearanceSettings(right);
-
-  return (
-    normalizedLeft.glassEffect === normalizedRight.glassEffect &&
-    normalizedLeft.glassOpacity === normalizedRight.glassOpacity &&
-    normalizedLeft.statusBarVisible === normalizedRight.statusBarVisible &&
-    normalizedLeft.sectionCorners === normalizedRight.sectionCorners &&
-    normalizedLeft.workspaceMargin === normalizedRight.workspaceMargin
-  );
+  return sameNormalizedSettings(normalizeVaultAppearanceSettings, left, right);
 }
 
 export function normalizeCanvasSettings(settings: CanvasSettings | undefined | null) {
@@ -458,17 +438,7 @@ export function sameCanvasSettings(
   left: CanvasSettings | undefined | null,
   right: CanvasSettings | undefined | null,
 ) {
-  const normalizedLeft = normalizeCanvasSettings(left);
-  const normalizedRight = normalizeCanvasSettings(right);
-
-  return (
-    normalizedLeft.nodeBorderWidth === normalizedRight.nodeBorderWidth &&
-    normalizedLeft.edgeThickness === normalizedRight.edgeThickness &&
-    normalizedLeft.edgeStyle === normalizedRight.edgeStyle &&
-    normalizedLeft.showGrid === normalizedRight.showGrid &&
-    normalizedLeft.showNavigationPreview === normalizedRight.showNavigationPreview &&
-    normalizedLeft.snapToGrid === normalizedRight.snapToGrid
-  );
+  return sameNormalizedSettings(normalizeCanvasSettings, left, right);
 }
 
 export function cleanCssSnippetFileName(name: string) {
@@ -498,14 +468,7 @@ export function sameCssSnippetSettings(
   left: CssSnippetSettings | undefined | null,
   right: CssSnippetSettings | undefined | null,
 ) {
-  const normalizedLeft = normalizeCssSnippetSettings(left);
-  const normalizedRight = normalizeCssSnippetSettings(right);
-
-  return (
-    normalizedLeft.directory === normalizedRight.directory &&
-    normalizedLeft.enabled.length === normalizedRight.enabled.length &&
-    normalizedLeft.enabled.every((name, index) => name === normalizedRight.enabled[index])
-  );
+  return sameNormalizedSettings(normalizeCssSnippetSettings, left, right);
 }
 
 export function cleanPluginId(id: string) {
@@ -530,13 +493,7 @@ export function samePluginSettings(
   left: PluginSettings | undefined | null,
   right: PluginSettings | undefined | null,
 ) {
-  const normalizedLeft = normalizePluginSettings(left);
-  const normalizedRight = normalizePluginSettings(right);
-
-  return (
-    normalizedLeft.enabled.length === normalizedRight.enabled.length &&
-    normalizedLeft.enabled.every((id, index) => id === normalizedRight.enabled[index])
-  );
+  return sameNormalizedSettings(normalizePluginSettings, left, right);
 }
 
 export function normalizeAiSettings(settings: AiSettings | undefined | null) {
@@ -552,15 +509,7 @@ export function sameAiSettings(
   left: AiSettings | undefined | null,
   right: AiSettings | undefined | null,
 ) {
-  const normalizedLeft = normalizeAiSettings(left);
-  const normalizedRight = normalizeAiSettings(right);
-
-  return (
-    normalizedLeft.enabled === normalizedRight.enabled &&
-    normalizedLeft.baseUrl === normalizedRight.baseUrl &&
-    normalizedLeft.model === normalizedRight.model &&
-    normalizedLeft.apiKey === normalizedRight.apiKey
-  );
+  return sameNormalizedSettings(normalizeAiSettings, left, right);
 }
 
 export function resolveAppearance(appearance: AppearanceMode): Exclude<AppearanceMode, "auto"> {

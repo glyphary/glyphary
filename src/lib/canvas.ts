@@ -67,7 +67,6 @@ export const defaultCanvasNodeWidth = 260;
 export const defaultCanvasNodeHeight = 160;
 export const defaultCanvasGroupWidth = 420;
 export const defaultCanvasGroupHeight = 260;
-export const canvasEdgeStrokeWidth = 2.5;
 export const canvasSnapGridSize = 20;
 export const canvasVaultRootDirectory = "";
 

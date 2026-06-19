@@ -8,7 +8,8 @@ import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { TaskList } from "@tiptap/extension-task-list";
-import { defaultTidbitPathPattern, expandDateTemplate } from "./logic";
+import { defaultTidbitPathPattern } from "./lib/defaults";
+import { expandDateTemplate } from "./lib/dates";
 import { normalizeVaultAppearanceSettings } from "./lib/settings";
 import type { VaultAppearanceSettings } from "./lib/app-types";
 

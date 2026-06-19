@@ -2,13 +2,29 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import {
+  aiBuilderVaultQueries,
+} from "../.test-dist/ai-builder.js";
+import {
   calendarDateKey,
   calendarDayRelativePath,
   calendarDayTitle,
   calendarPathDateKey,
+} from "../.test-dist/calendar.js";
+import {
   clampResizableDrawerWidth,
+  findTabAcrossSplitGroups,
+  recentFilesWithOpenedFile,
+  remainingGroupAfterSplitPaneClose,
+  splitHasDirtyTabs,
+  tabIdForFile,
+  tabsAfterClose,
+} from "../.test-dist/tabs.js";
+import {
   cleanVaultAssetReference,
-  composeMarkdown,
+  displayVaultRelativePath,
+  escapeMarkdownUrl,
+} from "../.test-dist/paths.js";
+import {
   defaultDrawerOpen,
   defaultExcalidrawDirectory,
   defaultFrontmatterPillHeader,
@@ -19,32 +35,34 @@ import {
   defaultVaultImageDirectory,
   defaultTidbitGlobalShortcut,
   defaultTidbitPathPattern,
-  displayVaultRelativePath,
   emptyCalloutMarkdown,
   emptyCollapseMarkdown,
   emptyColumnsMarkdown,
   emptyHtmlBlockMarkdown,
   emptyTableMarkdown,
-  aiBuilderVaultQueries,
+  maxRecentFiles,
+} from "../.test-dist/defaults.js";
+import {
+  composeMarkdown,
+  frontmatterListValues,
+  markdownHeadings,
+  splitMetaHeader,
+} from "../.test-dist/markdown.js";
+import {
   excalidrawFileNameForTitle,
+  fileNameForDroppedImage,
+  isSupportedImageFile,
+} from "../.test-dist/assets.js";
+import {
   expandDateFormat,
   expandDateTemplate,
-  escapeMarkdownUrl,
-  fileNameForDroppedImage,
-  findTabAcrossSplitGroups,
-  frontmatterListValues,
+} from "../.test-dist/dates.js";
+import {
   isMacOsPlatform,
-  isSupportedImageFile,
-  markdownHeadings,
-  maxRecentFiles,
-  recentFilesWithOpenedFile,
-  remainingGroupAfterSplitPaneClose,
+} from "../.test-dist/platform.js";
+import {
   richLinkMarkdown,
-  splitHasDirtyTabs,
-  splitMetaHeader,
-  tabIdForFile,
-  tabsAfterClose,
-} from "../.test-dist/logic.js";
+} from "../.test-dist/rich-links.js";
 
 test("frontmatter is split out of the editor body and composed back without losing it", () => {
   const source = "---\ntitle: Alpha\ntags: [note]\n---\n# Body\n";
@@ -809,7 +827,7 @@ test("frontend pure logic is split into documented helper modules", () => {
   const helperFiles = readdirSync("src/lib")
     .filter((file) => file.endsWith(".ts"))
     .map((file) => `src/lib/${file}`);
-  const barrel = readFileSync("src/logic.ts", "utf8");
+  const app = readFileSync("src/App.tsx", "utf8");
 
   assert.ok(helperFiles.length >= 8);
 
@@ -821,12 +839,9 @@ test("frontend pure logic is split into documented helper modules", () => {
     assert.match(source, /Contracts:/, `${file} should document contracts`);
   }
 
-  assert.match(barrel, /Compatibility barrel for pure frontend logic/);
-  assert.match(barrel, /export \* from "\.\/lib\/ai-builder\.js"/);
-  assert.match(barrel, /export \* from "\.\/lib\/canvas\.js"/);
-  assert.match(barrel, /export \* from "\.\/lib\/markdown\.js"/);
-  assert.match(barrel, /export \* from "\.\/lib\/tabs\.js"/);
-  assert.doesNotMatch(barrel, /function splitMetaHeader/);
+  assert.match(app, /from "\.\/lib\/markdown"/);
+  assert.match(app, /from "\.\/lib\/settings"/);
+  assert.doesNotMatch(app, /from "\.\/logic"/);
 });
 
 test("documentation website introduces core Glyphary workflows", () => {
@@ -2084,6 +2099,7 @@ test("table row and column actions are contextual command palette entries", () =
 
 test("list task quote code table columns and callout toolbar actions render as icons", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const toolbarIcons = readFileSync("src/toolbar-icons.tsx", "utf8");
   const css = readFileSync("src/App.css", "utf8");
   const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 
@@ -2092,8 +2108,9 @@ test("list task quote code table columns and callout toolbar actions render as i
   assert.match(app, /TaskItem\.configure\(\{\s*nested: true,/);
   assert.match(app, /TaskList/);
   assert.match(app, /toggleTaskList\(\)/);
-  assert.match(app, /type ToolbarIconName/);
-  assert.match(app, /function renderToolbarIcon/);
+  assert.match(app, /renderToolbarIcon\(action\.icon\)/);
+  assert.match(toolbarIcons, /export type ToolbarIconName/);
+  assert.match(toolbarIcons, /export function renderToolbarIcon/);
   assert.match(app, /icon: "bullet-list"/);
   assert.match(app, /icon: "ordered-list"/);
   assert.match(app, /icon: "task-list"/);

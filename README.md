@@ -658,7 +658,7 @@ Important files:
 
 - `src/App.tsx`: main React application and UI behavior.
 - `src/App.css`: app styling, drawers, editor surface, themes.
-- `src/logic.ts`: pure frontend helper logic used by app and tests.
+- `src/lib/`: pure frontend helper modules used by app and tests.
 - `tests/logic.test.mjs`: frontend unit tests.
 - `docs-site/`: Voilà-style static product page for Glyphary.
 - `docs-manual/`: task-oriented user manual and onboarding documentation.

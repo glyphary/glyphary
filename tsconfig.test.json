@@ -8,5 +8,5 @@
     "outDir": ".test-dist",
     "sourceMap": false
   },
-  "include": ["src/logic.ts"]
+  "include": ["src/lib/**/*.ts"]
 }
