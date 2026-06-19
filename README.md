@@ -22,6 +22,7 @@ Glyphary is a Tauri desktop Markdown editor built with React, TypeScript, and Ti
 - Expand/collapse blocks using `::: collapse "Title"` containers rendered as native details blocks.
 - Rich link cards that fetch page metadata and render URL previews.
 - Excalidraw drawings stored as vault `.excalidraw` files and embedded in notes.
+- Obsidian-compatible `.canvas` files open as React Flow graph tabs with node movement, node deletion, and edge editing.
 - Code blocks support language selection and Markdown fences such as ```` ```python ```` or ```` ```sh ````.
 - Syntax highlighting for code blocks using `highlight.js` and `lowlight`.
 - A ```` ```toc ```` fenced block renders as an inline table of contents when not being edited.
@@ -236,6 +237,14 @@ Drawings are stored as separate vault files and referenced from Markdown:
 ```
 
 The editor renders the embed as a preview block. Double-clicking the block reopens the drawing editor. Saving the drawing writes the Excalidraw JSON source back to the vault file; the Markdown note keeps only the embed reference.
+
+## Canvas Files
+
+Obsidian-compatible `.canvas` files open in tabs as React Flow graphs and use a distinct connected-node icon in the Files and Recent drawers. Text, file, link, and group nodes are rendered with Obsidian numeric or hex color accents. Markdown file nodes show bounded previews and can be double-clicked to open the referenced note; image, video, and audio nodes preview in place when their vault path is available through the asset protocol.
+
+Drag text, file, and link nodes to update their positions; group nodes behave as visual regions behind the graph. Right-click the canvas to add a card, add a Markdown note from the vault, add media from the vault, add a web page, create a group, or snap node positions to the grid. New cards are edited directly in place; double-click an existing card to edit it again, use `Cmd+Enter` or `Ctrl+Enter` to commit, and use `Esc` to cancel. Note and media insertion use progressive in-app vault trees, loading each folder only when expanded, rather than scanning the whole vault or opening a system file chooser.
+
+Drag between node handles to create arrowed edges. Select an edge and press Delete or Backspace to remove it. Right-click any node to choose an Obsidian canvas color, clear its color, or delete it; deleting a node also removes attached edges before saving. Save the tab normally to write node creation, movement, color changes, edge edits, and deletions back to the `.canvas` file. Unknown JSON Canvas fields are preserved so Obsidian and plugin-specific metadata can round-trip.
 
 ## Calendar Notes
 

@@ -48,6 +48,7 @@ pub(crate) fn walk_note_files(
 
     Ok(())
 }
+
 #[tauri::command]
 pub(crate) fn list_vault_dir(root: String, relative: String) -> Result<Vec<VaultEntry>, String> {
     let (root, dir) = resolve_existing(&root, &relative)?;

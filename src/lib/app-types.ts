@@ -248,6 +248,7 @@ export type ActiveFile = {
 
 export type DocumentTab = {
   id: string;
+  kind: "markdown" | "canvas";
   activeFile: ActiveFile | null;
   pageName: string;
   metaHeader: string;

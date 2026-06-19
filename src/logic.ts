@@ -14,6 +14,7 @@ export * from "./lib/assets.js";
 export * from "./lib/ai-builder.js";
 export * from "./lib/app-types.js";
 export * from "./lib/calendar.js";
+export * from "./lib/canvas.js";
 export * from "./lib/dates.js";
 export * from "./lib/defaults.js";
 export * from "./lib/markdown.js";

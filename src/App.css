@@ -1197,13 +1197,15 @@ body.workspace-resizing * {
   fill: rgb(255 255 255 / 0.28);
 }
 
-.markdown-icon .document-page {
+.markdown-icon .document-page,
+.canvas-file-icon .document-page {
   fill: #f7f9fb;
   stroke: #8d99a8;
   stroke-width: 1;
 }
 
-.markdown-icon .document-fold {
+.markdown-icon .document-fold,
+.canvas-file-icon .document-fold {
   fill: #dfe6ee;
   stroke: #8d99a8;
   stroke-linejoin: round;
@@ -1227,6 +1229,23 @@ body.workspace-resizing * {
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
+}
+
+.canvas-file-icon .canvas-edge-line {
+  fill: none;
+  stroke: #7c5cff;
+  stroke-linecap: round;
+  stroke-width: 1.25;
+}
+
+.canvas-file-icon .canvas-node-dot {
+  fill: #7c5cff;
+  stroke: #ffffff;
+  stroke-width: 0.8;
+}
+
+.canvas-file-icon .canvas-node-dot.primary {
+  fill: #24a6a0;
 }
 
 .vault-entry:hover .vault-entry-icon,
@@ -1630,6 +1649,462 @@ body.workspace-resizing * {
   position: relative;
   z-index: 1;
   min-height: 100%;
+}
+
+.canvas-editor-pane {
+  min-height: 0;
+}
+
+.canvas-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: color-mix(in srgb, var(--surface) 28%, transparent);
+}
+
+.canvas-view .react-flow {
+  font-family: var(--font-ui);
+  color: var(--text);
+}
+
+.canvas-view .react-flow__pane {
+  cursor: grab;
+}
+
+.canvas-view .react-flow__pane:active {
+  cursor: grabbing;
+}
+
+.canvas-view .react-flow__controls,
+.canvas-view .react-flow__minimap {
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  box-shadow: 0 10px 30px var(--shadow);
+}
+
+.canvas-view .react-flow__edge-path,
+.canvas-view .react-flow__connection-path {
+  stroke-width: 2.5;
+}
+
+.canvas-view .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid color-mix(in srgb, var(--surface) 82%, transparent);
+  background: color-mix(in srgb, var(--canvas-node-accent, var(--accent)) 82%, var(--text));
+  opacity: 0.42;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.canvas-view .react-flow__node:hover .react-flow__handle,
+.canvas-view .react-flow__handle:hover,
+.canvas-view .react-flow__handle.connectingfrom,
+.canvas-view .react-flow__handle.connectingto {
+  opacity: 1;
+  transform: scale(1.16);
+}
+
+.canvas-context-menu {
+  position: absolute;
+  z-index: 92;
+  display: grid;
+  min-width: 190px;
+  gap: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 14px 32px var(--shadow-strong);
+  padding: 5px;
+}
+
+.canvas-context-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  padding: 8px 10px;
+  color: var(--heading);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-align: left;
+}
+
+.canvas-context-menu button:hover {
+  background: var(--hover);
+}
+
+.canvas-menu-label {
+  padding: 5px 8px 2px;
+  color: var(--text-soft);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.canvas-color-menu {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px 6px 8px;
+}
+
+.canvas-context-menu .canvas-color-choice {
+  display: grid;
+  place-items: center;
+  min-height: 28px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 7px;
+  background: var(--canvas-choice-color, var(--surface-muted));
+  padding: 0;
+}
+
+.canvas-context-menu .canvas-color-choice.clear {
+  grid-column: span 2;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 0.72rem;
+}
+
+.canvas-context-menu button.danger {
+  color: var(--danger, #c94848);
+}
+
+.canvas-dialog-screen {
+  /* Canvas dialogs are portaled to body because React Flow transforms can trap
+     descendants. The backdrop fills the viewport; the dialog itself owns centering. */
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: color-mix(in srgb, var(--app-bg) 44%, transparent);
+}
+
+.canvas-dialog {
+  position: fixed;
+  top: 50vh;
+  left: 50vw;
+  display: grid;
+  width: min(520px, calc(100% - 40px));
+  max-height: min(620px, calc(100% - 40px));
+  gap: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 18px 44px var(--shadow-strong);
+  padding: 18px;
+  transform: translate(-50%, -50%);
+}
+
+.canvas-dialog h2 {
+  margin: 0;
+  color: var(--heading);
+  font-size: 1rem;
+}
+
+.canvas-dialog label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.canvas-dialog input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-muted);
+  padding: 9px 10px;
+  color: var(--text);
+  font: inherit;
+}
+
+.canvas-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.canvas-dialog-actions button {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-muted);
+  padding: 8px 12px;
+  color: var(--heading);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.canvas-dialog-actions button[type="submit"] {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-muted));
+}
+
+.canvas-vault-picker {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.canvas-vault-picker-list {
+  display: grid;
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
+  gap: 2px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-muted) 48%, transparent);
+  padding: 6px;
+  padding-right: 2px;
+}
+
+.canvas-vault-tree-branch,
+.canvas-vault-tree-children {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvas-vault-tree-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 7px 10px;
+  color: var(--heading);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.canvas-vault-tree-row.file {
+  grid-template-columns: 16px minmax(0, 0.72fr) minmax(0, 1.28fr);
+}
+
+.canvas-vault-tree-row.folder {
+  font-weight: 850;
+}
+
+.canvas-vault-tree-row:hover {
+  background: var(--hover);
+}
+
+.canvas-vault-tree-row strong {
+  overflow: hidden;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-vault-tree-row small {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-dialog-status {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.canvas-dialog-status.error {
+  color: var(--danger, #c94848);
+}
+
+.canvas-node-card,
+.canvas-group-node {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 1.5px solid var(--canvas-node-border, var(--border));
+  border-radius: 8px;
+  background: var(--canvas-node-bg, color-mix(in srgb, var(--surface) 88%, transparent));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--shadow) 70%, transparent);
+  color: var(--text);
+}
+
+.canvas-node-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 8px;
+  padding: 10px;
+}
+
+.canvas-text-node {
+  grid-template-rows: 1fr;
+}
+
+.canvas-card-editor {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-family: var(--font-editor);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  padding: 0;
+}
+
+.canvas-card-editor::selection {
+  background: var(--selection);
+}
+
+.canvas-file-node {
+  border-color: var(--canvas-node-border, color-mix(in srgb, var(--accent) 38%, var(--border)));
+}
+
+.canvas-link-node {
+  border-style: dashed;
+}
+
+.canvas-web-preview {
+  width: 100%;
+  min-height: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.canvas-web-fallback {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+}
+
+.canvas-group-node {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px;
+  background: var(--canvas-node-bg, color-mix(in srgb, var(--surface) 18%, transparent));
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.canvas-group-node strong {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  color: var(--muted-strong);
+  font-size: 0.74rem;
+  font-weight: 900;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.canvas-node-card header {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvas-node-card header span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.canvas-node-card header strong {
+  overflow: hidden;
+  color: var(--heading);
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-markdown-preview {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-editor);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.canvas-markdown-preview p,
+.canvas-markdown-preview strong {
+  margin: 0;
+}
+
+.canvas-preview-heading {
+  display: block;
+  color: var(--heading);
+  font-family: var(--font-ui);
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.canvas-preview-task,
+.canvas-preview-bullet {
+  display: flex;
+  gap: 6px;
+}
+
+.canvas-empty-preview {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.canvas-media-preview {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  overflow: hidden;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--selection) 66%, transparent);
+}
+
+.canvas-audio-preview {
+  align-self: center;
+  width: 100%;
+}
+
+.canvas-view-error {
+  display: grid;
+  flex: 1;
+  align-content: start;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  background: color-mix(in srgb, var(--surface) 36%, transparent);
+  padding: 24px;
+}
+
+.canvas-view-error h2,
+.canvas-view-error p {
+  margin: 0;
+}
+
+.canvas-view-error pre {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 12px;
 }
 
 .editor-surface .ProseMirror {

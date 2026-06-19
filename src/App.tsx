@@ -55,6 +55,7 @@ import xml from "highlight.js/lib/languages/xml";
 import { createLowlight } from "lowlight";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
+import { CanvasView, canvasTitle, isCanvasPath } from "./CanvasView";
 import {
   aiBuilderEffectiveTaskQueries,
   aiBuilderPromptRequestsTaskContext,
@@ -1718,6 +1719,38 @@ function FolderIcon({ className = "vault-entry-icon folder-icon" }: { className?
   );
 }
 
+function MarkdownFileIcon() {
+  return (
+    <svg aria-hidden="true" className="vault-entry-icon markdown-icon" viewBox="0 0 32 32">
+      <path className="document-page" d="M8.5 3.8h10.9l4.1 4.2v20.2h-15z" />
+      <path className="document-fold" d="M19.2 3.9v4.4h4.2z" />
+      <path className="document-line" d="M11.3 11.8h9.3" />
+      <path className="document-line" d="M11.3 14.7h9.3" />
+      <rect className="markdown-badge" x="9.9" y="18.3" width="12.2" height="6.1" rx="1.8" />
+      <text x="16" y="22.8" textAnchor="middle">
+        md
+      </text>
+    </svg>
+  );
+}
+
+function CanvasFileIcon() {
+  return (
+    <svg aria-hidden="true" className="vault-entry-icon canvas-file-icon" viewBox="0 0 32 32">
+      <path className="document-page" d="M8.5 3.8h10.9l4.1 4.2v20.2h-15z" />
+      <path className="document-fold" d="M19.2 3.9v4.4h4.2z" />
+      <circle className="canvas-node-dot primary" cx="13" cy="13" r="2.2" />
+      <circle className="canvas-node-dot" cx="20.2" cy="12.2" r="2" />
+      <circle className="canvas-node-dot" cx="16.8" cy="21.2" r="2.1" />
+      <path className="canvas-edge-line" d="M14.8 12.6 18.3 12.3M13.9 14.7l2 4.5M19.5 14l-1.8 5.3" />
+    </svg>
+  );
+}
+
+function VaultFileIcon({ relativePath }: { relativePath: string }) {
+  return isCanvasPath(relativePath) ? <CanvasFileIcon /> : <MarkdownFileIcon />;
+}
+
 function isMoveFolderDestinationDisabled(relativePath: string, movingEntry?: VaultEntry | null) {
   if (!movingEntry?.isDir) {
     return false;
@@ -2774,6 +2807,7 @@ function tabTitle(tab: DocumentTab) {
 function createUntitledTab(markdown = initialMarkdown): DocumentTab {
   return {
     id: `untitled:${Date.now()}:${Math.random().toString(36).slice(2)}`,
+    kind: "markdown",
     activeFile: null,
     pageName: "Untitled note",
     metaHeader: "",
@@ -5069,7 +5103,10 @@ function App() {
     const group = editorGroupsRef.current[groupId];
     const tab = group.tabs.find((documentTab) => documentTab.id === group.activeTabId);
     const groupEditor = editorForGroup(groupId);
-    const nextMarkdown = groupEditor?.getMarkdown() ?? tab?.markdown ?? initialMarkdown;
+    const nextMarkdown =
+      tab?.kind === "canvas"
+        ? tab.markdown
+        : groupEditor?.getMarkdown() ?? tab?.markdown ?? initialMarkdown;
     const isActiveGroup = groupId === activeGroupIdRef.current;
 
     // Inactive panes do not update the top-level mirrors, so their snapshot has
@@ -5116,7 +5153,7 @@ function App() {
   function hydrateDocumentTab(tab: DocumentTab, groupId = activeGroupIdRef.current) {
     const groupEditor = editorForGroup(groupId);
 
-    if (!groupEditor) {
+    if (!groupEditor && tab.kind !== "canvas") {
       return;
     }
 
@@ -5141,7 +5178,9 @@ function App() {
     if (groupId !== activeGroupIdRef.current) {
       // Loading an inactive split pane should update its editor content, but
       // must not move drawers, toolbar state, or persisted workspace focus.
-      setEditorMarkdownContent(groupEditor, tab.markdown);
+      if (groupEditor && tab.kind !== "canvas") {
+        setEditorMarkdownContent(groupEditor, tab.markdown);
+      }
       window.setTimeout(() => {
         hydratingEditor.current[groupId] = false;
       }, 0);
@@ -5156,9 +5195,13 @@ function App() {
     setMarkdownDraft(tab.markdownDraft);
     setDirty(tab.dirty);
     setPageNameEditing(false);
-    setEditorMarkdownContent(groupEditor, tab.markdown);
+    if (groupEditor && tab.kind !== "canvas") {
+      setEditorMarkdownContent(groupEditor, tab.markdown);
+    }
     void revealFileInVaultDrawer(tab.activeFile);
-    syncEditorState(groupEditor);
+    if (groupEditor) {
+      syncEditorState(groupEditor);
+    }
     window.setTimeout(() => {
       hydratingEditor.current[groupId] = false;
     }, 0);
@@ -5179,10 +5222,30 @@ function App() {
   }
 
   function createDocumentTabFromFile(file: OpenedFile): DocumentTab {
+    // Canvas tabs keep the raw JSON in the same content fields used by
+    // Markdown tabs, but they bypass frontmatter parsing and Tiptap hydration.
+    if (isCanvasPath(file.relativePath)) {
+      return {
+        id: tabIdForFile(file.relativePath),
+        kind: "canvas",
+        activeFile: {
+          name: file.name,
+          relativePath: file.relativePath,
+        },
+        pageName: canvasTitle(file.name),
+        metaHeader: "",
+        metaDelimiter: defaultMetaDelimiter,
+        markdown: file.content,
+        markdownDraft: file.content,
+        dirty: false,
+      };
+    }
+
     const parts = splitMetaHeader(file.content);
 
     return {
       id: tabIdForFile(file.relativePath),
+      kind: "markdown",
       activeFile: {
         name: file.name,
         relativePath: file.relativePath,
@@ -6900,10 +6963,17 @@ function App() {
     }
 
     const groupId = activeGroupIdRef.current;
+    const activeTab = editorGroupsRef.current[groupId].tabs.find(
+      (tab) => tab.id === editorGroupsRef.current[groupId].activeTabId,
+    );
     let file = activeFileRef.current;
     const requestedName = pageNameRef.current.trim();
 
-    if (requestedName && requestedName !== fileNameWithoutMarkdownExtension(file.name)) {
+    if (
+      activeTab?.kind !== "canvas" &&
+      requestedName &&
+      requestedName !== fileNameWithoutMarkdownExtension(file.name)
+    ) {
       // The displayed page name is the rename source of truth. Renaming first
       // lets the subsequent write target the new path and keeps tab IDs stable
       // with the file-relative-path convention.
@@ -6950,18 +7020,21 @@ function App() {
       await loadEntries(vaultRoot, currentDir);
     }
 
-    const content = composeMarkdown(
-      metaHeaderRef.current,
-      metaDelimiterRef.current,
-      editor.getMarkdown(),
-    );
+    const content =
+      activeTab?.kind === "canvas"
+        ? markdownDraft
+        : composeMarkdown(
+            metaHeaderRef.current,
+            metaDelimiterRef.current,
+            editor.getMarkdown(),
+          );
 
     await invoke("write_vault_file", {
       root: vaultRoot,
       relative: file.relativePath,
       content,
     });
-    const savedMarkdown = editor.getMarkdown();
+    const savedMarkdown = activeTab?.kind === "canvas" ? markdownDraft : editor.getMarkdown();
     const savedDraft = markdownDraft;
     const activeTabIdForGroup = editorGroupsRef.current[groupId].activeTabId;
     const savedTabs = editorGroupsRef.current[groupId].tabs.map((tab) =>
@@ -6969,7 +7042,9 @@ function App() {
         ? {
             ...tab,
             activeFile: file,
-            pageName: fileNameWithoutMarkdownExtension(file.name),
+            pageName: activeTab?.kind === "canvas"
+              ? canvasTitle(file.name)
+              : fileNameWithoutMarkdownExtension(file.name),
             metaHeader: metaHeaderRef.current,
             metaDelimiter: metaDelimiterRef.current,
             markdown: savedMarkdown,
@@ -8064,6 +8139,22 @@ function App() {
   resetDocumentRef.current = resetDocument;
 
   function applyMarkdown() {
+    const activeTab = editorGroupsRef.current[activeGroupIdRef.current].tabs.find(
+      (tab) => tab.id === editorGroupsRef.current[activeGroupIdRef.current].activeTabId,
+    );
+
+    if (activeTab?.kind === "canvas") {
+      setMarkdown(markdownDraft);
+      updateActiveTab({
+        markdown: markdownDraft,
+        markdownDraft,
+        dirty: true,
+      });
+      setActiveDocumentDirty(true);
+      setStatus(`Unsaved changes in ${activeFileRef.current?.name ?? "canvas"}`);
+      return;
+    }
+
     const parts = splitMetaHeader(markdownDraft);
 
     // Source edits may include frontmatter pasted by hand. Split it back out so
@@ -8073,6 +8164,29 @@ function App() {
     }
 
     setEditorBody(parts.body, false);
+  }
+
+  function updateCanvasDocument(groupId: EditorGroupId, nextContent: string) {
+    const group = editorGroupsRef.current[groupId];
+    const tab = group.tabs.find((documentTab) => documentTab.id === group.activeTabId);
+
+    if (tab?.kind !== "canvas") {
+      return;
+    }
+
+    updateGroupTab(groupId, tab.id, {
+      markdown: nextContent,
+      markdownDraft: nextContent,
+      dirty: true,
+    });
+
+    if (groupId === activeGroupIdRef.current) {
+      setMarkdown(nextContent);
+      setMarkdownDraft(nextContent);
+      setDirty(true);
+    }
+
+    setStatus(`Unsaved canvas changes in ${tab.activeFile?.name ?? "canvas"}`);
   }
 
   function appendTable() {
@@ -10019,6 +10133,7 @@ function App() {
     const paneMetaHeader = isActiveGroup ? metaHeader : groupActiveTab?.metaHeader ?? "";
     const paneMarkdown = isActiveGroup ? markdown : groupActiveTab?.markdown ?? "";
     const paneActiveFile = isActiveGroup ? activeFile : groupActiveTab?.activeFile ?? null;
+    const isCanvasTab = groupActiveTab?.kind === "canvas";
     const frontmatterPillSettings = normalizeFrontmatterPillSettings(
       vaultSettings.frontmatterPills,
     );
@@ -10071,8 +10186,9 @@ function App() {
             </div>
           ))}
         </div>
-        <div className="editor-pane">
-        <div className="metadata-shell" aria-label="Metadata editor">
+        <div className={isCanvasTab ? "editor-pane canvas-editor-pane" : "editor-pane"}>
+        {!isCanvasTab ? (
+          <div className="metadata-shell" aria-label="Metadata editor">
           <div className="page-name-control">
             {pageNameEditing && isActiveGroup ? (
               <input
@@ -10155,7 +10271,8 @@ function App() {
             </label>
           ) : null}
         </div>
-        {isActiveGroup ? (
+        ) : null}
+        {isActiveGroup && !isCanvasTab ? (
           <div className="toolbar" aria-label="Formatting toolbar">
             {toolbarActions.map((action) => (
               <button
@@ -10176,18 +10293,28 @@ function App() {
           </div>
         ) : null}
 
-        <div className="editor-surface-frame">
-          <EditorContent
-            className="editor-surface markdown-rendered markdown-preview-view"
-            editor={groupEditor}
-            onDoubleClick={openImagePreviewFromEditor}
+        {isCanvasTab ? (
+          <CanvasView
+            content={paneMarkdown}
+            name={panePageName}
+            vaultRoot={vaultRoot}
+            onChange={(nextContent) => updateCanvasDocument(groupId, nextContent)}
+            onOpenFile={openFile}
           />
-          {!paneMarkdown.trim() ? (
-            <div className="empty-document-placeholder" aria-hidden="true">
-              Start writing...
-            </div>
-          ) : null}
-        </div>
+        ) : (
+          <div className="editor-surface-frame">
+            <EditorContent
+              className="editor-surface markdown-rendered markdown-preview-view"
+              editor={groupEditor}
+              onDoubleClick={openImagePreviewFromEditor}
+            />
+            {!paneMarkdown.trim() ? (
+              <div className="empty-document-placeholder" aria-hidden="true">
+                Start writing...
+              </div>
+            ) : null}
+          </div>
+        )}
         </div>
       </div>
     );
@@ -10228,6 +10355,11 @@ function App() {
     transform: `translate(${settingsOffset.x}px, ${settingsOffset.y}px)`,
   } as CSSProperties;
   const aiBuilderHistoryTurns = activeAiBuilderHistoryTurns();
+  const activeDocumentTab =
+    editorGroups[activeGroupId]?.tabs.find(
+      (tab) => tab.id === editorGroups[activeGroupId]?.activeTabId,
+    ) ?? null;
+  const activeDocumentIsCanvas = activeDocumentTab?.kind === "canvas";
 
   return (
     <main className={appShellClassName} style={appShellStyle}>
@@ -10502,27 +10634,7 @@ function App() {
                         onContextMenu={(event) => handleFolderContextMenu(entry, event)}
                         type="button"
                       >
-                        {entry.isDir ? (
-                          <FolderIcon />
-                        ) : (
-                          <svg
-                            aria-hidden="true"
-                            className="vault-entry-icon markdown-icon"
-                            viewBox="0 0 32 32"
-                          >
-                            <path
-                              className="document-page"
-                              d="M8.5 3.8h10.9l4.1 4.2v20.2h-15z"
-                            />
-                            <path className="document-fold" d="M19.2 3.9v4.4h4.2z" />
-                            <path className="document-line" d="M11.3 11.8h9.3" />
-                            <path className="document-line" d="M11.3 14.7h9.3" />
-                            <rect className="markdown-badge" x="9.9" y="18.3" width="12.2" height="6.1" rx="1.8" />
-                            <text x="16" y="22.8" textAnchor="middle">
-                              md
-                            </text>
-                          </svg>
-                        )}
+                        {entry.isDir ? <FolderIcon /> : <VaultFileIcon relativePath={entry.relativePath} />}
                         <strong>{entry.name}</strong>
                       </button>
                     ))}
@@ -10544,23 +10656,7 @@ function App() {
                       type="button"
                       onClick={() => openFile(file.relativePath)}
                     >
-                      <svg
-                        aria-hidden="true"
-                        className="vault-entry-icon markdown-icon"
-                        viewBox="0 0 32 32"
-                      >
-                        <path
-                          className="document-page"
-                          d="M8.5 3.8h10.9l4.1 4.2v20.2h-15z"
-                        />
-                        <path className="document-fold" d="M19.2 3.9v4.4h4.2z" />
-                        <path className="document-line" d="M11.3 11.8h9.3" />
-                        <path className="document-line" d="M11.3 14.7h9.3" />
-                        <rect className="markdown-badge" x="9.9" y="18.3" width="12.2" height="6.1" rx="1.8" />
-                        <text x="16" y="22.8" textAnchor="middle">
-                          md
-                        </text>
-                      </svg>
+                      <VaultFileIcon relativePath={file.relativePath} />
                       <span className="recent-entry-text">
                         <strong>{file.name}</strong>
                         <em>{file.relativePath}</em>
@@ -10862,7 +10958,9 @@ function App() {
                   </h2>
                   <span>
                     {drawerItem === "source"
-                      ? "Markdown source and export"
+                      ? activeDocumentIsCanvas
+                        ? "Canvas JSON source"
+                        : "Markdown source and export"
                       : drawerItem === "toc"
                         ? "Current document headings"
                         : "Monthly calendar notes"}
@@ -10881,13 +10979,13 @@ function App() {
                 <div className="drawer-panel source-panel">
                   <div className="markdown-import">
                     <div className="pane-header compact">
-                      <h2>Source</h2>
+                      <h2>{activeDocumentIsCanvas ? "JSON Source" : "Source"}</h2>
                       <button className="inline-action" type="button" onClick={applyMarkdown}>
                         Apply
                       </button>
                     </div>
                     <textarea
-                      aria-label="Markdown source"
+                      aria-label={activeDocumentIsCanvas ? "Canvas JSON source" : "Markdown source"}
                       value={markdownDraft}
                       onChange={(event) => {
                         const nextDraft = event.currentTarget.value;
@@ -10909,7 +11007,7 @@ function App() {
                   </div>
                   <div className="markdown-export">
                     <div className="pane-header">
-                      <h2>Export</h2>
+                      <h2>{activeDocumentIsCanvas ? "Preview Source" : "Export"}</h2>
                       <span>
                         {dirty ? "Unsaved / " : ""}
                         {stats.words} words / {stats.characters} chars
