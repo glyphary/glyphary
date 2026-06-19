@@ -904,6 +904,7 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /HTML blocks/);
   assert.match(manualHtml, /renders a sanitized preview/);
   assert.match(manualHtml, /Canvas Files/);
+  assert.match(manualHtml, /\.\/assets\/screenshots\/canvas\.png/);
   assert.match(manualHtml, /connected-node file icon/);
   assert.match(manualHtml, /Add Note From Vault/);
   assert.match(manualHtml, /Cmd\+Enter/);
