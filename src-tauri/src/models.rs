@@ -48,6 +48,8 @@ pub(crate) struct RenamedDirectory {
 pub(crate) struct VaultSettings {
     #[serde(default = "crate::defaults::default_asset_directory")]
     pub(crate) asset_directory: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub(crate) new_tab_file: String,
     #[serde(default)]
     pub(crate) frontmatter_pills: FrontmatterPillSettings,
     #[serde(default)]

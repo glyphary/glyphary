@@ -45,6 +45,7 @@ import {
 import {
   composeMarkdown,
   frontmatterListValues,
+  frontmatterScalarValue,
   markdownHeadings,
   splitMetaHeader,
 } from "../.test-dist/markdown.js";
@@ -88,6 +89,14 @@ test("frontmatter supports toml delimiters and ignores unterminated headers", ()
     metaDelimiter: "---",
     body: "---\ntitle: Alpha\n# Body\n",
   });
+  assert.deepEqual(
+    splitMetaHeader("---\nConvoso: [[Convoso Debugging]]\n\nNormal note text\n---\n"),
+    {
+      metaHeader: "",
+      metaDelimiter: "---",
+      body: "---\nConvoso: [[Convoso Debugging]]\n\nNormal note text\n---\n",
+    },
+  );
 });
 
 test("date templates expand centrally for tidbit paths", () => {
@@ -176,6 +185,14 @@ tags: [ignored]
   assert.deepEqual(frontmatterListValues("owners:\n  - Chris\n  - Sam\n"), []);
 });
 
+test("frontmatter banner values can be extracted for page chrome", () => {
+  assert.equal(
+    frontmatterScalarValue("banner: '![[Attachments/Pasted image 20230521183520.png]]'", "banner"),
+    "![[Attachments/Pasted image 20230521183520.png]]",
+  );
+  assert.equal(frontmatterScalarValue("title: Alpha", "banner"), "");
+});
+
 test("local vault image references are accepted while URLs and path escapes are rejected", () => {
   assert.equal(cleanVaultAssetReference("image.png"), "image.png");
   assert.equal(cleanVaultAssetReference("folder/image.png|alias"), "folder/image.png");
@@ -222,9 +239,17 @@ test("dropped image names follow the pasted-image timestamp convention", () => {
 });
 
 test("drag and paste image filtering accepts supported image formats", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+
   assert.equal(isSupportedImageFile({ name: "photo.png", type: "" }), true);
   assert.equal(isSupportedImageFile({ name: "photo.dat", type: "image/webp" }), true);
   assert.equal(isSupportedImageFile({ name: "notes.txt", type: "text/plain" }), false);
+  assert.match(app, /handlePaste: \(_view: unknown, event: ClipboardEvent\) =>/);
+  assert.match(app, /queueImageImport\(event\.clipboardData\?\.files\)/);
+  assert.match(app, /handleKeyDown: \(view: EditorView, event: KeyboardEvent\) =>/);
+  assert.match(app, /event\.shiftKey && \(event\.metaKey \|\| event\.ctrlKey\) && event\.key\.toLowerCase\(\) === "v"/);
+  assert.match(app, /navigator\.clipboard\?\.readText/);
+  assert.match(app, /view\.pasteText\(text\)/);
 });
 
 test("desktop platform detection controls platform-specific window actions", () => {
@@ -395,6 +420,8 @@ test("columns markdown containers are wired into the editor", () => {
   assert.match(app, /createColumnExtension\(\)/);
   assert.match(app, /createColumnsExtension\(\)/);
   assert.match(app, /appendColumns\(\)/);
+  assert.match(app, /insertContent\(emptyColumnsMarkdown, \{ contentType: "markdown" \}\)/);
+  assert.doesNotMatch(app, /setEditorBody\(`\$\{markdown\.trimEnd\(\)\}\\n\\n\$\{emptyColumnsMarkdown\}`/);
   assert.match(css, /\.markdown-columns/);
   assert.match(css, /\.markdown-column/);
 });
@@ -878,7 +905,12 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(html, /VoilaWeb/);
   assert.match(html, /Three steps from folder to workspace/);
   assert.match(html, /Rich editing without giving up Markdown/);
+  assert.match(html, /page\s+banners/);
+  assert.match(html, /Configure Cmd\+T to open a chosen note/);
+  assert.match(html, /View mode hides editor chrome/);
   assert.match(html, /⌘P/);
+  assert.match(html, /⌘T/);
+  assert.match(html, /⌘⇧V/);
   assert.match(html, /assets\/screenshots\/main-workspace\.png/);
   assert.match(html, /assets\/screenshots\/split-editing\.png/);
   assert.match(css, /\.navbar/);
@@ -896,6 +928,8 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.doesNotMatch(manualHtml, /href="\.\.\/docs\/plugins\.md"/);
   assert.match(manualHtml, /Open A Vault/);
   assert.match(manualHtml, /File And Folder Actions/);
+  assert.match(manualHtml, /Create canvas/);
+  assert.match(manualHtml, /Rename file or canvas/);
   assert.match(manualHtml, /Command Palette/);
   assert.match(manualHtml, /AI Actions/);
   assert.match(manualHtml, /OpenAI-compatible backend/);
@@ -911,6 +945,9 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /local bounded retrieval/);
   assert.match(manualHtml, /does not send the whole vault/);
   assert.match(manualHtml, /Metadata And Frontmatter/);
+  assert.match(manualHtml, /banner: '!\[\[Pasted image 20230521183520\.png\]\]'/);
+  assert.match(manualHtml, /View\/Edit icon selector/);
+  assert.match(manualHtml, /Configure <strong>New Tab<\/strong>/);
   assert.match(manualHtml, /Markdown Features/);
   assert.match(manualHtml, /Excalidraw drawings/);
   assert.match(manualHtml, /Tidbits/);
@@ -934,6 +971,8 @@ test("documentation website introduces core Glyphary workflows", () => {
     /asks for accessibility permission only when this\s+feature is enabled/,
   );
   assert.match(manualHtml, /Settings tabs/);
+  assert.match(manualHtml, /New Tab file/);
+  assert.match(manualHtml, /Cmd\+Shift\+V/);
   assert.match(manualHtml, /glass opacity/);
   assert.match(manualHtml, /Optional editor treatments/);
   assert.match(manualHtml, /Theme Builder groups/);
@@ -978,6 +1017,8 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualCss, /\.manual-toplinks a\.current/);
   assert.match(manualScript, /filterManualSections/);
   assert.match(screenshots, /Main workspace/);
+  assert.match(screenshots, /Settings main tab/);
+  assert.match(screenshots, /New Tab selector/);
   assert.match(screenshots, /docs-site\/assets\/screenshots\/main-workspace\.png/);
   assert.match(makefile, /^docs:/m);
   assert.match(makefile, /^docs-open:/m);
@@ -1087,6 +1128,9 @@ test("wikilinks use the vault filename index for navigation and insertion", () =
   assert.match(appTypes, /export type WikiLinkPickerState/);
   assert.match(app, /createWikiLinkExtension/);
   assert.match(app, /wikiLinkTokenPattern/);
+  assert.match(app, /state\.selection\.\$from\.parent !== parent/);
+  assert.match(app, /wikilink-hidden-syntax/);
+  assert.match(app, /markup\.indexOf\("\|"\)/);
   assert.match(app, /data-wikilink-target/);
   assert.match(app, /resolveWikiLinkTarget/);
   assert.match(app, /rebuildWikiLinkIndex/);
@@ -1107,6 +1151,7 @@ test("wikilinks use the vault filename index for navigation and insertion", () =
   assert.match(app, /replaceFileInWikiLinkIndex/);
   assert.match(app, /removeFileFromWikiLinkIndex/);
   assert.match(css, /\.editor-surface \.wikilink/);
+  assert.match(css, /\.editor-surface \.wikilink-hidden-syntax/);
   assert.match(css, /\.wikilink-search-screen/);
   assert.match(css, /\.wikilink-picker/);
 });
@@ -1396,10 +1441,31 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(css, /\.task-results/);
   assert.doesNotMatch(app, /className="file-context"/);
   assert.match(app, /displayVaultRelativePath\(activeFile\?\.relativePath \?\? currentDir, vaultRoot\)/);
+  assert.match(app, /frontmatterScalarValue\(paneMetaHeader, "banner"\)/);
+  assert.match(app, /useState<"edit" \| "view">\("edit"\)/);
+  assert.match(app, /className="view-mode-control"/);
+  assert.match(app, /aria-label="Document display mode"/);
+  assert.match(app, /aria-label="View mode"/);
+  assert.match(app, /aria-label="Edit mode"/);
+  assert.match(app, /<svg aria-hidden="true" viewBox="0 0 24 24">/);
+  assert.match(app, /setDocumentDisplayMode\("view"\)/);
+  assert.match(app, /setDocumentDisplayMode\("edit"\)/);
+  assert.match(app, /const showEditingChrome = documentDisplayMode === "edit"/);
+  assert.match(app, /!isCanvasTab && showEditingChrome/);
+  assert.match(app, /isActiveGroup && !isCanvasTab && showEditingChrome/);
+  assert.match(app, /className="document-banner"/);
+  assert.match(app, /className="document-banner"[\s\S]*className="metadata-shell"/);
+  assert.match(app, /<img alt="" src=\{bannerSrc\} \/>/);
   assert.doesNotMatch(app, /vaultDrawerItem === "files"[\s\S]*?return vaultRoot \|\| "No vault selected"/);
   assert.doesNotMatch(app, /aria-label="Close vault drawer"/);
   assert.match(app, /className=\{isActiveGroup \? "editor-pane-shell active-group" : "editor-pane-shell"\}/);
   assert.match(css, /\.editor-pane-shell/);
+  assert.match(css, /\.view-mode-control/);
+  assert.match(css, /\.view-mode-button/);
+  assert.match(css, /\.view-mode-button svg/);
+  assert.match(css, /\.view-mode-button\.active/);
+  assert.match(css, /\.document-banner/);
+  assert.match(css, /\.document-banner img/);
   assert.match(css, /\.editor-pane-shell\.active-group \.editor-pane/);
   assert.match(css, /\.editor-groups \{[\s\S]*grid-auto-rows: minmax\(0, 1fr\)/);
   assert.match(css, /\.editor-pane-shell \{[\s\S]*height: 100%/);
@@ -1417,6 +1483,11 @@ test("vault rows expose context menu actions for folders and files", () => {
   const config = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
 
   assert.match(app, /onContextMenu=\{\(event\) => handleFolderContextMenu\(entry, event\)\}/);
+  assert.match(app, /function currentDirectoryEntry\(\): VaultEntry/);
+  assert.match(app, /function handleVaultListContextMenu\(event: ReactMouseEvent<HTMLDivElement>\)/);
+  assert.match(app, /onContextMenu=\{handleVaultListContextMenu\}/);
+  assert.match(app, /createOnly: true/);
+  assert.match(app, /!folderContextMenu\.createOnly/);
   assert.match(app, /suppressDirectoryClickRef/);
   assert.match(app, /onMouseDown=\{\(event\) => handleVaultEntryMouseDown\(entry, event\)\}/);
   assert.match(app, /event\.button !== 0 \|\| suppressDirectoryClickRef\.current/);
@@ -1424,8 +1495,10 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(app, /event\.button === 0/);
   assert.match(app, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.match(app, /createNoteFromFolderMenu/);
+  assert.match(app, /createCanvasFromFolderMenu/);
   assert.match(app, /createFolderFromFolderMenu/);
   assert.match(app, /renameFolderFromFolderMenu/);
+  assert.match(app, /renameFileFromContextMenu/);
   assert.match(app, /moveFolderFromContextMenu/);
   assert.match(app, /moveFileFromContextMenu/);
   assert.match(app, /deleteFileFromContextMenu/);
@@ -1434,20 +1507,26 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(app, /children\.filter\(\(entry\) => entry\.isDir\)/);
   assert.match(app, /folderActionDialog/);
   assert.match(app, /openFolderActionDialog\("create-folder"/);
+  assert.match(app, /openFolderActionDialog\("create-canvas"/);
   assert.match(app, /openFolderActionDialog\("move-folder"/);
   assert.match(app, /openFolderActionDialog\("move-file"/);
+  assert.match(app, /openFolderActionDialog\("rename-file"/);
   assert.match(app, /openFolderActionDialog\("delete-file"/);
   assert.match(app, /aria-label=\{folderActionDialogTitle\(folderActionDialog\.action\)\}/);
   assert.match(app, /"create_note_in_directory"/);
+  assert.match(app, /"create_canvas_in_directory"/);
   assert.match(app, /"create_directory_in_directory"/);
   assert.match(app, /"rename_vault_directory"/);
   assert.match(app, /"move_vault_directory"/);
   assert.match(app, /"move_vault_file"/);
   assert.match(app, /"delete_vault_file"/);
   assert.match(app, /Create Note/);
+  assert.match(app, /Create Canvas/);
   assert.match(app, /Create Folder/);
   assert.match(app, /Move Folder/);
   assert.match(app, /Move File/);
+  assert.match(app, /Rename File/);
+  assert.match(app, /Rename Canvas/);
   assert.match(app, /Delete File/);
   assert.match(app, /<VaultFolderTree/);
   assert.match(app, /<FolderIcon \/>/);
@@ -1458,6 +1537,7 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(css, /\.vault-folder-tree/);
   assert.match(css, /\.folder-tree-select/);
   assert.match(vaultBackend, /pub\(crate\) fn create_note_in_directory/);
+  assert.match(vaultBackend, /pub\(crate\) fn create_canvas_in_directory/);
   assert.match(vaultBackend, /pub\(crate\) fn create_directory_in_directory/);
   assert.match(vaultBackend, /pub\(crate\) fn rename_vault_directory/);
   assert.match(vaultBackend, /pub\(crate\) fn move_vault_directory/);
@@ -1581,16 +1661,33 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.doesNotMatch(app, /attachmentDirectory: string/);
   assert.doesNotMatch(app, /defaultVaultAttachmentDirectory/);
   assert.match(app, /function joinVaultImagePath/);
+  assert.match(app, /function joinVaultRelativeImagePath/);
+  assert.match(app, /if \(!cleanReference\.includes\("\/"\)\) \{/);
+  assert.match(app, /return joinVaultImagePath\(root, cleanReference\)/);
   assert.match(app, /defaultVaultImageDirectory/);
   assert.match(app, /convertFileSrc\(`\$\{root\}\/\$\{defaultVaultImageDirectory\}\/\$\{cleanReference\}`\)/);
   assert.match(app, /createVaultImageExtension\(\s*\(target\) => joinVaultImagePath/);
   assert.match(app, /assetDirectory: defaultVaultImageDirectory/);
   assert.match(settings, /defaultFileDisplaySettings/);
   assert.match(settings, /showDotfiles: false/);
+  assert.match(settings, /defaultNewTabFile = ""/);
+  assert.match(settings, /function normalizeNewTabFile/);
+  assert.match(settings, /function sameNewTabFile/);
   assert.match(settings, /defaultAutosaveSettings/);
   assert.match(settings, /enabled: true/);
   assert.match(settings, /defaultTidbitSettings/);
   assert.match(app, /Tidbit path pattern/);
+  assert.match(app, /<span>New Tab<\/span>/);
+  assert.match(app, /function chooseNewTabFile\(\)/);
+  assert.match(app, /title: "Choose New Tab File"/);
+  assert.match(app, /Choose a file inside the current vault/);
+  assert.match(app, /value=\{newTabFileDraft\}/);
+  assert.match(app, /Choose\.\.\./);
+  assert.match(app, /setNewTabFileDraft\(activeFile\?\.relativePath \?\? ""\)/);
+  assert.match(app, /Configure a new tab note in Settings/);
+  assert.match(app, /openConfiguredNewTabRef\.current\(\)/);
+  assert.match(app, /event\.key\.toLowerCase\(\) !== "t"/);
+  assert.match(app, /addEventListener\("keydown", handleGlobalNewTabShortcut, \{ capture: true \}\)/);
   assert.doesNotMatch(app, /Attachment directory/);
   assert.match(app, /defaultTidbitPathPattern/);
   assert.match(app, /Show dotfiles and dot folders/);
@@ -1791,7 +1888,9 @@ test("quick command palette exposes initial editor commands", () => {
   assert.match(app, /canvasInsertCommandPaletteCommands/);
   assert.match(app, /canvasCommandPaletteCommands/);
   assert.match(app, /editorCommandPaletteCommands/);
-  assert.match(app, /activeDocumentIsCanvas\s*\?\s*canvasCommandPaletteCommands\s*:\s*editorCommandPaletteCommands/);
+  assert.match(app, /function hasActiveDocumentTab\(\)/);
+  assert.match(app, /Open or create a note before using the command palette/);
+  assert.match(app, /activeDocumentTab[\s\S]*activeDocumentIsCanvas[\s\S]*canvasCommandPaletteCommands[\s\S]*editorCommandPaletteCommands[\s\S]*\[\]/);
   assert.match(app, /activeDocumentIsCanvas\s*\?\s*canvasInsertCommandPaletteCommands\s*:\s*insertCommandPaletteCommands/);
   assert.match(app, /activeCommandPaletteCommands/);
   assert.match(app, /setCanvasCommandRequest/);
@@ -2252,11 +2351,25 @@ test("split editor groups find an already open file across both panes", () => {
   assert.match(app, /function hydrateDocumentTabAfterCommit\(tab: DocumentTab/);
   assert.match(app, /window\.requestAnimationFrame\(\(\) => \{/);
   assert.match(app, /hydrateDocumentTabAfterCommit\(closeResult\.nextActiveTab, groupId\)/);
+  assert.match(app, /function createEmptyEditorGroups\(\)/);
+  assert.match(app, /function hasNoOpenDocumentTabs\(groups: Record<EditorGroupId, EditorGroupState>\)/);
+  assert.match(app, /function clearEditorContent\(targetEditor: Editor \| null\)/);
+  assert.match(app, /function clearActiveDocument\(\)/);
+  assert.match(app, /clearEditorContent\(primaryEditor\)/);
+  assert.match(app, /clearEditorContent\(secondaryEditor\)/);
+  assert.match(app, /if \(!tab \|\| tab\.kind !== "markdown"\) \{/);
+  assert.match(app, /if \(hasNoOpenDocumentTabs\(editorGroupsRef\.current\)\) \{/);
+  assert.match(app, /replaceEditorGroupsWithPrimaryTab\(tab\)/);
+  assert.match(app, /Closed \$\{tabTitle\(tab\)\}; no document open/);
+  assert.match(app, /Open or create a note to start editing\./);
   assert.match(app, /className="editor-surface-frame"/);
   assert.match(app, /className="empty-document-placeholder"/);
+  assert.match(app, /className="editor-pane no-document-pane"/);
   assert.doesNotMatch(app, /commands\.setContent\(tab\.markdown, \{ contentType: "markdown" \}\)/);
   assert.match(css, /\.editor-surface-frame/);
   assert.match(css, /\.empty-document-placeholder/);
+  assert.match(css, /\.no-document-pane/);
+  assert.match(css, /\.empty-document-placeholder\.no-document/);
   assert.match(css, /isolation: isolate/);
   assert.match(css, /caret-color: var\(--editor-text\)/);
   assert.match(css, /\.ProseMirror-gapcursor/);
@@ -2299,6 +2412,12 @@ test("closing the active tab selects a neighboring remaining tab", () => {
     nextActiveTab: todayTab,
     nextActiveTabId: todayTab.id,
     wasActiveTab: false,
+  });
+  assert.deepEqual(tabsAfterClose([todayTab], todayTab.id, todayTab.id), {
+    nextTabs: [],
+    nextActiveTab: null,
+    nextActiveTabId: "",
+    wasActiveTab: true,
   });
 });
 

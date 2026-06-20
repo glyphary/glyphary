@@ -124,6 +124,7 @@ import {
 import {
   defaultMetaDelimiter,
   composeMarkdown,
+  frontmatterScalarValue,
   frontmatterListValues,
   markdownHeadings,
   splitMetaHeader,
@@ -154,6 +155,7 @@ import {
   closedDrawerWidth,
   cssColorToHex,
   defaultAiSettings,
+  defaultNewTabFile,
   isRunningOnMacOs,
   keyboardEventMatchesShortcut,
   normalizeAiSettings,
@@ -164,6 +166,7 @@ import {
   normalizeEditorBehaviorSettings,
   normalizeFileDisplaySettings,
   normalizeFrontmatterPillSettings,
+  normalizeNewTabFile,
   normalizePluginSettings,
   normalizeTidbitSettings,
   normalizeVaultAppearanceSettings,
@@ -178,6 +181,7 @@ import {
   sameEditorBehaviorSettings,
   sameFileDisplaySettings,
   sameFrontmatterPillSettings,
+  sameNewTabFile,
   samePluginSettings,
   sameTidbitSettings,
   sameVaultAppearanceSettings,
@@ -715,12 +719,15 @@ function createWikiLinkExtension(options: WikiLinkExtensionOptions) {
                 }
 
                 for (const match of node.text.matchAll(wikiLinkTokenPattern)) {
-                  const target = wikiLinkTargetFromMarkup(match[1] ?? "");
+                  const markup = match[1] ?? "";
+                  const target = wikiLinkTargetFromMarkup(markup);
 
                   if (!target) {
                     continue;
                   }
 
+                  const from = position + match.index;
+                  const to = from + match[0].length;
                   const candidates = options.resolveTarget(target).candidates;
                   const stateClass =
                     candidates.length === 0
@@ -730,7 +737,7 @@ function createWikiLinkExtension(options: WikiLinkExtensionOptions) {
                         : "ambiguous";
 
                   decorations.push(
-                    Decoration.inline(position + match.index, position + match.index + match[0].length, {
+                    Decoration.inline(from, to, {
                       class: `wikilink wikilink-${stateClass}`,
                       "data-wikilink-target": target,
                       title:
@@ -741,6 +748,23 @@ function createWikiLinkExtension(options: WikiLinkExtensionOptions) {
                             : `${candidates.length} matching notes`,
                     }),
                   );
+
+                  if (state.selection.$from.parent !== parent) {
+                    decorations.push(
+                      Decoration.inline(from, from + 2, { class: "wikilink-hidden-syntax" }),
+                      Decoration.inline(to - 2, to, { class: "wikilink-hidden-syntax" }),
+                    );
+
+                    const pipeIndex = markup.indexOf("|");
+
+                    if (pipeIndex >= 0) {
+                      decorations.push(
+                        Decoration.inline(from + 2, from + 2 + pipeIndex + 1, {
+                          class: "wikilink-hidden-syntax",
+                        }),
+                      );
+                    }
+                  }
                 }
 
                 return true;
@@ -2697,6 +2721,10 @@ function tabTitle(tab: DocumentTab) {
   return tab.pageName || tab.activeFile?.name || "Untitled note";
 }
 
+function pageNameForFileName(name: string) {
+  return isCanvasPath(name) ? canvasTitle(name) : fileNameWithoutMarkdownExtension(name);
+}
+
 function createUntitledTab(markdown = initialMarkdown): DocumentTab {
   return {
     id: `untitled:${Date.now()}:${Math.random().toString(36).slice(2)}`,
@@ -2726,6 +2754,21 @@ function createEditorGroups(tab = createUntitledTab()): Record<EditorGroupId, Ed
   };
 }
 
+function createEmptyEditorGroups(): Record<EditorGroupId, EditorGroupState> {
+  return {
+    primary: {
+      id: "primary",
+      tabs: [],
+      activeTabId: "",
+    },
+    secondary: {
+      id: "secondary",
+      tabs: [],
+      activeTabId: "",
+    },
+  };
+}
+
 function setEditorMarkdownContent(targetEditor: Editor, markdown: string) {
   if (markdown.trim()) {
     targetEditor.commands.setContent(markdown, { contentType: "markdown" });
@@ -2740,6 +2783,16 @@ function setEditorMarkdownContent(targetEditor: Editor, markdown: string) {
     type: "doc",
     content: [{ type: "paragraph" }],
   });
+}
+
+function clearEditorContent(targetEditor: Editor | null) {
+  if (targetEditor) {
+    setEditorMarkdownContent(targetEditor, "");
+  }
+}
+
+function hasNoOpenDocumentTabs(groups: Record<EditorGroupId, EditorGroupState>) {
+  return groups.primary.tabs.length === 0 && groups.secondary.tabs.length === 0;
 }
 
 function joinVaultAssetPath(root: string, assetDirectory: string, reference: string) {
@@ -2760,6 +2813,21 @@ function joinVaultImagePath(root: string, reference: string) {
   }
 
   return convertFileSrc(`${root}/${defaultVaultImageDirectory}/${cleanReference}`);
+}
+
+function joinVaultRelativeImagePath(root: string, reference: string) {
+  const wikilinkMatch = reference.match(/^!\[\[([^\]\n]+)\]\]$/);
+  const cleanReference = cleanVaultAssetReference(wikilinkMatch?.[1] ?? reference);
+
+  if (!root || !cleanReference) {
+    return "";
+  }
+
+  if (!cleanReference.includes("/")) {
+    return joinVaultImagePath(root, cleanReference);
+  }
+
+  return convertFileSrc(`${root}/${cleanReference}`);
 }
 
 type ContainerMarkdownLexer = {
@@ -4155,6 +4223,7 @@ function App() {
   const [vaultRoot, setVaultRoot] = useState("");
   const [vaultSettings, setVaultSettings] = useState<VaultSettings>({
     assetDirectory: defaultVaultAssetDirectory,
+    newTabFile: defaultNewTabFile,
     frontmatterPills: defaultFrontmatterPillSettings,
     files: defaultFileDisplaySettings,
     autosave: defaultAutosaveSettings,
@@ -4169,6 +4238,7 @@ function App() {
     theme: null,
   });
   const [settingsDraft, setSettingsDraft] = useState(defaultVaultAssetDirectory);
+  const [newTabFileDraft, setNewTabFileDraft] = useState(defaultNewTabFile);
   const [frontmatterPillDraft, setFrontmatterPillDraft] = useState<FrontmatterPillSettings>(
     defaultFrontmatterPillSettings,
   );
@@ -4222,6 +4292,7 @@ function App() {
     useState<MarkdownParts["metaDelimiter"]>(defaultMetaDelimiter);
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [pageNameEditing, setPageNameEditing] = useState(false);
+  const [documentDisplayMode, setDocumentDisplayMode] = useState<"edit" | "view">("edit");
   const [appearance, setAppearance] = useState<AppearanceMode>(readPersistedAppearance);
   const [resolvedAppearance, setResolvedAppearance] = useState(() =>
     resolveAppearance(readPersistedAppearance()),
@@ -4332,6 +4403,7 @@ function App() {
     () => undefined,
   );
   const resetDocumentRef = useRef<() => void>(() => undefined);
+  const openConfiguredNewTabRef = useRef<() => void>(() => undefined);
   const openWikiLinkSearchRef = useRef<() => void>(() => undefined);
   const resolveWikiLinkTargetRef = useRef<(target: string) => WikiLinkResolution>(() => ({
     candidates: [],
@@ -4354,6 +4426,7 @@ function App() {
   const vaultRootRef = useRef("");
   const vaultSettingsRef = useRef<VaultSettings>({
     assetDirectory: defaultVaultAssetDirectory,
+    newTabFile: defaultNewTabFile,
     frontmatterPills: defaultFrontmatterPillSettings,
     files: defaultFileDisplaySettings,
     autosave: defaultAutosaveSettings,
@@ -4806,6 +4879,51 @@ function App() {
     return normalizeCanvasSettings(vaultSettings.canvas);
   }
 
+  function savedNewTabFile() {
+    return normalizeNewTabFile(vaultSettings.newTabFile);
+  }
+
+  function vaultRelativeFileFromSelection(selected: string) {
+    // The dialog returns an absolute native path; settings store portable
+    // vault-relative paths so the config remains usable if the vault moves.
+    const root = vaultRootRef.current
+      .split(/[\\/]+/)
+      .filter(Boolean)
+      .join("/");
+    const file = selected
+      .split(/[\\/]+/)
+      .filter(Boolean)
+      .join("/");
+
+    return root && file.startsWith(`${root}/`) ? file.slice(root.length + 1) : "";
+  }
+
+  async function chooseNewTabFile() {
+    if (!vaultRootRef.current) {
+      return;
+    }
+
+    const selected = await open({
+      defaultPath: vaultRootRef.current,
+      directory: false,
+      multiple: false,
+      title: "Choose New Tab File",
+    });
+
+    if (typeof selected !== "string") {
+      return;
+    }
+
+    const relative = vaultRelativeFileFromSelection(selected);
+
+    if (!relative) {
+      setStatus("Choose a file inside the current vault");
+      return;
+    }
+
+    setNewTabFileDraft(relative);
+  }
+
   function updateAiDraft(nextSettings: AiSettings) {
     setAiTestStatus(null);
     setAiDraft(nextSettings);
@@ -4814,6 +4932,7 @@ function App() {
   function settingsHaveChanges() {
     return (
       settingsDraft !== vaultSettings.assetDirectory ||
+      !sameNewTabFile(newTabFileDraft, savedNewTabFile()) ||
       !sameFrontmatterPillSettings(frontmatterPillDraft, savedFrontmatterPillSettings()) ||
       !sameEditorBehaviorSettings(editorBehaviorDraft, savedEditorBehaviorSettings()) ||
       !sameFileDisplaySettings(fileDisplayDraft, savedFileDisplaySettings()) ||
@@ -4847,6 +4966,7 @@ function App() {
     const savedCanvas = savedCanvasSettings();
 
     setSettingsDraft(vaultSettings.assetDirectory);
+    setNewTabFileDraft(savedNewTabFile());
     setFrontmatterPillDraft(savedFrontmatterPillSettings());
     setEditorBehaviorDraft(savedEditorBehaviorSettings());
     setFileDisplayDraft(savedFileDisplaySettings());
@@ -4978,6 +5098,12 @@ function App() {
     updateGroupTab(groupId, tabId, patch);
   }
 
+  function hasActiveDocumentTab() {
+    const group = editorGroupsRef.current[activeGroupIdRef.current];
+
+    return group.tabs.some((tab) => tab.id === group.activeTabId);
+  }
+
   function replaceEditorGroupsWithPrimaryTab(tab: DocumentTab) {
     const nextGroups = createEditorGroups(tab);
 
@@ -4985,6 +5111,23 @@ function App() {
     setActiveGroupId("primary");
     setSplitOpen(false);
     setEditorGroupsAndRef(nextGroups);
+  }
+
+  function clearActiveDocument() {
+    activeFileRef.current = null;
+    pageNameRef.current = "";
+    metaHeaderRef.current = "";
+    metaDelimiterRef.current = defaultMetaDelimiter;
+    setActiveFile(null);
+    setPageName("");
+    setMetaHeader("");
+    setMetaDelimiter(defaultMetaDelimiter);
+    setMarkdown("");
+    setMarkdownDraft("");
+    setDirty(false);
+    setPageNameEditing(false);
+    clearEditorContent(primaryEditor);
+    clearEditorContent(secondaryEditor);
   }
 
   function addTabToGroup(tab: DocumentTab, groupId = activeGroupIdRef.current) {
@@ -5202,7 +5345,12 @@ function App() {
 
     if (tabs.length === 1) {
       if (!splitOpen) {
-        setStatus("Keep at least one document tab open");
+        activeGroupIdRef.current = "primary";
+        setActiveGroupId("primary");
+        setEditorGroupsAndRef(createEmptyEditorGroups());
+        clearActiveDocument();
+        persistActiveFile(null);
+        setStatus(`Closed ${tabTitle(tab)}; no document open`);
         return;
       }
 
@@ -5560,18 +5708,46 @@ function App() {
           event.preventDefault();
           return true;
         },
+        handleKeyDown: (view: EditorView, event: KeyboardEvent) => {
+          if (!(event.shiftKey && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "v")) {
+            return false;
+          }
+
+          if (!navigator.clipboard?.readText) {
+            setStatus("Plain paste is not available in this webview");
+            return true;
+          }
+
+          event.preventDefault();
+          void navigator.clipboard
+            .readText()
+            .then((text) => {
+              if (text) {
+                view.pasteText(text);
+              }
+            })
+            .catch(() => setStatus("Could not read clipboard for plain paste"));
+
+          return true;
+        },
       },
       onUpdate: ({ editor }: { editor: Editor }) => {
+        const group = editorGroupsRef.current[groupId];
+        const tabId = group.activeTabId;
+        const tab = group.tabs.find((documentTab) => documentTab.id === tabId);
+
+        if (!tab || tab.kind !== "markdown") {
+          return;
+        }
+
         const nextMarkdown = editor.getMarkdown();
         const isActiveGroup = activeGroupIdRef.current === groupId;
 
-        updateGroupTab(groupId, editorGroupsRef.current[groupId].activeTabId, {
+        updateGroupTab(groupId, tabId, {
           markdown: nextMarkdown,
           markdownDraft: nextMarkdown,
           dirty: hydratingEditor.current[groupId]
-            ? editorGroupsRef.current[groupId].tabs.find(
-                (tab) => tab.id === editorGroupsRef.current[groupId].activeTabId,
-              )?.dirty ?? false
+            ? tab.dirty
             : true,
         });
 
@@ -6656,6 +6832,7 @@ function App() {
       ? await invoke<VaultSettings>("read_vault_settings", { root })
         : {
           assetDirectory: defaultVaultAssetDirectory,
+          newTabFile: defaultNewTabFile,
           frontmatterPills: defaultFrontmatterPillSettings,
           files: defaultFileDisplaySettings,
           autosave: defaultAutosaveSettings,
@@ -6684,9 +6861,11 @@ function App() {
     const plugins = normalizePluginSettings(settings.plugins);
     const ai = normalizeAiSettings(settings.ai);
     const canvas = normalizeCanvasSettings(settings.canvas);
+    const newTabFile = normalizeNewTabFile(settings.newTabFile);
 
     const normalizedSettings = {
       ...settings,
+      newTabFile,
       frontmatterPills,
       files: fileDisplaySettings,
       autosave,
@@ -6714,6 +6893,7 @@ function App() {
     vaultSettingsRef.current = normalizedSettings;
     setVaultSettings(normalizedSettings);
     setSettingsDraft(settings.assetDirectory);
+    setNewTabFileDraft(newTabFile);
     setFrontmatterPillDraft(frontmatterPills);
     setEditorBehaviorDraft(editorSettings);
     setEditorBehavior(editorSettings);
@@ -6763,6 +6943,7 @@ function App() {
         root: vaultRoot,
         settings: {
           assetDirectory: settingsDraft,
+          newTabFile: normalizeNewTabFile(newTabFileDraft),
           frontmatterPills: normalizeFrontmatterPillSettings(frontmatterPillDraft),
           files: normalizeFileDisplaySettings(fileDisplayDraft),
           autosave: normalizeAutosaveSettings(autosaveDraft),
@@ -6802,8 +6983,10 @@ function App() {
       const plugins = normalizePluginSettings(settings.plugins);
       const ai = normalizeAiSettings(settings.ai);
       const canvas = normalizeCanvasSettings(settings.canvas);
+      const newTabFile = normalizeNewTabFile(settings.newTabFile);
       const normalizedSettings = {
         ...settings,
+        newTabFile,
         frontmatterPills,
         files: fileDisplaySettings,
         autosave,
@@ -6835,6 +7018,7 @@ function App() {
       vaultSettingsRef.current = normalizedSettings;
       setVaultSettings(normalizedSettings);
       setSettingsDraft(settings.assetDirectory);
+      setNewTabFileDraft(newTabFile);
       setFrontmatterPillDraft(frontmatterPills);
       setEditorBehaviorDraft(editorSettings);
       setEditorBehavior(editorSettings);
@@ -7043,6 +7227,7 @@ function App() {
 
   openVaultRef.current = openVault;
   saveCurrentFileRef.current = saveCurrentFile;
+  openConfiguredNewTabRef.current = openConfiguredNewTab;
   closeActiveDocumentTabRef.current = () => {
     const groupId = activeGroupIdRef.current;
     const activeTabId = editorGroupsRef.current[groupId]?.activeTabId;
@@ -7075,6 +7260,11 @@ function App() {
       }
 
       event.preventDefault();
+      if (!hasActiveDocumentTab()) {
+        setStatus("Open or create a note before using the command palette");
+        return;
+      }
+
       setCommandPaletteScope("root");
       setCommandPaletteQuery("");
       setCommandPaletteSelectedIndex(0);
@@ -7092,14 +7282,28 @@ function App() {
       event.preventDefault();
       closeActiveDocumentTabRef.current();
     };
+    const handleGlobalNewTabShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key.toLowerCase() !== "t") {
+        return;
+      }
+
+      if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) {
+        return;
+      }
+
+      event.preventDefault();
+      openConfiguredNewTabRef.current();
+    };
 
     window.addEventListener("keydown", handleGlobalSaveShortcut);
     window.addEventListener("keydown", handleGlobalCommandPaletteShortcut);
+    window.addEventListener("keydown", handleGlobalNewTabShortcut, { capture: true });
     window.addEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
 
     return () => {
       window.removeEventListener("keydown", handleGlobalSaveShortcut);
       window.removeEventListener("keydown", handleGlobalCommandPaletteShortcut);
+      window.removeEventListener("keydown", handleGlobalNewTabShortcut, { capture: true });
       window.removeEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
     };
   }, []);
@@ -7348,6 +7552,16 @@ function App() {
         setStatus(error instanceof Error ? error.message : String(error));
       });
 
+    listen("new-tab-requested", () => {
+      openConfiguredNewTabRef.current();
+    })
+      .then((nextUnlisten) => {
+        unlisteners.push(nextUnlisten);
+      })
+      .catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+
     listen<AppearanceMode>("appearance-requested", (event) => {
       if (event.payload === "auto" || event.payload === "light" || event.payload === "dark") {
         setAppearance(event.payload);
@@ -7401,13 +7615,34 @@ function App() {
       });
       const tab = createDocumentTabFromFile(file);
 
-      addTabToGroup(tab);
+      if (hasNoOpenDocumentTabs(editorGroupsRef.current)) {
+        replaceEditorGroupsWithPrimaryTab(tab);
+      } else {
+        addTabToGroup(tab);
+      }
       hydrateDocumentTab(tab);
       persistActiveFile(tab.activeFile);
       setStatus(`Opened ${file.relativePath}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  function openConfiguredNewTab() {
+    if (!vaultRootRef.current) {
+      setStatus("Open a vault before opening a new tab");
+      return;
+    }
+
+    const relativePath = normalizeNewTabFile(vaultSettingsRef.current.newTabFile);
+
+    if (!relativePath) {
+      setStatus("Configure a new tab note in Settings");
+      return;
+    }
+
+    // Cmd+T uses the saved setting, not the draft currently open in Settings.
+    void openFile(relativePath);
   }
 
   async function openCalendarDay(date: Date) {
@@ -7559,7 +7794,7 @@ function App() {
               ...tab,
               id: nextId,
               activeFile: nextActiveFile,
-              pageName: fileNameWithoutMarkdownExtension(nextActiveFile.name),
+              pageName: pageNameForFileName(nextActiveFile.name),
             };
           });
 
@@ -7586,7 +7821,7 @@ function App() {
     activeFileRef.current = nextActiveFile;
     setActiveFile(nextActiveFile);
     if (nextActiveFile) {
-      setPageName(fileNameWithoutMarkdownExtension(nextActiveFile.name));
+      setPageName(pageNameForFileName(nextActiveFile.name));
     }
     recentFilesRef.current = nextRecentFiles;
     setRecentFiles(nextRecentFiles);
@@ -7618,7 +7853,7 @@ function App() {
               ...tab,
               id: nextId,
               activeFile: movedFile,
-              pageName: fileNameWithoutMarkdownExtension(movedFile.name),
+              pageName: pageNameForFileName(movedFile.name),
             };
           });
 
@@ -7641,7 +7876,7 @@ function App() {
       nextActiveFile = movedFile;
       activeFileRef.current = movedFile;
       setActiveFile(movedFile);
-      setPageName(fileNameWithoutMarkdownExtension(movedFile.name));
+      setPageName(pageNameForFileName(movedFile.name));
     }
 
     setEditorGroupsAndRef(nextGroups);
@@ -7765,13 +8000,32 @@ function App() {
     });
   }
 
+  function currentDirectoryEntry(): VaultEntry {
+    return {
+      name: currentDir ? relativePathFileName(currentDir) : "Vault root",
+      relativePath: currentDir,
+      isDir: true,
+    };
+  }
+
+  function handleVaultListContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setFolderContextMenu({
+      entry: currentDirectoryEntry(),
+      x: event.clientX,
+      y: event.clientY,
+      createOnly: true,
+    });
+  }
+
   function openFolderActionDialog(action: FolderActionKind, entry: VaultEntry) {
     setFolderContextMenu(null);
     setFolderActionDialog({
       action,
       entry,
       value:
-        action === "rename"
+        action === "rename" || action === "rename-file"
           ? entry.name
           : action === "move-file" || action === "move-folder"
             ? parentDirectory(entry.relativePath)
@@ -7784,12 +8038,22 @@ function App() {
       return "Create Note";
     }
 
+    if (action === "create-canvas") {
+      return "Create Canvas";
+    }
+
     if (action === "create-folder") {
       return "Create Folder";
     }
 
     if (action === "move-file") {
       return "Move File";
+    }
+
+    if (action === "rename-file") {
+      return isCanvasPath(folderActionDialog?.entry.relativePath ?? "")
+        ? "Rename Canvas"
+        : "Rename File";
     }
 
     if (action === "move-folder") {
@@ -7806,6 +8070,16 @@ function App() {
   function folderActionDialogLabel(action: FolderActionKind) {
     if (action === "create-note") {
       return "Note name";
+    }
+
+    if (action === "create-canvas") {
+      return "Canvas name";
+    }
+
+    if (action === "rename-file") {
+      return isCanvasPath(folderActionDialog?.entry.relativePath ?? "")
+        ? "Canvas name"
+        : "File name";
     }
 
     if (action === "move-file" || action === "move-folder") {
@@ -7839,6 +8113,34 @@ function App() {
       addFileToWikiLinkIndex(file);
       await loadEntries(vaultRoot, currentDir);
       setStatus(`Created note ${file.relativePath}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function createCanvasFromFolderMenu(entry: VaultEntry, canvasName: string) {
+    if (!vaultRoot) {
+      return;
+    }
+
+    if (!canvasName?.trim()) {
+      return;
+    }
+
+    try {
+      const file = await invoke<OpenedFile>("create_canvas_in_directory", {
+        root: vaultRoot,
+        relative: entry.relativePath,
+        canvasName,
+      });
+      const tab = createDocumentTabFromFile(file);
+
+      snapshotActiveTab();
+      addTabToGroup(tab);
+      hydrateDocumentTab(tab);
+      persistActiveFile(tab.activeFile);
+      await loadEntries(vaultRoot, currentDir);
+      setStatus(`Created canvas ${file.relativePath}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -7890,6 +8192,37 @@ function App() {
       );
       await rebuildWikiLinkIndex(vaultRoot);
       setStatus(`Renamed folder ${entry.name} to ${renamed.name}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function renameFileFromContextMenu(entry: VaultEntry, nextName: string) {
+    if (!vaultRoot || entry.isDir) {
+      return;
+    }
+
+    if (!nextName?.trim()) {
+      return;
+    }
+
+    try {
+      snapshotActiveTab();
+      const renamed = await invoke<OpenedFile>("rename_vault_file", {
+        root: vaultRoot,
+        relative: entry.relativePath,
+        nextName,
+      });
+      const renamedFile = {
+        name: renamed.name,
+        relativePath: renamed.relativePath,
+      };
+
+      replaceOpenFilePath(entry.relativePath, renamedFile);
+      replaceFileInWikiLinkIndex(entry.relativePath, renamedFile);
+      moveAiBuilderHistoryKey(entry.relativePath, renamedFile.relativePath);
+      await loadEntries(vaultRoot, currentDir);
+      setStatus(`Renamed ${entry.name} to ${renamed.name}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -7992,10 +8325,14 @@ function App() {
 
     if (action === "create-note") {
       await createNoteFromFolderMenu(entry, value);
+    } else if (action === "create-canvas") {
+      await createCanvasFromFolderMenu(entry, value);
     } else if (action === "create-folder") {
       await createFolderFromFolderMenu(entry, value);
     } else if (action === "move-folder") {
       await moveFolderFromContextMenu(entry, value);
+    } else if (action === "rename-file") {
+      await renameFileFromContextMenu(entry, value);
     } else if (action === "move-file") {
       await moveFileFromContextMenu(entry, value);
     } else if (action === "delete-file") {
@@ -8138,7 +8475,7 @@ function App() {
       return;
     }
 
-    setEditorBody(`${markdown.trimEnd()}\n\n${emptyColumnsMarkdown}`, false);
+    editor.chain().focus().insertContent(emptyColumnsMarkdown, { contentType: "markdown" }).run();
   }
 
   function selectedGalleryImages(targetEditor: Editor) {
@@ -9588,9 +9925,11 @@ function App() {
     },
     ...pluginCommandPaletteCommands,
   ];
-  const commandPaletteCommands = activeDocumentIsCanvas
-    ? canvasCommandPaletteCommands
-    : editorCommandPaletteCommands;
+  const commandPaletteCommands = activeDocumentTab
+    ? activeDocumentIsCanvas
+      ? canvasCommandPaletteCommands
+      : editorCommandPaletteCommands
+    : [];
   // All scopes share the same filtering, selection, and rendering pipeline.
   // Adding a new grouped menu should usually mean adding one command list here
   // and a root "Name ..." command that switches to that scope.
@@ -10135,12 +10474,16 @@ function App() {
     const paneMarkdown = isActiveGroup ? markdown : groupActiveTab?.markdown ?? "";
     const paneActiveFile = isActiveGroup ? activeFile : groupActiveTab?.activeFile ?? null;
     const isCanvasTab = groupActiveTab?.kind === "canvas";
+    const showEditingChrome = documentDisplayMode === "edit";
     const frontmatterPillSettings = normalizeFrontmatterPillSettings(
       vaultSettings.frontmatterPills,
     );
     const frontmatterPills = frontmatterPillSettings.enabled
       ? frontmatterListValues(paneMetaHeader, frontmatterPillSettings.headerName)
       : [];
+    const bannerSrc = !isCanvasTab
+      ? joinVaultRelativeImagePath(vaultRoot, frontmatterScalarValue(paneMetaHeader, "banner"))
+      : "";
 
     // Only the active pane renders the toolbar. Toolbar actions are tied to the
     // active editor mirror; hiding inactive toolbars avoids commands landing in
@@ -10187,138 +10530,152 @@ function App() {
             </div>
           ))}
         </div>
-        <div className={isCanvasTab ? "editor-pane canvas-editor-pane" : "editor-pane"}>
-        {!isCanvasTab ? (
-          <div className="metadata-shell" aria-label="Metadata editor">
-          <div className="page-name-control">
-            {pageNameEditing && isActiveGroup ? (
-              <input
-                aria-label="Page name"
-                autoFocus
-                disabled={!paneActiveFile}
-                value={pageName}
-                onBlur={finishPageNameEdit}
-                onChange={(event) => {
-                  setActivePageName(event.currentTarget.value);
-                  markPageNameDirty();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.currentTarget.blur();
-                  } else if (event.key === "Escape") {
-                    if (activeFileRef.current) {
-                      setActivePageName(
-                        fileNameWithoutMarkdownExtension(activeFileRef.current.name),
-                      );
-                    }
-                    setPageNameEditing(false);
-                  }
-                }}
-              />
-            ) : (
-              <button
-                className="page-name-display"
-                disabled={!paneActiveFile}
-                type="button"
-                title="Double-click to rename on save"
-                onDoubleClick={() => {
-                  activateEditorGroup(groupId);
-                  if (paneActiveFile) {
-                    setPageNameEditing(true);
-                  }
-                }}
-              >
-                {panePageName || "Untitled note"}
-              </button>
-            )}
+        {!groupActiveTab ? (
+          <div className="editor-pane no-document-pane">
+            <div className="empty-document-placeholder no-document">
+              Open or create a note to start editing.
+            </div>
           </div>
-          <div className="frontmatter-header">
-            <button
-              className={metadataOpen ? "metadata-toggle open" : "metadata-toggle"}
-              type="button"
-              aria-expanded={metadataOpen}
-              aria-controls={`${groupId}-frontmatter-editor`}
-              aria-label={metadataOpen ? "Hide frontmatter" : "Show frontmatter"}
-              title={metadataOpen ? "Hide frontmatter" : "Show frontmatter"}
-              onClick={() => setMetadataOpen((open) => !open)}
-            />
-            <span>Frontmatter</span>
-            {frontmatterPills.length > 0 ? (
-              <div className="frontmatter-pills" aria-label="Frontmatter list values">
-                {frontmatterPills.map((value) => (
-                  <span className="frontmatter-pill" key={value}>
-                    {value}
-                  </span>
+        ) : (
+          <div className={isCanvasTab ? "editor-pane canvas-editor-pane" : "editor-pane"}>
+            {bannerSrc ? (
+              <figure className="document-banner">
+                <img alt="" src={bannerSrc} />
+              </figure>
+            ) : null}
+            {!isCanvasTab && showEditingChrome ? (
+              <div className="metadata-shell" aria-label="Metadata editor">
+                <div className="page-name-control">
+                  {pageNameEditing && isActiveGroup ? (
+                    <input
+                      aria-label="Page name"
+                      autoFocus
+                      disabled={!paneActiveFile}
+                      value={pageName}
+                      onBlur={finishPageNameEdit}
+                      onChange={(event) => {
+                        setActivePageName(event.currentTarget.value);
+                        markPageNameDirty();
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.currentTarget.blur();
+                        } else if (event.key === "Escape") {
+                          if (activeFileRef.current) {
+                            setActivePageName(
+                              fileNameWithoutMarkdownExtension(activeFileRef.current.name),
+                            );
+                          }
+                          setPageNameEditing(false);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      className="page-name-display"
+                      disabled={!paneActiveFile}
+                      type="button"
+                      title="Double-click to rename on save"
+                      onDoubleClick={() => {
+                        activateEditorGroup(groupId);
+                        if (paneActiveFile) {
+                          setPageNameEditing(true);
+                        }
+                      }}
+                    >
+                      {panePageName || "Untitled note"}
+                    </button>
+                  )}
+                </div>
+                <div className="frontmatter-header">
+                  <button
+                    className={metadataOpen ? "metadata-toggle open" : "metadata-toggle"}
+                    type="button"
+                    aria-expanded={metadataOpen}
+                    aria-controls={`${groupId}-frontmatter-editor`}
+                    aria-label={metadataOpen ? "Hide frontmatter" : "Show frontmatter"}
+                    title={metadataOpen ? "Hide frontmatter" : "Show frontmatter"}
+                    onClick={() => setMetadataOpen((open) => !open)}
+                  />
+                  <span>Frontmatter</span>
+                  {frontmatterPills.length > 0 ? (
+                    <div className="frontmatter-pills" aria-label="Frontmatter list values">
+                      {frontmatterPills.map((value) => (
+                        <span className="frontmatter-pill" key={value}>
+                          {value}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                {metadataOpen ? (
+                  <label className="metadata-control" id={`${groupId}-frontmatter-editor`}>
+                    <textarea
+                      disabled={!paneActiveFile}
+                      spellCheck="false"
+                      value={paneMetaHeader}
+                      onChange={(event) => {
+                        activateEditorGroup(groupId);
+                        setActiveMetaHeader(event.currentTarget.value);
+                        if (activeFileRef.current) {
+                          setActiveDocumentDirty(true);
+                          setStatus(`Unsaved changes in ${activeFileRef.current.name}`);
+                        }
+                      }}
+                      placeholder="title: Example&#10;tags: [note]"
+                    />
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+
+            {isActiveGroup && !isCanvasTab && showEditingChrome ? (
+              <div className="toolbar" aria-label="Formatting toolbar">
+                {toolbarActions.map((action) => (
+                  <button
+                    aria-label={action.title}
+                    className={action.isActive() ? "tool-button active" : "tool-button"}
+                    disabled={action.isEnabled ? !action.isEnabled() : false}
+                    key={action.title}
+                    onClick={() => {
+                      action.run();
+                      setEditorFocused(true);
+                    }}
+                    title={action.title}
+                    type="button"
+                  >
+                    {action.icon ? renderToolbarIcon(action.icon) : action.label}
+                  </button>
                 ))}
               </div>
             ) : null}
-          </div>
-          {metadataOpen ? (
-            <label className="metadata-control" id={`${groupId}-frontmatter-editor`}>
-              <textarea
-                disabled={!paneActiveFile}
-                spellCheck="false"
-                value={paneMetaHeader}
-                onChange={(event) => {
-                  activateEditorGroup(groupId);
-                  setActiveMetaHeader(event.currentTarget.value);
-                  if (activeFileRef.current) {
-                    setActiveDocumentDirty(true);
-                    setStatus(`Unsaved changes in ${activeFileRef.current.name}`);
-                  }
-                }}
-                placeholder="title: Example&#10;tags: [note]"
-              />
-            </label>
-          ) : null}
-        </div>
-        ) : null}
-        {isActiveGroup && !isCanvasTab ? (
-          <div className="toolbar" aria-label="Formatting toolbar">
-            {toolbarActions.map((action) => (
-              <button
-                aria-label={action.title}
-                className={action.isActive() ? "tool-button active" : "tool-button"}
-                disabled={action.isEnabled ? !action.isEnabled() : false}
-                key={action.title}
-                onClick={() => {
-                  action.run();
-                  setEditorFocused(true);
-                }}
-                title={action.title}
-                type="button"
-              >
-                {action.icon ? renderToolbarIcon(action.icon) : action.label}
-              </button>
-            ))}
-          </div>
-        ) : null}
 
-        {isCanvasTab ? (
-          <CanvasView
-            commandRequest={isActiveGroup ? canvasCommandRequest : null}
-            content={paneMarkdown}
-            name={panePageName}
-            settings={canvasDraft}
-            vaultRoot={vaultRoot}
-            onChange={(nextContent) => updateCanvasDocument(groupId, nextContent)}
-            onOpenFile={openFile}
-          />
-        ) : (
-          <div className="editor-surface-frame">
-            <EditorContent
-              className="editor-surface markdown-rendered markdown-preview-view"
-              editor={groupEditor}
-              onDoubleClick={openImagePreviewFromEditor}
-            />
-            {!paneMarkdown.trim() ? (
-              <div className="empty-document-placeholder" aria-hidden="true">
-                Start writing...
+            {isCanvasTab ? (
+              <CanvasView
+                commandRequest={isActiveGroup ? canvasCommandRequest : null}
+                content={paneMarkdown}
+                name={panePageName}
+                settings={canvasDraft}
+                vaultRoot={vaultRoot}
+                onChange={(nextContent) => updateCanvasDocument(groupId, nextContent)}
+                onOpenFile={openFile}
+              />
+            ) : (
+              <div className="editor-surface-frame">
+                <EditorContent
+                  className="editor-surface markdown-rendered markdown-preview-view"
+                  editor={groupEditor}
+                  onDoubleClick={openImagePreviewFromEditor}
+                />
+                {!paneMarkdown.trim() ? (
+                  <div className="empty-document-placeholder" aria-hidden="true">
+                    Start writing...
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            )}
           </div>
         )}
-        </div>
       </div>
     );
   }
@@ -10448,6 +10805,34 @@ function App() {
               New
             </button>
           ) : null}
+          <div className="view-mode-control" role="group" aria-label="Document display mode">
+            <button
+              className={documentDisplayMode === "view" ? "view-mode-button active" : "view-mode-button"}
+              type="button"
+              aria-label="View mode"
+              aria-pressed={documentDisplayMode === "view"}
+              title="View Mode"
+              onClick={() => setDocumentDisplayMode("view")}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M3.5 12s3-5.5 8.5-5.5S20.5 12 20.5 12s-3 5.5-8.5 5.5S3.5 12 3.5 12Z" />
+                <circle cx="12" cy="12" r="2.5" />
+              </svg>
+            </button>
+            <button
+              className={documentDisplayMode === "edit" ? "view-mode-button active" : "view-mode-button"}
+              type="button"
+              aria-label="Edit mode"
+              aria-pressed={documentDisplayMode === "edit"}
+              title="Edit Mode"
+              onClick={() => setDocumentDisplayMode("edit")}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M5 19h4.2L18.5 9.7a2 2 0 0 0-2.8-2.8L6.4 16.2Z" />
+                <path d="m14.4 8.2 1.4 1.4" />
+              </svg>
+            </button>
+          </div>
           <div className="appearance-control" role="group" aria-label="App style">
             <button
               className={appearance === "auto" ? "appearance-button active" : "appearance-button"}
@@ -10610,7 +10995,11 @@ function App() {
                   <div className="vault-path">
                     {displayVaultRelativePath(activeFile?.relativePath ?? currentDir, vaultRoot)}
                   </div>
-                  <div className="vault-list" role="list">
+                  <div
+                    className="vault-list"
+                    role="list"
+                    onContextMenu={handleVaultListContextMenu}
+                  >
                     {entries.map((entry) => (
                       <button
                         className={
@@ -11224,6 +11613,39 @@ function App() {
                         onChange={(event) => setSettingsDraft(event.currentTarget.value)}
                         placeholder={defaultVaultAssetDirectory}
                       />
+                    </label>
+                    <label>
+                      <span>New Tab</span>
+                      <div className="shortcut-capture-control">
+                        <input
+                          disabled={!vaultRoot}
+                          value={newTabFileDraft}
+                          onChange={(event) => setNewTabFileDraft(event.currentTarget.value)}
+                          placeholder="No file selected"
+                        />
+                        <button
+                          type="button"
+                          disabled={!vaultRoot}
+                          onClick={() => void chooseNewTabFile()}
+                        >
+                          Choose...
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!vaultRoot || !activeFile}
+                          onClick={() => setNewTabFileDraft(activeFile?.relativePath ?? "")}
+                        >
+                          Current
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!vaultRoot || !newTabFileDraft}
+                          onClick={() => setNewTabFileDraft(defaultNewTabFile)}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      <small>Cmd+T opens this vault file in the active pane.</small>
                     </label>
                     <label className="settings-check-control">
                       <input
@@ -12903,32 +13325,56 @@ function App() {
                 type="button"
                 role="menuitem"
                 onClick={() => {
+                  openFolderActionDialog("create-canvas", folderContextMenu.entry);
+                }}
+              >
+                Create Canvas
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
                   openFolderActionDialog("create-folder", folderContextMenu.entry);
                 }}
               >
                 Create Folder
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  openFolderActionDialog("rename", folderContextMenu.entry);
-                }}
-              >
-                Rename
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  openFolderActionDialog("move-folder", folderContextMenu.entry);
-                }}
-              >
-                Move
-              </button>
+              {!folderContextMenu.createOnly ? (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      openFolderActionDialog("rename", folderContextMenu.entry);
+                    }}
+                  >
+                    Rename
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      openFolderActionDialog("move-folder", folderContextMenu.entry);
+                    }}
+                  >
+                    Move
+                  </button>
+                </>
+              ) : null}
             </>
           ) : (
             <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  openFolderActionDialog("rename-file", folderContextMenu.entry);
+                }}
+              >
+                {isCanvasPath(folderContextMenu.entry.relativePath)
+                  ? "Rename Canvas"
+                  : "Rename File"}
+              </button>
               <button
                 type="button"
                 role="menuitem"

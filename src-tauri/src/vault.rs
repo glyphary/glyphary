@@ -263,7 +263,22 @@ pub(crate) fn rename_vault_file(
         return Err("Vault path is not a file".into());
     }
 
-    let next_name = sanitize_markdown_file_name(&next_name)?;
+    let next_name = match path
+        .extension()
+        .map(|extension| extension.to_string_lossy().to_lowercase())
+        .as_deref()
+    {
+        Some("md" | "markdown") => sanitize_markdown_file_name(&next_name)?,
+        Some("canvas") => sanitize_canvas_file_name(&next_name)?,
+        other => {
+            let clean = sanitize_directory_name(&next_name)?;
+
+            match (Path::new(&clean).extension(), other) {
+                (None, Some(extension)) => format!("{clean}.{extension}"),
+                _ => clean,
+            }
+        }
+    };
     let parent = path
         .parent()
         .ok_or_else(|| "File path has no parent".to_string())?;
@@ -359,6 +374,33 @@ pub(crate) fn create_note_in_directory(
     }
 
     fs::write(&path, "").map_err(|err| format!("Could not create note: {err}"))?;
+
+    read_vault_file(
+        root_path.to_string_lossy().into_owned(),
+        relative_string(&root_path, &path)?,
+    )
+}
+#[tauri::command]
+pub(crate) fn create_canvas_in_directory(
+    root: String,
+    relative: String,
+    canvas_name: String,
+) -> Result<OpenedFile, String> {
+    let (root_path, dir) = resolve_existing(&root, &relative)?;
+
+    if !dir.is_dir() {
+        return Err("Vault path is not a directory".into());
+    }
+
+    let canvas_name = sanitize_canvas_file_name(&canvas_name)?;
+    let path = dir.join(canvas_name);
+
+    if path.exists() {
+        return Err("A canvas with that name already exists in this folder".into());
+    }
+
+    fs::write(&path, "{\n  \"nodes\": [],\n  \"edges\": []\n}\n")
+        .map_err(|err| format!("Could not create canvas: {err}"))?;
 
     read_vault_file(
         root_path.to_string_lossy().into_owned(),

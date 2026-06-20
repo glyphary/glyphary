@@ -240,6 +240,7 @@ export type SettingsDragState = {
 
 export type VaultSettings = {
   assetDirectory: string;
+  newTabFile?: string | null;
   frontmatterPills?: FrontmatterPillSettings | null;
   files?: FileDisplaySettings | null;
   autosave?: AutosaveSettings | null;
@@ -307,12 +308,15 @@ export type FolderContextMenuState = {
   entry: VaultEntry;
   x: number;
   y: number;
+  createOnly?: boolean;
 };
 
 export type FolderActionKind =
   | "create-note"
+  | "create-canvas"
   | "create-folder"
   | "rename"
+  | "rename-file"
   | "move-folder"
   | "move-file"
   | "delete-file";

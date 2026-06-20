@@ -1,6 +1,6 @@
 APP_NAME := Glyphary
 APP_BUNDLE := src-tauri/target/release/bundle/macos/$(APP_NAME).app
-DMG := src-tauri/target/release/bundle/dmg/$(APP_NAME)_1.0.0-beta.1_aarch64.dmg
+DMG := src-tauri/target/release/bundle/dmg/$(APP_NAME)_1.0.0-beta.2_aarch64.dmg
 
 .PHONY: help install dev web docs docs-open manual manual-open build check test audit prod-app release windows run-app open-app open-dmg ship-dmg clean
 

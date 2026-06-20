@@ -1,4 +1,4 @@
-# Glyphary 1.0.0-beta.1 Release Notes
+# Glyphary 1.0.0-beta.2 Release Notes
 
 This release is a large step forward from `0.1.0`, focused on making Glyphary feel like a serious local-first Markdown workspace: richer editing, AI-assisted page building, Obsidian-compatible canvas support, faster navigation, better packaging, and more polished app chrome.
 
@@ -49,8 +49,12 @@ The left drawer now has a Tasks view.
 
 ### Visual Editing Improvements
 
+- Added View/Edit chrome modes so reading can hide frontmatter and the formatting toolbar while the document remains editable.
+- Added frontmatter-driven page banners via a `banner` value that can point at a vault image.
+- Wikilinks with aliases such as `[[Page Name|Display Name]]` now render as clean links when the cursor is outside the line.
 - Added gallery blocks for selected images.
 - Improved insertion points between special blocks.
+- Added plain paste with `Cmd+Shift+V`.
 - Improved HTML block insertion and rendering.
 - Improved table, callout, columns, collapse, rich-link, and TOC block behavior.
 - Better block boundary controls with less intrusive UI.
@@ -66,12 +70,20 @@ The left drawer now has a Tasks view.
 
 ### Packaging And Platform Work
 
-- Version moved to `1.0.0-beta.1`.
+- Version moved to `1.0.0-beta.2`.
 - Added Mac and Windows build targets.
 - Added Windows-specific Tauri configuration.
 - Added release/build Makefile improvements.
 - Added app icon generation for platform bundles.
 - Added `Cmd+W` behavior for closing the current tab.
+- Added `Cmd+T` New Tab behavior backed by a vault setting for a chosen default note.
+- The final tab can now be closed, leaving the editor center empty until another note or canvas opens.
+
+### Vault File Management
+
+- Empty space in the file drawer now offers create-note, create-canvas, and create-folder actions for the current folder.
+- Markdown files, canvas files, and folders can be renamed from the right-click menu.
+- New canvas files can be created directly from the folder context menu.
 
 ### Documentation
 
@@ -95,6 +107,9 @@ The left drawer now has a Tasks view.
 - Fixed duplicate File/New controls on platforms with an app menu.
 - Fixed app icon packaging issues.
 - Fixed command palette organization and keyboard navigation issues.
+- Fixed the command palette so it does not open document commands when no note or canvas is active.
+- Fixed column insertion so the block inserts at the cursor instead of appending to the file.
+- Fixed frontmatter parsing so a whole document wrapped in `---` is not swallowed as metadata.
 
 ## Notes
 

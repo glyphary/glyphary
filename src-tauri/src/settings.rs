@@ -24,6 +24,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
         })
         .collect::<Vec<_>>()
         .join("/");
+    let new_tab_file = clean_optional_relative(&settings.new_tab_file)?;
 
     let theme = clean_theme(settings.theme)?;
     let frontmatter_pills = clean_frontmatter_pill_settings(settings.frontmatter_pills)?;
@@ -39,6 +40,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
     } else {
         Ok(VaultSettings {
             asset_directory,
+            new_tab_file,
             frontmatter_pills,
             files: settings.files,
             autosave: settings.autosave,
@@ -53,6 +55,22 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
             theme,
         })
     }
+}
+pub(crate) fn clean_optional_relative(relative: &str) -> Result<String, String> {
+    let relative = relative.trim();
+
+    if relative.is_empty() {
+        return Ok(String::new());
+    }
+
+    Ok(clean_relative(relative)?
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(part) => Some(part.to_string_lossy().into_owned()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/"))
 }
 pub(crate) fn clean_ai_settings(settings: AiSettings) -> Result<AiSettings, String> {
     let base_url = settings.base_url.trim().trim_end_matches('/').to_string();

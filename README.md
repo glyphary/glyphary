@@ -18,15 +18,16 @@ blocks are edited visually instead of through raw syntax.
 ## Highlights
 
 - **Visual extended Markdown editing**: edit rich Markdown structures directly, including tables, columns, callouts, rich card links, galleries, code blocks, task lists, and collapsible sections.
-- **Obsidian compatibility where it matters**: open local vaults, resolve wikilinks, preserve frontmatter, support compatible daily notes, load approved CSS snippets, and fully open/edit Obsidian `.canvas` files.
+- **Obsidian compatibility where it matters**: open local vaults, resolve wikilinks and aliases, preserve frontmatter, render banner images, support compatible daily notes, load approved CSS snippets, and fully open/edit Obsidian `.canvas` files.
 - **Fast local search**: built-in vault search is extremely fast and does not require an external `rg` install.
 - **Command palette**: use quick commands for inserts, table actions, rich links, Excalidraw drawings, tidbits, canvas actions, and more.
-- **Canvas support**: open, edit, move, color, connect, and save Obsidian-compatible canvas nodes and edges.
+- **Canvas support**: create, open, rename, edit, move, color, connect, and save Obsidian-compatible canvas nodes and edges.
 - **Native Excalidraw integration**: create drawings from Glyphary and store them as vault files.
 - **Daily notes and tidbits**: open calendar notes, create quick notes, and capture tidbits from anywhere when the app is running.
 - **AI assistance**: connect an OpenAI-compatible backend for writing help, summaries, outlines, title generation, and page building.
 - **Optional Vim mode**: use a practical Normal/Insert mode editing layer for keyboard-driven note work.
-- **Themes and appearance**: choose light, dark, auto, glass, theme templates, CSS snippets, and editor treatments.
+- **Focused reading and editing**: switch between View and Edit chrome, close every tab when you want a blank workspace, and configure `Cmd+T` to reopen a chosen vault note.
+- **Themes and appearance**: choose light, dark, auto, glass, theme templates, CSS snippets, page banners, and editor treatments.
 - **Plugin system**: enable vault-local plugins that run fast inside a WASM sandbox.
 
 ## Visual Editing
@@ -67,6 +68,10 @@ Search, recent files, tasks, and quick commands are built into the workspace so
 large vaults stay navigable. The command palette adapts to the current context:
 Markdown notes get editing commands, tables get table commands, and canvases get
 canvas commands.
+
+When no document is open, Glyphary keeps the workspace calm: document-specific
+commands wait until a note or canvas is open. Configure the New Tab file in
+Settings to make `Cmd+T` open a favorite vault page such as a home note.
 
 <p align="center">
   <img src="https://glyphary.github.io/assets/screenshots/vault-search.png" alt="Glyphary vault search" />

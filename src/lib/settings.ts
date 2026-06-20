@@ -112,6 +112,7 @@ export const defaultAiSettings: AiSettings = {
   model: defaultAiModel,
   apiKey: "",
 };
+export const defaultNewTabFile = "";
 
 export function readPersistedWorkspace() {
   try {
@@ -264,6 +265,14 @@ export function sameTidbitSettings(
   right: TidbitSettings | undefined | null,
 ) {
   return sameNormalizedSettings(normalizeTidbitSettings, left, right);
+}
+
+export function normalizeNewTabFile(value: string | undefined | null) {
+  return value?.trim().replace(/^\/+/, "") ?? defaultNewTabFile;
+}
+
+export function sameNewTabFile(left: string | undefined | null, right: string | undefined | null) {
+  return normalizeNewTabFile(left) === normalizeNewTabFile(right);
 }
 
 export type ShortcutKeyboardEvent = Pick<

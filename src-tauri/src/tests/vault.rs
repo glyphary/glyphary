@@ -67,6 +67,27 @@ fn creates_note_inside_directory() {
 }
 
 #[test]
+fn creates_canvas_inside_directory() {
+    let root = test_root();
+    fs::create_dir(root.join("chapter")).expect("directory should be created");
+
+    let opened = create_canvas_in_directory(
+        root.to_string_lossy().into_owned(),
+        "chapter".into(),
+        "Map".into(),
+    )
+    .expect("canvas should be created");
+
+    assert_eq!(opened.name, "Map.canvas");
+    assert_eq!(opened.relative_path, "chapter/Map.canvas");
+    assert!(opened.content.contains(r#""nodes": []"#));
+    assert!(opened.content.contains(r#""edges": []"#));
+    assert!(root.join("chapter").join("Map.canvas").is_file());
+
+    fs::remove_dir_all(root).expect("test root should be removed");
+}
+
+#[test]
 fn creates_nested_vault_markdown_file() {
     let root = test_root();
 
@@ -267,6 +288,28 @@ fn renames_vault_file_in_same_directory() {
     assert_eq!(renamed.relative_path, "notes/New Name.md");
     assert!(!root.join("notes").join("Old.md").exists());
     assert_eq!(renamed.content, "# Old\n");
+
+    fs::remove_dir_all(root).expect("test root should be removed");
+}
+
+#[test]
+fn renames_canvas_file_in_same_directory() {
+    let root = test_root();
+    fs::write(root.join("Board.canvas"), r#"{"nodes":[],"edges":[]}"#)
+        .expect("canvas should be created");
+
+    let renamed = rename_vault_file(
+        root.to_string_lossy().into_owned(),
+        "Board.canvas".into(),
+        "Planning".into(),
+    )
+    .expect("canvas should rename");
+
+    assert_eq!(renamed.name, "Planning.canvas");
+    assert_eq!(renamed.relative_path, "Planning.canvas");
+    assert!(!root.join("Board.canvas").exists());
+    assert!(root.join("Planning.canvas").exists());
+    assert!(renamed.content.contains("nodes"));
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }

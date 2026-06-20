@@ -115,6 +115,8 @@ pub fn run() {
             let save = MenuItem::with_id(app, "save", "Save", true, Some("CmdOrCtrl+S"))?;
             let new_document =
                 MenuItem::with_id(app, "new_document", "New", true, Some("CmdOrCtrl+N"))?;
+            let new_tab =
+                MenuItem::with_id(app, "new_tab", "New Tab", true, Some("CmdOrCtrl+T"))?;
             let settings =
                 MenuItem::with_id(app, "settings", "Settings...", true, Some("CmdOrCtrl+,"))?;
             let appearance_auto =
@@ -145,6 +147,7 @@ pub fn run() {
                 "File",
                 true,
                 &[
+                    &new_tab,
                     &new_document,
                     &open_vault,
                     &save,
@@ -217,6 +220,8 @@ pub fn run() {
                 let _ = app.emit("save-requested", ());
             } else if event.id() == "new_document" {
                 let _ = app.emit("new-document-requested", ());
+            } else if event.id() == "new_tab" {
+                let _ = app.emit("new-tab-requested", ());
             } else if event.id() == "settings" {
                 let _ = app.emit("settings-requested", ());
             } else if event.id() == "appearance_auto" {
@@ -243,6 +248,7 @@ pub fn run() {
             move_vault_file,
             delete_vault_file,
             create_note_in_directory,
+            create_canvas_in_directory,
             create_directory_in_directory,
             rename_vault_directory,
             move_vault_directory,

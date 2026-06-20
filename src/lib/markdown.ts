@@ -109,12 +109,17 @@ export function splitMetaHeader(content: string): MarkdownParts {
 
     if (line === delimiter) {
       const headerEnd = nextBreak === -1 ? content.length : nextBreak + 1;
+      const metaHeader = content
+        .slice(content.indexOf("\n") + 1, match.index)
+        .replace(/\r\n/g, "\n")
+        .replace(/\r$/, "");
+
+      if (!looksLikeFrontmatter(metaHeader, delimiter)) {
+        return { metaHeader: "", metaDelimiter: defaultMetaDelimiter, body: content };
+      }
 
       return {
-        metaHeader: content
-          .slice(content.indexOf("\n") + 1, match.index)
-          .replace(/\r\n/g, "\n")
-          .replace(/\r$/, ""),
+        metaHeader,
         metaDelimiter: delimiter,
         body: content.slice(headerEnd),
       };
@@ -122,6 +127,53 @@ export function splitMetaHeader(content: string): MarkdownParts {
   }
 
   return { metaHeader: "", metaDelimiter: defaultMetaDelimiter, body: content };
+}
+
+function looksLikeFrontmatter(metaHeader: string, delimiter: MarkdownParts["metaDelimiter"]) {
+  const lines = metaHeader.split("\n").filter((line) => line.trim());
+
+  if (lines.length === 0) {
+    return false;
+  }
+
+  if (delimiter === "+++") {
+    let sawKey = false;
+    const validToml = lines.every((line) => {
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith("#") || /^\[[A-Za-z0-9_.-]+\]$/.test(trimmed)) {
+        return true;
+      }
+
+      if (/^[A-Za-z0-9_.-]+\s*=/.test(trimmed)) {
+        sawKey = true;
+        return true;
+      }
+
+      return false;
+    });
+
+    return validToml && sawKey;
+  }
+
+  let sawKey = false;
+
+  const validYaml = lines.every((line) => {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("#")) {
+      return true;
+    }
+
+    if (/^[A-Za-z0-9_-]+:\s*/.test(trimmed)) {
+      sawKey = true;
+      return true;
+    }
+
+    return sawKey && (/^\s+/.test(line) || trimmed.startsWith("- "));
+  });
+
+  return validYaml && sawKey;
 }
 
 function escapeRegExp(value: string) {
@@ -202,6 +254,21 @@ export function frontmatterListValues(
   }
 
   return values;
+}
+
+export function frontmatterScalarValue(metaHeader: string, headerName: string) {
+  const cleanHeaderName = headerName.trim();
+
+  if (!cleanHeaderName) {
+    return "";
+  }
+
+  const escapedHeaderName = escapeRegExp(cleanHeaderName);
+  const pattern = new RegExp(`^\\s*${escapedHeaderName}\\s*:\\s*(.+?)\\s*$`, "im");
+  const match = metaHeader.match(pattern);
+  const value = match?.[1]?.trim() ?? "";
+
+  return value.replace(/^['"]|['"]$/g, "").trim();
 }
 
 export function composeMarkdown(

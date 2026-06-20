@@ -211,6 +211,46 @@ pub(crate) fn sanitize_markdown_file_name(file_name: &str) -> Result<String, Str
         Ok(format!("{clean}.md"))
     }
 }
+pub(crate) fn sanitize_canvas_file_name(file_name: &str) -> Result<String, String> {
+    let file_name = Path::new(file_name)
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let without_extension = file_name.strip_suffix(".canvas").unwrap_or(&file_name);
+    let mut clean = String::new();
+    let mut previous_space = false;
+
+    for character in without_extension.chars() {
+        let next =
+            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_' | ' ') {
+                character
+            } else if character.is_whitespace() {
+                ' '
+            } else {
+                '-'
+            };
+
+        if next == ' ' {
+            if !previous_space {
+                clean.push(next);
+            }
+            previous_space = true;
+        } else {
+            clean.push(next);
+            previous_space = false;
+        }
+    }
+
+    let clean = clean
+        .trim_matches(|character: char| character == '.' || character == '-' || character == ' ')
+        .to_string();
+
+    if clean.is_empty() {
+        Err("Canvas name cannot be empty".into())
+    } else {
+        Ok(format!("{clean}.canvas"))
+    }
+}
 pub(crate) fn sanitize_directory_name(directory_name: &str) -> Result<String, String> {
     let directory_name = Path::new(directory_name)
         .file_name()

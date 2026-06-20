@@ -40,7 +40,10 @@ fn lists_underscore_canvas_files() {
         .expect("directory should list");
 
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0].relative_path, "_Veterinary Clinic Purchase.canvas");
+    assert_eq!(
+        entries[0].relative_path,
+        "_Veterinary Clinic Purchase.canvas"
+    );
     assert!(!entries[0].is_dir);
 
     fs::remove_dir_all(root).expect("test root should be removed");
@@ -89,6 +92,7 @@ fn reads_default_vault_settings_when_missing() {
         read_vault_settings(root.to_string_lossy().into_owned()).expect("settings should default");
 
     assert_eq!(settings.asset_directory, DEFAULT_ASSET_DIRECTORY);
+    assert!(settings.new_tab_file.is_empty());
     assert!(settings.frontmatter_pills.enabled);
     assert_eq!(
         settings.frontmatter_pills.header_name,
@@ -166,6 +170,7 @@ fn writes_vault_settings_file() {
         root.to_string_lossy().into_owned(),
         VaultSettings {
             asset_directory: "media/images".into(),
+            new_tab_file: " Meta/Home2.md ".into(),
             frontmatter_pills: FrontmatterPillSettings {
                 enabled: false,
                 header_name: "topics".into(),
@@ -199,6 +204,7 @@ fn writes_vault_settings_file() {
     .expect("settings should write");
 
     assert_eq!(settings.asset_directory, "media/images");
+    assert_eq!(settings.new_tab_file, "Meta/Home2.md");
     assert!(!settings.frontmatter_pills.enabled);
     assert_eq!(settings.frontmatter_pills.header_name, "topics");
     assert!(settings.files.show_dotfiles);
@@ -306,9 +312,18 @@ fn rejects_invalid_vault_settings_asset_directories() {
         },
     )
     .expect_err("escaping asset directory should fail");
+    let escaped_new_tab = write_vault_settings(
+        root.to_string_lossy().into_owned(),
+        VaultSettings {
+            new_tab_file: "../Home.md".into(),
+            ..VaultSettings::default()
+        },
+    )
+    .expect_err("escaping new tab file should fail");
 
     assert!(empty.contains("cannot be empty"));
     assert!(escaped.contains("escapes the vault"));
+    assert!(escaped_new_tab.contains("escapes the vault"));
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }

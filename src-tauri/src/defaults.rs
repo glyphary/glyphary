@@ -203,6 +203,7 @@ impl Default for VaultSettings {
     fn default() -> Self {
         Self {
             asset_directory: DEFAULT_ASSET_DIRECTORY.into(),
+            new_tab_file: String::new(),
             frontmatter_pills: FrontmatterPillSettings::default(),
             files: FileDisplaySettings::default(),
             autosave: AutosaveSettings::default(),
