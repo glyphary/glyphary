@@ -15,9 +15,16 @@ blocks are edited visually instead of through raw syntax.
   <img src="https://glyphary.github.io/assets/screenshots/main-workspace.png" alt="Glyphary workspace with an open vault" />
 </p>
 
+## Install
+
+Download the latest build from
+[GitHub Releases](https://github.com/glyphary/glyphary/releases). On macOS,
+download the `.dmg`, open it, and move `Glyphary.app` to Applications. On
+Windows, download the Windows installer and run it.
+
 ## Highlights
 
-- **Visual extended Markdown editing**: edit rich Markdown structures directly, including tables, columns, callouts, rich card links, galleries, code blocks, task lists, and collapsible sections.
+- **Visual extended Markdown editing**: edit rich Markdown structures directly, including tables with right-click row, column, and alignment actions; columns; callouts; rich card links; galleries; code blocks; task lists; and collapsible sections.
 - **Obsidian compatibility where it matters**: open local vaults, resolve wikilinks and aliases, preserve frontmatter, render banner images, support compatible daily notes, load approved CSS snippets, and fully open/edit Obsidian `.canvas` files.
 - **Fast local search**: built-in vault search is extremely fast and does not require an external `rg` install.
 - **Command palette**: use quick commands for inserts, table actions, rich links, Excalidraw drawings, tidbits, canvas actions, and more.
@@ -102,13 +109,22 @@ snippets, a theme builder, and basic Obsidian-style theme compatibility.
 ## For Devs
 
 ```
-make prod-app && make run-app
-make ship-dmg && make windows
+git clone https://github.com/glyphary/glyphary.git
+cd glyphary
+make install
+make dev
+make check
+make test
 ```
+
+Use `make prod-app` for a production `.app`, `make release` for a release
+bundle, and `make ship-dmg` for notarized distribution when signing is
+configured.
 
 ## Learn More
 
-The full user manual covers vaults, editing, canvas files, AI features, settings,
-themes, plugins, shortcuts, and troubleshooting:
+The full user manual covers installation, vaults, editing, Markdown syntax,
+canvas files, AI features, settings, themes, plugins, shortcuts, developer
+setup, and troubleshooting:
 
 [Open the Glyphary documentation](https://glyphary.github.io/)

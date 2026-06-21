@@ -11,6 +11,7 @@ import type { Editor, JSONContent, MarkdownToken, NodeViewProps } from "@tiptap/
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { redo, undo } from "@tiptap/pm/history";
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection } from "@tiptap/pm/state";
+import { TableMap } from "@tiptap/pm/tables";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { EditorView } from "@tiptap/pm/view";
 import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
@@ -808,6 +809,14 @@ type CommandPaletteCommand = {
   description: string;
   run: () => void | Promise<void>;
 };
+
+type TableContextMenuState = {
+  groupId: EditorGroupId;
+  x: number;
+  y: number;
+};
+
+type TableColumnAlignment = "left" | "center" | "right";
 
 // The command palette is intentionally shallow at the root. Heavy command
 // families live in scopes so the root stays useful for fuzzy search.
@@ -4363,6 +4372,7 @@ function App() {
   const [excalidrawDirty, setExcalidrawDirty] = useState(false);
   const [imagePreview, setImagePreview] = useState<ImagePreviewState | null>(null);
   const [folderContextMenu, setFolderContextMenu] = useState<FolderContextMenuState | null>(null);
+  const [tableContextMenu, setTableContextMenu] = useState<TableContextMenuState | null>(null);
   const [folderActionDialog, setFolderActionDialog] = useState<FolderActionDialogState | null>(null);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState("No vault open");
@@ -4779,6 +4789,32 @@ function App() {
       window.removeEventListener("keydown", closeMenuOnEscape);
     };
   }, [folderContextMenu]);
+
+  useEffect(() => {
+    if (!tableContextMenu) {
+      return;
+    }
+
+    const closeMenu = () => setTableContextMenu(null);
+    const closeMenuOnPrimaryPointerDown = (event: PointerEvent) => {
+      if (event.button === 0) {
+        closeMenu();
+      }
+    };
+    const closeMenuOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+
+    window.addEventListener("pointerdown", closeMenuOnPrimaryPointerDown);
+    window.addEventListener("keydown", closeMenuOnEscape);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeMenuOnPrimaryPointerDown);
+      window.removeEventListener("keydown", closeMenuOnEscape);
+    };
+  }, [tableContextMenu]);
 
   function syncEditorState(nextEditor: Editor) {
     if (!isEditorReady(nextEditor)) {
@@ -7663,6 +7699,7 @@ function App() {
       setActiveGroupId(existing.groupId);
       hydrateDocumentTab(existing.tab, existing.groupId);
       persistActiveFile(existing.tab.activeFile);
+      await revealFileInVaultDrawer(existing.tab.activeFile);
       setStatus(
         `Switched to ${existing.tab.activeFile?.relativePath ?? tabTitle(existing.tab)}`,
       );
@@ -7681,7 +7718,7 @@ function App() {
       hydrateDocumentTab(tab);
       persistActiveFile(tab.activeFile);
       addFileToWikiLinkIndex(file);
-      await loadEntries(vaultRoot, currentDir);
+      await revealFileInVaultDrawer(tab.activeFile);
       setCalendarNoteDateKeys((dateKeys) =>
         dateKeys.includes(calendarDateKey(date)) ? dateKeys : [...dateKeys, calendarDateKey(date)],
       );
@@ -8399,6 +8436,88 @@ function App() {
     cancelPendingDirectoryClick();
 
     openDirectoryShadow(entry.relativePath);
+  }
+
+  function handleEditorContextMenu(
+    event: ReactMouseEvent<HTMLElement>,
+    targetEditor: Editor | null,
+    groupId: EditorGroupId,
+  ) {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+
+    if (!targetEditor || !target?.closest("table")) {
+      return;
+    }
+
+    event.preventDefault();
+    activateEditorGroup(groupId);
+
+    const position = targetEditor.view.posAtCoords({
+      left: event.clientX,
+      top: event.clientY,
+    });
+
+    if (position) {
+      targetEditor.commands.setTextSelection(position.pos);
+    }
+
+    if (
+      targetEditor.isActive("table") ||
+      targetEditor.isActive("tableCell") ||
+      targetEditor.isActive("tableHeader")
+    ) {
+      setTableContextMenu({ groupId, x: event.clientX, y: event.clientY });
+    }
+  }
+
+  function alignCurrentTableColumn(targetEditor: Editor | null, alignment: TableColumnAlignment) {
+    if (!targetEditor) {
+      return;
+    }
+
+    const { state, view } = targetEditor;
+    const restorePosition = state.selection.from;
+    const tableDepth = ancestorDepthByName(state.selection.$from, "table");
+    const cellDepth =
+      ancestorDepthByName(state.selection.$from, "tableCell") ??
+      ancestorDepthByName(state.selection.$from, "tableHeader");
+
+    if (tableDepth === null || cellDepth === null) {
+      return;
+    }
+
+    const table = state.selection.$from.node(tableDepth);
+    const tableStart = state.selection.$from.start(tableDepth);
+    const map = TableMap.get(table);
+    const cellOffset = state.selection.$from.before(cellDepth) - tableStart;
+    const column = map.colCount(cellOffset);
+    const tr = state.tr;
+
+    // Avoid CellSelection here: ProseMirror records it in undo history, so
+    // Cmd+Z would restore a visible whole-column selection after undoing align.
+    for (const cellPosition of map.cellsInRect({
+      left: column,
+      right: column + 1,
+      top: 0,
+      bottom: map.height,
+    })) {
+      const cell = table.nodeAt(cellPosition);
+
+      if (cell && cell.attrs.align !== alignment) {
+        tr.setNodeMarkup(tableStart + cellPosition, undefined, {
+          ...cell.attrs,
+          align: alignment,
+        });
+      }
+    }
+
+    if (tr.docChanged) {
+      tr.setSelection(TextSelection.create(tr.doc, restorePosition));
+      view.dispatch(tr);
+      view.focus();
+    }
+
+    setTableContextMenu(null);
   }
 
   function resetDocument() {
@@ -10668,6 +10787,7 @@ function App() {
                   className="editor-surface markdown-rendered markdown-preview-view"
                   editor={groupEditor}
                   onDoubleClick={openImagePreviewFromEditor}
+                  onContextMenu={(event) => handleEditorContextMenu(event, groupEditor, groupId)}
                 />
                 {!paneMarkdown.trim() ? (
                   <div className="empty-document-placeholder" aria-hidden="true">
@@ -10719,6 +10839,9 @@ function App() {
     transform: `translate(${settingsOffset.x}px, ${settingsOffset.y}px)`,
   } as CSSProperties;
   const aiBuilderHistoryTurns = activeAiBuilderHistoryTurns();
+  const tableContextEditor = tableContextMenu
+    ? editorForGroup(tableContextMenu.groupId)
+    : null;
 
   return (
     <main className={appShellClassName} style={appShellStyle}>
@@ -13298,6 +13421,54 @@ function App() {
               <small>{file.relativePath}</small>
             </button>
           ))}
+        </div>
+      ) : null}
+      {tableContextMenu ? (
+        <div
+          className="table-context-menu"
+          style={{ left: tableContextMenu.x, top: tableContextMenu.y }}
+          role="menu"
+          aria-label="Table actions"
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+          onMouseDown={(event) => event.preventDefault()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {tableCommandPaletteCommands.map((command) => (
+            <button
+              key={command.id}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                void command.run();
+                setTableContextMenu(null);
+              }}
+            >
+              {command.title}
+            </button>
+          ))}
+          <div className="table-context-separator" role="separator" />
+          <div className="table-context-submenu">
+            <button type="button" role="menuitem" aria-haspopup="menu">
+              Align column...
+            </button>
+            <div className="table-context-submenu-panel" role="menu" aria-label="Align column">
+              {(["left", "center", "right"] as const).map((alignment) => (
+                <button
+                  key={alignment}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => alignCurrentTableColumn(tableContextEditor, alignment)}
+                >
+                  {alignment === "left"
+                    ? "Left align"
+                    : alignment === "center"
+                      ? "Center align"
+                      : "Right align"}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       ) : null}
       {folderContextMenu ? (

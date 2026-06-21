@@ -5044,7 +5044,8 @@ body.workspace-resizing * {
   gap: 8px;
 }
 
-.folder-context-menu {
+.folder-context-menu,
+.table-context-menu {
   position: fixed;
   z-index: 80;
   display: grid;
@@ -5057,7 +5058,8 @@ body.workspace-resizing * {
   padding: 5px;
 }
 
-.folder-context-menu button {
+.folder-context-menu button,
+.table-context-menu button {
   width: 100%;
   border: 0;
   border-radius: 6px;
@@ -5071,8 +5073,38 @@ body.workspace-resizing * {
   text-align: left;
 }
 
-.folder-context-menu button:hover {
+.folder-context-menu button:hover,
+.table-context-menu button:hover {
   background: var(--hover);
+}
+
+.table-context-submenu {
+  position: relative;
+}
+
+.table-context-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+.table-context-submenu-panel {
+  position: absolute;
+  top: -5px;
+  left: 100%;
+  display: none;
+  min-width: 142px;
+  gap: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px var(--shadow-strong);
+  padding: 5px;
+}
+
+.table-context-submenu:hover .table-context-submenu-panel,
+.table-context-submenu:focus-within .table-context-submenu-panel {
+  display: grid;
 }
 
 .folder-action-dialog-screen {

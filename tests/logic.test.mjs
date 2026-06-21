@@ -285,6 +285,11 @@ test("desktop platform detection controls platform-specific window actions", () 
 });
 
 test("calendar filenames match the requested note naming scheme and dot marker keys", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const openCalendarDay = app.slice(
+    app.indexOf("async function openCalendarDay"),
+    app.indexOf("async function openDirectoryShadow"),
+  );
   const day = new Date(2026, 5, 14);
 
   assert.equal(calendarDayTitle(day), "Sun, Jun 14th 2026");
@@ -292,6 +297,9 @@ test("calendar filenames match the requested note naming scheme and dot marker k
   assert.equal(calendarDateKey(day), "2026-06-14");
   assert.equal(calendarPathDateKey("Calendar/Sun, Jun 14th 2026.md"), "2026-06-14");
   assert.equal(calendarPathDateKey("Calendar/Mon, Jun 14th 2026.md"), null);
+  assert.match(openCalendarDay, /await revealFileInVaultDrawer\(existing\.tab\.activeFile\)/);
+  assert.match(openCalendarDay, /await revealFileInVaultDrawer\(tab\.activeFile\)/);
+  assert.doesNotMatch(openCalendarDay, /await loadEntries\(vaultRoot, currentDir\)/);
 });
 
 test("markdown headings produce a table of contents and ignore fenced code", () => {
@@ -927,6 +935,11 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.doesNotMatch(manualHtml, /href="\.\.\/docs\/theming\.md"/);
   assert.doesNotMatch(manualHtml, /href="\.\.\/docs\/plugins\.md"/);
   assert.match(manualHtml, /Open A Vault/);
+  assert.match(manualHtml, /Install Glyphary/);
+  assert.match(manualHtml, /https:\/\/github\.com\/glyphary\/glyphary\/releases/);
+  assert.match(manualHtml, /Download the macOS <code>\.dmg<\/code>/);
+  assert.match(manualHtml, /Download the Windows installer/);
+  assert.match(manualHtml, /Windows SmartScreen/);
   assert.match(manualHtml, /File And Folder Actions/);
   assert.match(manualHtml, /Create canvas/);
   assert.match(manualHtml, /Rename file or canvas/);
@@ -948,7 +961,15 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /banner: '!\[\[Pasted image 20230521183520\.png\]\]'/);
   assert.match(manualHtml, /View\/Edit icon selector/);
   assert.match(manualHtml, /Configure <strong>New Tab<\/strong>/);
-  assert.match(manualHtml, /Markdown Features/);
+  assert.match(manualHtml, /Markdown Reference/);
+  assert.match(manualHtml, /Glyphary Markdown support is extension-driven/);
+  assert.match(manualHtml, /\| :--- \| -----: \|/);
+  assert.match(manualHtml, /right-click a table to use the same row\s+and column commands/);
+  assert.match(manualHtml, /<strong>Align column\.\.\.<\/strong>/);
+  assert.match(manualHtml, /\[\[Page Name\|Display text\]\]/);
+  assert.match(manualHtml, /attribute-list syntax such as <code>\{align=right\}<\/code>/);
+  assert.match(manualHtml, /::: gallery/);
+  assert.match(manualHtml, /::: rich-link/);
   assert.match(manualHtml, /Excalidraw drawings/);
   assert.match(manualHtml, /Tidbits/);
   assert.match(manualHtml, /Global tidbit capture/);
@@ -980,6 +1001,11 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /Minimal manifest/);
   assert.match(manualHtml, /glyphary-wasm-transform@1/);
   assert.match(manualHtml, /About And Debug/);
+  assert.match(manualHtml, /Developers/);
+  assert.match(manualHtml, /git clone https:\/\/github\.com\/glyphary\/glyphary\.git/);
+  assert.match(manualHtml, /make install/);
+  assert.match(manualHtml, /make dev/);
+  assert.match(manualHtml, /make check/);
   assert.match(manualHtml, /Vim Mode/);
   assert.match(manualHtml, /Troubleshooting/);
   assert.match(manualHtml, /\.\/assets\/screenshots\/main-workspace\.png/);
@@ -2205,6 +2231,7 @@ test("AI commands use vault settings and review output before editing", () => {
 
 test("table row and column actions are contextual command palette entries", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
 
   assert.match(app, /const cursorInsideTable/);
   assert.match(app, /editor\.isActive\("table"\)/);
@@ -2225,6 +2252,28 @@ test("table row and column actions are contextual command palette entries", () =
   assert.match(app, /setCommandPaletteScope\("table"\)/);
   assert.match(app, /Table commands/);
   assert.match(app, /Type a table command/);
+  assert.match(app, /type TableColumnAlignment = "left" \| "center" \| "right"/);
+  assert.match(app, /function handleEditorContextMenu/);
+  assert.match(app, /target\?\.closest\("table"\)/);
+  assert.match(app, /onContextMenu=\{\(event\) => handleEditorContextMenu\(event, groupEditor, groupId\)\}/);
+  assert.match(app, /TableMap\.get\(table\)/);
+  assert.match(app, /map\.cellsInRect/);
+  assert.match(app, /tr\.setNodeMarkup\(tableStart \+ cellPosition/);
+  assert.match(app, /Avoid CellSelection here/);
+  assert.match(app, /Cmd\+Z would restore a visible whole-column selection/);
+  assert.match(app, /const restorePosition = state\.selection\.from/);
+  assert.match(app, /tr\.setSelection\(TextSelection\.create\(tr\.doc, restorePosition\)\)/);
+  assert.doesNotMatch(app, /CellSelection\.colSelection/);
+  assert.doesNotMatch(app, /setCellAttribute\("align", alignment\)/);
+  assert.match(app, /onMouseDown=\{\(event\) => event\.preventDefault\(\)\}/);
+  assert.match(app, /Align column\.\.\./);
+  assert.match(app, /className="table-context-separator"/);
+  assert.match(app, /Left align/);
+  assert.match(app, /Center align/);
+  assert.match(app, /Right align/);
+  assert.match(css, /\.table-context-menu/);
+  assert.match(css, /\.table-context-separator/);
+  assert.match(css, /\.table-context-submenu-panel/);
   assert.doesNotMatch(app, /\.\.\.tableCommandPaletteCommands/);
   assert.doesNotMatch(app, /label: "\+ Row"/);
   assert.doesNotMatch(app, /label: "- Row"/);
