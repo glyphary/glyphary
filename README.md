@@ -4,7 +4,9 @@
 
 # Glyphary
 
-[Documentation](https://glyphary.github.io/)
++-----------------------------------------------------------+
+| **Click for [Documentation and Install guide](https://glyphary.github.io/)**
++-----------------------------------------------------------+
 
 Glyphary is a fully open-source, fast, responsive, macOS-only Markdown workspace
 for local vaults. It edits extended Markdown in true WYSIWYG mode, so tables,
@@ -14,13 +16,6 @@ blocks are edited visually instead of through raw syntax.
 <p align="center">
   <img src="https://glyphary.github.io/assets/screenshots/main-workspace.png" alt="Glyphary workspace with an open vault" />
 </p>
-
-## Install
-
-Download the latest build from
-[GitHub Releases](https://github.com/glyphary/glyphary/releases). On macOS,
-download the `.dmg`, open it, and move `Glyphary.app` to Applications. On
-Windows, download the Windows installer and run it.
 
 ## Highlights
 
@@ -105,21 +100,6 @@ through follow-up prompts.
 
 Glyphary supports light, dark, and auto modes, theme templates, approved CSS
 snippets, a theme builder, and basic Obsidian-style theme compatibility.
-
-## For Devs
-
-```
-git clone https://github.com/glyphary/glyphary.git
-cd glyphary
-make install
-make dev
-make check
-make test
-```
-
-Use `make prod-app` for a production `.app`, `make release` for a release
-bundle, and `make ship-dmg` for notarized distribution when signing is
-configured.
 
 ## Learn More
 
