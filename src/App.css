@@ -3394,6 +3394,23 @@ body.workspace-resizing * {
   padding: 1rem;
 }
 
+.editor-surface pre.mermaid-code-block,
+.editor-surface .code-block-node.mermaid-code-block {
+  border: var(--border-width) solid var(--border-soft);
+  background: var(--surface-muted);
+  color: var(--editor-text);
+}
+
+.editor-surface pre.mermaid-code-block.rendered,
+.editor-surface .code-block-node.mermaid-code-block.rendered {
+  display: none;
+}
+
+.editor-surface pre.mermaid-code-block.editing,
+.editor-surface .code-block-node.mermaid-code-block.editing pre {
+  padding: 1rem;
+}
+
 .toc-code-render {
   display: flex;
   flex-direction: column;
@@ -3402,7 +3419,8 @@ body.workspace-resizing * {
   white-space: normal;
 }
 
-.toc-code-header {
+.toc-code-header,
+.mermaid-code-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -3410,14 +3428,16 @@ body.workspace-resizing * {
   padding-bottom: 6px;
 }
 
-.toc-code-header strong {
+.toc-code-header strong,
+.mermaid-code-header strong {
   color: var(--heading);
   font-family: var(--font-ui);
   font-size: 0.82rem;
   font-weight: 900;
 }
 
-.toc-code-header button {
+.toc-code-header button,
+.mermaid-code-header button {
   border: var(--border-width) solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -3429,9 +3449,39 @@ body.workspace-resizing * {
   padding: 4px 8px;
 }
 
-.toc-code-header button:hover {
+.toc-code-header button:hover,
+.mermaid-code-header button:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+.mermaid-code-render {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 1rem 0;
+  border: var(--border-width) solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted);
+  padding: 12px;
+  white-space: normal;
+}
+
+.mermaid-code-body {
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 12px;
+  color: var(--muted-strong);
+  font-family: var(--font-ui);
+  font-size: 0.82rem;
+}
+
+.mermaid-code-body svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
 }
 
 .toc-code-list {

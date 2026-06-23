@@ -21,7 +21,7 @@ blocks are edited visually instead of through raw syntax.
 
 ## Highlights
 
-- **Visual extended Markdown editing**: edit rich Markdown structures directly, including tables with right-click row, column, and alignment actions; columns; callouts; rich card links; galleries; code blocks; task lists; and collapsible sections.
+- **Visual extended Markdown editing**: edit rich Markdown structures directly, including tables with right-click row, column, and alignment actions; Mermaid diagrams; columns; callouts; rich card links; galleries; code blocks; task lists; and collapsible sections.
 - **Obsidian compatibility where it matters**: open local vaults, resolve wikilinks and aliases, preserve frontmatter, render banner images, support compatible daily notes, load approved CSS snippets, and fully open/edit Obsidian `.canvas` files.
 - **Fast local search**: built-in vault search is extremely fast and does not require an external `rg` install.
 - **Command palette**: use quick commands for inserts, table actions, rich links, Excalidraw drawings, tidbits, canvas actions, and more.

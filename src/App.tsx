@@ -298,6 +298,23 @@ lowlight.register("md", markdownLanguage);
 // "toc" is a display mode layered over a normal fenced code block. Register it
 // as plain text so the block remains editable and round-trips as ```toc.
 lowlight.register("toc", plaintext);
+lowlight.register("mermaid", plaintext);
+
+let mermaidRenderer: Promise<typeof import("mermaid")["default"]> | null = null;
+
+function loadMermaidRenderer() {
+  mermaidRenderer ??= import("mermaid").then(({ default: mermaid }) => {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "default",
+    });
+
+    return mermaid;
+  });
+
+  return mermaidRenderer;
+}
 
 const RuntimeGapCursor = GapCursor as typeof GapCursor & {
   valid: (position: ResolvedPos) => boolean;
@@ -1008,6 +1025,80 @@ function createTocCodeWidget(headings: TocEntry[], blockPosition: number) {
   return render;
 }
 
+function shortHash(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+
+  return Math.abs(hash).toString(36);
+}
+
+function renderMermaidDiagram(render: HTMLElement, source: string, renderId: string) {
+  render.dataset.mermaidRenderId = renderId;
+
+  const body = render.querySelector<HTMLElement>(".mermaid-code-body");
+
+  if (!body) {
+    return;
+  }
+
+  if (!source.trim()) {
+    body.textContent = "Empty Mermaid diagram.";
+    return;
+  }
+
+  body.textContent = "Rendering diagram...";
+
+  void loadMermaidRenderer()
+    .then((mermaid) => mermaid.render(renderId, source))
+    .then(({ svg, bindFunctions }) => {
+      if (render.dataset.mermaidRenderId !== renderId) {
+        return;
+      }
+
+      body.innerHTML = svg;
+      bindFunctions?.(body);
+    })
+    .catch((error: unknown) => {
+      if (render.dataset.mermaidRenderId !== renderId) {
+        return;
+      }
+
+      body.textContent = error instanceof Error ? error.message : String(error);
+    });
+}
+
+function createMermaidCodeWidget(source: string, blockPosition: number) {
+  const render = document.createElement("div");
+  const renderId = `glyphary-mermaid-${blockPosition}-${shortHash(source)}`;
+  render.className = "mermaid-code-render mermaid-code-widget";
+  render.contentEditable = "false";
+  render.dataset.mermaidBlockPosition = String(blockPosition);
+
+  const header = document.createElement("div");
+  header.className = "mermaid-code-header";
+
+  const title = document.createElement("strong");
+  title.textContent = "Mermaid";
+  header.appendChild(title);
+
+  const editButton = document.createElement("button");
+  editButton.type = "button";
+  editButton.dataset.mermaidEdit = "true";
+  editButton.textContent = "Edit";
+  header.appendChild(editButton);
+  render.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "mermaid-code-body";
+  render.appendChild(body);
+
+  renderMermaidDiagram(render, source, renderId);
+  return render;
+}
+
 const TocCodeBlockRenderer = Extension.create({
   name: "tocCodeBlockRenderer",
 
@@ -1046,6 +1137,63 @@ const TocCodeBlockRenderer = Extension.create({
                     () => createTocCodeWidget(headings, position),
                     {
                       key: `toc-code:${position}:${headings.map((entry) => entry.id).join("|")}`,
+                      side: -1,
+                    },
+                  ),
+                );
+              }
+
+              return false;
+            });
+
+            return DecorationSet.create(state.doc, decorations);
+          },
+        },
+      }),
+    ];
+  },
+});
+
+const MermaidCodeBlockRenderer = Extension.create({
+  name: "mermaidCodeBlockRenderer",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("mermaidCodeBlockRenderer"),
+        props: {
+          decorations: (state) => {
+            const decorations: Decoration[] = [];
+
+            state.doc.descendants((node, position) => {
+              if (node.type.name !== "codeBlock") {
+                return true;
+              }
+
+              if (node.attrs.language !== "mermaid") {
+                return false;
+              }
+
+              const selected = codeBlockContainsSelection(
+                state.selection,
+                position,
+                node.nodeSize,
+              );
+              const source = node.textContent;
+
+              decorations.push(
+                Decoration.node(position, position + node.nodeSize, {
+                  class: selected ? "mermaid-code-block editing" : "mermaid-code-block rendered",
+                }),
+              );
+
+              if (!selected) {
+                decorations.push(
+                  Decoration.widget(
+                    position + node.nodeSize,
+                    () => createMermaidCodeWidget(source, position),
+                    {
+                      key: `mermaid-code:${position}:${shortHash(source)}`,
                       side: -1,
                     },
                   ),
@@ -5685,6 +5833,7 @@ function App() {
           lowlight,
         }),
         TocCodeBlockRenderer,
+        MermaidCodeBlockRenderer,
         createWikiLinkExtension({
           openSearch: () => openWikiLinkSearchRef.current(),
           resolveTarget: (target) => resolveWikiLinkTargetRef.current(target),
@@ -5865,7 +6014,7 @@ function App() {
         }
 
         const button = target.closest<HTMLButtonElement>(
-          "[data-toc-entry-id], [data-toc-edit]",
+          "[data-toc-entry-id], [data-toc-edit], [data-mermaid-edit]",
         );
 
         if (!button || !root.contains(button)) {
@@ -5878,6 +6027,18 @@ function App() {
         if (button.dataset.tocEdit) {
           const widget = button.closest<HTMLElement>("[data-toc-block-position]");
           const blockPosition = Number(widget?.dataset.tocBlockPosition);
+
+          if (Number.isFinite(blockPosition)) {
+            targetEditor.chain().focus().setTextSelection(blockPosition + 1).run();
+          } else {
+            targetEditor.commands.focus();
+          }
+          return;
+        }
+
+        if (button.dataset.mermaidEdit) {
+          const widget = button.closest<HTMLElement>("[data-mermaid-block-position]");
+          const blockPosition = Number(widget?.dataset.mermaidBlockPosition);
 
           if (Number.isFinite(blockPosition)) {
             targetEditor.chain().focus().setTextSelection(blockPosition + 1).run();
@@ -6132,6 +6293,13 @@ function App() {
         title: "Insert HTML block",
         isActive: () => false,
         run: () => insertHtmlBlock(),
+      },
+      {
+        label: "Mermaid",
+        icon: "code",
+        title: "Insert Mermaid diagram",
+        isActive: () => false,
+        run: () => insertMermaidDiagram(),
       },
       {
         label: "Table",
@@ -8676,6 +8844,20 @@ function App() {
       .run();
   }
 
+  function insertMermaidDiagram() {
+    if (!editor) {
+      return;
+    }
+
+    editor
+      .chain()
+      .focus()
+      .insertContent("```mermaid\nflowchart TD\n  A[Start] --> B[Done]\n```", {
+        contentType: "markdown",
+      })
+      .run();
+  }
+
   function insertMarkdownAtCursor(content: string) {
     if (!editor || !content.trim()) {
       return;
@@ -9974,6 +10156,12 @@ function App() {
       title: "Insert HTML block",
       description: "Add a sanitized raw HTML block",
       run: insertHtmlBlock,
+    },
+    {
+      id: "insert-mermaid-diagram",
+      title: "Insert Mermaid diagram",
+      description: "Add a rendered Mermaid diagram block",
+      run: insertMermaidDiagram,
     },
     {
       id: "insert-table-of-contents",

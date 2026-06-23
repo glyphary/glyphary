@@ -1,4 +1,4 @@
-# Glyphary 1.0.0-beta.2 Release Notes
+# Glyphary 1.0.0-beta.3 Release Notes
 
 This beta is focused on making Glyphary feel more natural as a local-first
 Markdown editor: cleaner reading, better Obsidian compatibility, richer table
@@ -15,6 +15,8 @@ controls, and release packaging that is ready for notarization.
 - Added wikilink aliases such as `[[Actual Page|Display Name]]`.
 - Wikilinks render as clean links outside the active line, hiding `[[...]]`
   syntax and alias targets while preserving the Markdown on disk.
+- Added rendered Mermaid diagrams from fenced `mermaid` code blocks, with an
+  Edit control to return to the Markdown source.
 - Added plain paste with `Cmd+Shift+V`.
 - Fixed column insertion so new columns insert at the cursor instead of the end
   of the file.
@@ -63,7 +65,7 @@ controls, and release packaging that is ready for notarization.
 
 ### Packaging
 
-- Version fields are now `1.0.0-beta.2`.
+- Version fields are now `1.0.0-beta.3`.
 - Fixed the Windows bundle icon configuration.
 - Updated the release Makefile to build the universal macOS DMG path directly.
 - Fixed macOS release signing so the universal app binary is signed with the
@@ -72,6 +74,6 @@ controls, and release packaging that is ready for notarization.
 
 ## Notes
 
-`1.0.0-beta.2` is still a beta because these changes touch editing behavior,
+`1.0.0-beta.3` is still a beta because these changes touch editing behavior,
 Markdown rendering, table mutation, file-tree actions, and platform packaging.
 Please test with a real vault before replacing your daily build.

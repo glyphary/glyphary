@@ -966,6 +966,7 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /\| :--- \| -----: \|/);
   assert.match(manualHtml, /right-click a table to use the same row\s+and column commands/);
   assert.match(manualHtml, /<strong>Align column\.\.\.<\/strong>/);
+  assert.match(manualHtml, /rendered Mermaid diagrams from <code>mermaid<\/code> fences/);
   assert.match(manualHtml, /\[\[Page Name\|Display text\]\]/);
   assert.match(manualHtml, /attribute-list syntax such as <code>\{align=right\}<\/code>/);
   assert.match(manualHtml, /::: gallery/);
@@ -1938,6 +1939,10 @@ test("quick command palette exposes initial editor commands", () => {
   assert.match(app, /title: "Insert collapse"/);
   assert.match(app, /id: "insert-html-block"/);
   assert.match(app, /title: "Insert HTML block"/);
+  assert.match(app, /id: "insert-mermaid-diagram"/);
+  assert.match(app, /title: "Insert Mermaid diagram"/);
+  assert.match(app, /function insertMermaidDiagram\(\)/);
+  assert.match(app, /flowchart TD\\n  A\[Start\] --> B\[Done\]/);
   assert.match(app, /id: "insert-table-of-contents"/);
   assert.match(app, /title: "Insert table of contents"/);
   assert.match(app, /id: "insert-menu"/);
@@ -2360,6 +2365,27 @@ test("code block language picker renders inside the active code block", () => {
   assert.match(css, /tab-size: 4;/);
   assert.match(css, /\.code-block-language-control/);
   assert.doesNotMatch(css, /\.code-language-control/);
+});
+
+test("mermaid code blocks render diagrams while keeping fenced source editable", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+
+  assert.match(app, /lowlight\.register\("mermaid", plaintext\)/);
+  assert.match(app, /function loadMermaidRenderer/);
+  assert.match(app, /import\("mermaid"\)\.then/);
+  assert.match(app, /mermaid\.initialize\(\{/);
+  assert.match(app, /function createMermaidCodeWidget/);
+  assert.match(app, /function renderMermaidDiagram/);
+  assert.match(app, /mermaid\.render\(renderId, source\)/);
+  assert.match(app, /new PluginKey\("mermaidCodeBlockRenderer"\)/);
+  assert.match(app, /node\.attrs\.language !== "mermaid"/);
+  assert.match(app, /class: selected \? "mermaid-code-block editing" : "mermaid-code-block rendered"/);
+  assert.match(app, /MermaidCodeBlockRenderer/);
+  assert.match(app, /data-mermaid-edit/);
+  assert.match(css, /\.editor-surface pre\.mermaid-code-block\.rendered/);
+  assert.match(css, /\.mermaid-code-render/);
+  assert.match(css, /\.mermaid-code-body svg/);
 });
 
 test("tauri starts with the requested default window size", () => {
