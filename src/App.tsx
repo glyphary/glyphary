@@ -835,6 +835,16 @@ type TableContextMenuState = {
 
 type TableColumnAlignment = "left" | "center" | "right";
 
+type PageSearchMatch = {
+  from: number;
+  to: number;
+};
+
+type PageSearchPluginState = {
+  activeIndex: number;
+  matches: PageSearchMatch[];
+};
+
 // The command palette is intentionally shallow at the root. Heavy command
 // families live in scopes so the root stays useful for fuzzy search.
 type CommandPaletteScope = "root" | "ai" | "insert" | "table";
@@ -1214,6 +1224,92 @@ const MermaidCodeBlockRenderer = Extension.create({
 function isEditorReady(editor: Editor | null | undefined): editor is Editor {
   return Boolean(editor && !editor.isDestroyed);
 }
+
+function pageSearchMatches(targetEditor: Editor | null, query: string): PageSearchMatch[] {
+  const needle = query.trim().toLowerCase();
+
+  if (!targetEditor || !needle) {
+    return [];
+  }
+
+  const chars: string[] = [];
+  const positions: number[] = [];
+
+  targetEditor.state.doc.descendants((node, position) => {
+    if (!node.isText || !node.text) {
+      return true;
+    }
+
+    if (chars.length > 0) {
+      chars.push("\n");
+      positions.push(-1);
+    }
+
+    for (let index = 0; index < node.text.length; index += 1) {
+      chars.push(node.text[index]);
+      positions.push(position + 1 + index);
+    }
+
+    return true;
+  });
+
+  const haystack = chars.join("").toLowerCase();
+  const matches: PageSearchMatch[] = [];
+  let index = haystack.indexOf(needle);
+
+  while (index >= 0) {
+    const from = positions[index];
+    const endPosition = positions[index + needle.length - 1];
+
+    if (from >= 0 && endPosition >= 0) {
+      matches.push({ from, to: endPosition + 1 });
+    }
+
+    index = haystack.indexOf(needle, index + Math.max(needle.length, 1));
+  }
+
+  return matches;
+}
+
+const pageSearchPluginKey = new PluginKey<PageSearchPluginState>("pageSearch");
+
+const PageSearchRenderer = Extension.create({
+  name: "pageSearchRenderer",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<PageSearchPluginState>({
+        key: pageSearchPluginKey,
+        state: {
+          init: () => ({ activeIndex: -1, matches: [] }),
+          apply(transaction, previous) {
+            return transaction.getMeta(pageSearchPluginKey) ?? previous;
+          },
+        },
+        props: {
+          decorations(state) {
+            const search = pageSearchPluginKey.getState(state);
+
+            if (!search || search.matches.length === 0) {
+              return DecorationSet.empty;
+            }
+
+            const decorations = search.matches.map((match, index) =>
+              Decoration.inline(match.from, match.to, {
+                class:
+                  index === search.activeIndex
+                    ? "page-search-match active"
+                    : "page-search-match",
+              }),
+            );
+
+            return DecorationSet.create(state.doc, decorations);
+          },
+        },
+      }),
+    ];
+  },
+});
 
 function isVimNormalMode(editor: Editor) {
   const storage = editor.storage as unknown as {
@@ -4479,6 +4575,9 @@ function App() {
     useState<CommandPaletteScope>("root");
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteSelectedIndex, setCommandPaletteSelectedIndex] = useState(0);
+  const [pageSearchOpen, setPageSearchOpen] = useState(false);
+  const [pageSearchQuery, setPageSearchQuery] = useState("");
+  const [pageSearchIndex, setPageSearchIndex] = useState(0);
   const [canvasCommandRequest, setCanvasCommandRequest] =
     useState<CanvasCommandRequest | null>(null);
   const [richLinkDialogOpen, setRichLinkDialogOpen] = useState(false);
@@ -4538,6 +4637,7 @@ function App() {
   const activeGroupIdRef = useRef<EditorGroupId>("primary");
   const workspaceRef = useRef<HTMLElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
+  const pageSearchInputRef = useRef<HTMLInputElement | null>(null);
   const canvasCommandRequestIdRef = useRef(0);
   // Keyboard navigation moves a virtual selection through scrollable results;
   // this ref lets the selected option be kept visible without stealing focus.
@@ -4564,6 +4664,7 @@ function App() {
   );
   const resetDocumentRef = useRef<() => void>(() => undefined);
   const openConfiguredNewTabRef = useRef<() => void>(() => undefined);
+  const openPageSearchRef = useRef<() => void>(() => undefined);
   const openWikiLinkSearchRef = useRef<() => void>(() => undefined);
   const resolveWikiLinkTargetRef = useRef<(target: string) => WikiLinkResolution>(() => ({
     candidates: [],
@@ -5832,6 +5933,7 @@ function App() {
         CodeBlockWithLanguageControl.configure({
           lowlight,
         }),
+        PageSearchRenderer,
         TocCodeBlockRenderer,
         MermaidCodeBlockRenderer,
         createWikiLinkExtension({
@@ -5980,6 +6082,93 @@ function App() {
   const secondaryEditor = useEditor(createEditorOptions("secondary"), [editorBehavior.vimMode]);
   const activeEditor = activeGroupId === "secondary" ? secondaryEditor : primaryEditor;
   const editor = isEditorReady(activeEditor) ? activeEditor : null;
+  const pageSearchResults = useMemo(
+    () => pageSearchMatches(editor, pageSearchQuery),
+    [editor, pageSearchQuery, markdown],
+  );
+  const pageSearchActiveIndex =
+    pageSearchResults.length > 0 ? Math.min(pageSearchIndex, pageSearchResults.length - 1) : -1;
+
+  function selectPageSearchMatch(index: number) {
+    if (pageSearchResults.length === 0) {
+      return;
+    }
+
+    const nextIndex = (index + pageSearchResults.length) % pageSearchResults.length;
+
+    setPageSearchIndex(nextIndex);
+  }
+
+  function openPageSearch() {
+    if (!editor || activeDocumentIsCanvas) {
+      setStatus("Open a note before searching in page");
+      return;
+    }
+
+    setPageSearchOpen(true);
+    window.requestAnimationFrame(() => {
+      pageSearchInputRef.current?.focus();
+      pageSearchInputRef.current?.select();
+    });
+  }
+
+  function closePageSearch() {
+    setPageSearchOpen(false);
+    setPageSearchQuery("");
+    setPageSearchIndex(0);
+    editor?.commands.focus();
+  }
+
+  function movePageSearch(direction: 1 | -1) {
+    selectPageSearchMatch(pageSearchActiveIndex + direction);
+  }
+
+  openPageSearchRef.current = openPageSearch;
+
+  useEffect(() => {
+    if (!pageSearchOpen || !pageSearchQuery.trim()) {
+      return;
+    }
+
+    if (pageSearchResults.length === 0) {
+      setPageSearchIndex(0);
+      return;
+    }
+
+    if (pageSearchActiveIndex < 0) {
+      setPageSearchIndex(0);
+    }
+  }, [pageSearchOpen, pageSearchQuery, pageSearchResults.length]);
+
+  useEffect(() => {
+    [primaryEditor, secondaryEditor].forEach((targetEditor) => {
+      if (!isEditorReady(targetEditor)) {
+        return;
+      }
+
+      const state =
+        targetEditor === editor && pageSearchOpen
+          ? { activeIndex: pageSearchActiveIndex, matches: pageSearchResults }
+          : { activeIndex: -1, matches: [] };
+
+      targetEditor.view.dispatch(targetEditor.state.tr.setMeta(pageSearchPluginKey, state));
+    });
+
+    if (editor && pageSearchOpen && pageSearchResults.length > 0) {
+      window.requestAnimationFrame(() => {
+        editor.view.dom
+          .querySelector(".page-search-match.active")
+          ?.scrollIntoView({ block: "center", inline: "nearest" });
+      });
+    }
+  }, [
+    editor,
+    pageSearchActiveIndex,
+    pageSearchOpen,
+    pageSearchResults,
+    primaryEditor,
+    secondaryEditor,
+  ]);
 
   useEffect(() => {
     [primaryEditor, secondaryEditor].forEach((targetEditor) => {
@@ -7476,6 +7665,18 @@ function App() {
       setCommandPaletteSelectedIndex(0);
       setCommandPaletteOpen(true);
     };
+    const handleGlobalPageSearchShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key.toLowerCase() !== "f") {
+        return;
+      }
+
+      if (!event.metaKey && !event.ctrlKey) {
+        return;
+      }
+
+      event.preventDefault();
+      openPageSearchRef.current();
+    };
     const handleGlobalCloseTabShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.key.toLowerCase() !== "w") {
         return;
@@ -7503,12 +7704,14 @@ function App() {
 
     window.addEventListener("keydown", handleGlobalSaveShortcut);
     window.addEventListener("keydown", handleGlobalCommandPaletteShortcut);
+    window.addEventListener("keydown", handleGlobalPageSearchShortcut, { capture: true });
     window.addEventListener("keydown", handleGlobalNewTabShortcut, { capture: true });
     window.addEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
 
     return () => {
       window.removeEventListener("keydown", handleGlobalSaveShortcut);
       window.removeEventListener("keydown", handleGlobalCommandPaletteShortcut);
+      window.removeEventListener("keydown", handleGlobalPageSearchShortcut, { capture: true });
       window.removeEventListener("keydown", handleGlobalNewTabShortcut, { capture: true });
       window.removeEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
     };
@@ -10956,6 +11159,57 @@ function App() {
                     {action.icon ? renderToolbarIcon(action.icon) : action.label}
                   </button>
                 ))}
+              </div>
+            ) : null}
+
+            {isActiveGroup && !isCanvasTab && pageSearchOpen ? (
+              <div className="page-search-bar" role="search" aria-label="Find in page">
+                <input
+                  ref={pageSearchInputRef}
+                  aria-label="Find in page"
+                  placeholder="Find in page"
+                  spellCheck="false"
+                  value={pageSearchQuery}
+                  onChange={(event) => {
+                    setPageSearchQuery(event.currentTarget.value);
+                    setPageSearchIndex(0);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      closePageSearch();
+                    } else if (event.key === "Enter") {
+                      event.preventDefault();
+                      movePageSearch(event.shiftKey ? -1 : 1);
+                    }
+                  }}
+                />
+                <span>
+                  {pageSearchQuery.trim()
+                    ? pageSearchResults.length > 0
+                      ? `${pageSearchActiveIndex + 1}/${pageSearchResults.length}`
+                      : "0/0"
+                    : "0/0"}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Previous match"
+                  disabled={pageSearchResults.length === 0}
+                  onClick={() => movePageSearch(-1)}
+                >
+                  Up
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next match"
+                  disabled={pageSearchResults.length === 0}
+                  onClick={() => movePageSearch(1)}
+                >
+                  Down
+                </button>
+                <button type="button" aria-label="Close find in page" onClick={closePageSearch}>
+                  Close
+                </button>
               </div>
             ) : null}
 

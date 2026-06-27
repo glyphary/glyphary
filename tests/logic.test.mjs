@@ -1878,21 +1878,46 @@ test("vim-style editing is wired behind a settings option", () => {
 
 test("command save shortcut is wrapped in the webview", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
 
   assert.match(app, /handleGlobalSaveShortcut/);
   assert.match(app, /handleGlobalCommandPaletteShortcut/);
+  assert.match(app, /handleGlobalPageSearchShortcut/);
   assert.match(app, /handleGlobalCloseTabShortcut/);
+  assert.match(app, /function pageSearchMatches/);
+  assert.match(app, /new PluginKey<PageSearchPluginState>\("pageSearch"\)/);
+  assert.match(app, /const PageSearchRenderer = Extension\.create/);
+  assert.match(app, /PageSearchRenderer/);
+  assert.match(app, /Decoration\.inline\(match\.from, match\.to/);
+  assert.match(app, /targetEditor\.state\.tr\.setMeta\(pageSearchPluginKey, state\)/);
+  assert.match(app, /function openPageSearch/);
+  assert.match(app, /function closePageSearch/);
+  assert.match(app, /function movePageSearch/);
+  assert.match(app, /const \[pageSearchOpen, setPageSearchOpen\] = useState\(false\)/);
+  assert.match(app, /const \[pageSearchQuery, setPageSearchQuery\] = useState\(""\)/);
+  assert.match(app, /const \[pageSearchIndex, setPageSearchIndex\] = useState\(0\)/);
   assert.match(app, /event\.key\.toLowerCase\(\) !== "s"/);
   assert.match(app, /event\.key\.toLowerCase\(\) !== "p"/);
+  assert.match(app, /event\.key\.toLowerCase\(\) !== "f"/);
   assert.match(app, /event\.key\.toLowerCase\(\) !== "w"/);
   assert.match(app, /!event\.metaKey && !event\.ctrlKey/);
   assert.match(app, /!event\.metaKey \|\| event\.ctrlKey \|\| event\.altKey \|\| event\.shiftKey/);
   assert.match(app, /void saveCurrentFileRef\.current\(\)/);
+  assert.match(app, /openPageSearchRef\.current\(\)/);
   assert.match(app, /closeActiveDocumentTabRef\.current\(\)/);
   assert.match(app, /setCommandPaletteOpen\(true\)/);
+  assert.match(app, /className="page-search-bar"/);
+  assert.match(app, /aria-label="Find in page"/);
+  assert.match(app, /aria-label="Previous match"/);
+  assert.match(app, /aria-label="Next match"/);
+  assert.match(app, /aria-label="Close find in page"/);
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalSaveShortcut\)/);
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalCommandPaletteShortcut\)/);
+  assert.match(app, /window\.addEventListener\("keydown", handleGlobalPageSearchShortcut, \{ capture: true \}\)/);
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalCloseTabShortcut, \{ capture: true \}\)/);
+  assert.match(css, /\.page-search-bar/);
+  assert.match(css, /\.editor-surface \.page-search-match/);
+  assert.match(css, /\.editor-surface \.page-search-match\.active/);
 });
 
 test("renaming a page title immediately saves the active file", () => {

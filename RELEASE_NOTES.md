@@ -17,6 +17,7 @@ controls, and release packaging that is ready for notarization.
   syntax and alias targets while preserving the Markdown on disk.
 - Added rendered Mermaid diagrams from fenced `mermaid` code blocks, with an
   Edit control to return to the Markdown source.
+- Added in-page search with `Cmd+F`, match counts, and previous/next navigation.
 - Added plain paste with `Cmd+Shift+V`.
 - Fixed column insertion so new columns insert at the cursor instead of the end
   of the file.
