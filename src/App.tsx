@@ -5666,7 +5666,11 @@ function App() {
     }
   }
 
-  function hydrateDocumentTab(tab: DocumentTab, groupId = activeGroupIdRef.current) {
+  function hydrateDocumentTab(
+    tab: DocumentTab,
+    groupId = activeGroupIdRef.current,
+    options: { revealInVaultDrawer?: boolean } = {},
+  ) {
     const groupEditor = editorForGroup(groupId);
 
     if (!groupEditor && tab.kind !== "canvas") {
@@ -5714,7 +5718,9 @@ function App() {
     if (groupEditor && tab.kind !== "canvas") {
       setEditorMarkdownContent(groupEditor, tab.markdown);
     }
-    void revealFileInVaultDrawer(tab.activeFile);
+    if (options.revealInVaultDrawer !== false) {
+      void revealFileInVaultDrawer(tab.activeFile);
+    }
     if (groupEditor) {
       syncEditorState(groupEditor);
     }
@@ -8328,7 +8334,10 @@ function App() {
     };
   }, []);
 
-  async function openFile(relativePath: string) {
+  async function openFile(
+    relativePath: string,
+    options: { revealInVaultDrawer?: boolean } = {},
+  ) {
     if (!vaultRoot) {
       return;
     }
@@ -8342,7 +8351,7 @@ function App() {
         // tab prevents divergent dirty states for one vault path.
         activeGroupIdRef.current = existing.groupId;
         setActiveGroupId(existing.groupId);
-        hydrateDocumentTab(existing.tab, existing.groupId);
+        hydrateDocumentTab(existing.tab, existing.groupId, options);
         persistActiveFile(existing.tab.activeFile);
         setStatus(
           `Switched to ${existing.tab.activeFile?.relativePath ?? tabTitle(existing.tab)}`,
@@ -8361,7 +8370,7 @@ function App() {
       } else {
         addTabToGroup(tab);
       }
-      hydrateDocumentTab(tab);
+      hydrateDocumentTab(tab, activeGroupIdRef.current, options);
       persistActiveFile(tab.activeFile);
       setStatus(`Opened ${file.relativePath}`);
     } catch (error) {
@@ -11135,6 +11144,30 @@ function App() {
       });
   }, [taskListQuery, taskResults, taskSort]);
 
+  const visibleSearchResults = useMemo(() => {
+    const seenPaths = new Set<string>();
+    const matchCounts = searchResults.reduce((counts, result) => {
+      counts.set(result.relativePath, (counts.get(result.relativePath) ?? 0) + 1);
+      return counts;
+    }, new Map<string, number>());
+
+    // The search backend returns one row per match; the drawer presents one row per file.
+    return searchResults
+      .filter((result) => {
+        if (seenPaths.has(result.relativePath)) {
+          return false;
+        }
+
+        seenPaths.add(result.relativePath);
+        return true;
+      })
+      .sort((left, right) => (right.modifiedMs ?? 0) - (left.modifiedMs ?? 0))
+      .map((result) => ({
+        result,
+        matchCount: matchCounts.get(result.relativePath) ?? 1,
+      }));
+  }, [searchResults]);
+
   async function refreshTasks(filter = taskFilter) {
     if (!vaultRoot) {
       setTaskResults([]);
@@ -11191,7 +11224,7 @@ function App() {
   }
 
   async function openSearchResult(result: SearchResult) {
-    await openFile(result.relativePath);
+    await openFile(result.relativePath, { revealInVaultDrawer: false });
   }
 
   useEffect(() => {
@@ -12186,9 +12219,9 @@ function App() {
                       {searching ? "..." : "Go"}
                     </button>
                   </div>
-                  {searchResults.length > 0 ? (
+                  {visibleSearchResults.length > 0 ? (
                     <div className="search-results" role="list" aria-label="Search results">
-                      {searchResults.map((result, index) => (
+                      {visibleSearchResults.map(({ matchCount, result }, index) => (
                         <button
                           key={`${result.relativePath}-${result.lineNumber ?? "name"}-${index}`}
                           type="button"
@@ -12196,9 +12229,7 @@ function App() {
                         >
                           <strong>{result.relativePath}</strong>
                           <span>
-                            {result.isContentMatch && result.lineNumber
-                              ? `Line ${result.lineNumber}`
-                              : "Filename"}
+                            {matchCount === 1 ? "1 match" : `${matchCount} matches`}
                           </span>
                           {result.lineText ? <em>{result.lineText}</em> : null}
                         </button>

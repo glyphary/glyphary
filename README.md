@@ -73,6 +73,9 @@ large vaults stay navigable. The command palette adapts to the current context:
 Markdown notes get editing commands, tables get table commands, and canvases get
 canvas commands.
 
+Content search groups matches by file, shows the match count for each result,
+and sorts the list from the most recently modified page down to older notes.
+
 When no document is open, Glyphary keeps the workspace calm: document-specific
 commands wait until a note or canvas is open. Configure the New Tab file in
 Settings to make `Cmd+T` open a favorite vault page such as a home note.

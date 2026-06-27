@@ -979,7 +979,10 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /File And Folder Actions/);
   assert.match(manualHtml, /Create canvas/);
   assert.match(manualHtml, /Rename file or canvas/);
+  assert.match(manualHtml, /Search results are grouped by file/);
+  assert.match(manualHtml, /count, and are sorted from the most recently modified page/);
   assert.match(manualHtml, /Command Palette/);
+  assert.match(manualHtml, /Wrap selected text as keyboard keys, strikethrough, highlight, superscript, or subscript Markdown/);
   assert.match(manualHtml, /AI Actions/);
   assert.match(manualHtml, /OpenAI-compatible backend/);
   assert.match(manualHtml, /Refresh Models/);
@@ -999,6 +1002,11 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /Configure <strong>New Tab<\/strong>/);
   assert.match(manualHtml, /Markdown Reference/);
   assert.match(manualHtml, /Glyphary Markdown support is extension-driven/);
+  assert.match(manualHtml, /<code>~~strikethrough~~<\/code>/);
+  assert.match(manualHtml, /<code>==highlight==<\/code>/);
+  assert.match(manualHtml, /<code>\^superscript\^<\/code>/);
+  assert.match(manualHtml, /<code>~subscript~<\/code>/);
+  assert.match(manualHtml, /<code>&lt;kbd&gt;Cmd&lt;\/kbd&gt;<\/code>/);
   assert.match(manualHtml, /\| :--- \| -----: \|/);
   assert.match(manualHtml, /right-click a table to use the same row\s+and column commands/);
   assert.match(manualHtml, /<strong>Align column\.\.\.<\/strong>/);
@@ -1012,6 +1020,7 @@ test("documentation website introduces core Glyphary workflows", () => {
   assert.match(manualHtml, /Global tidbit capture/);
   assert.match(manualHtml, /Tasks scans visible Markdown files/);
   assert.match(manualHtml, /same grep crates that power ripgrep-style matching/);
+  assert.match(manualHtml, /The results list shows one\s+row per file, reports how many matches/);
   assert.match(manualHtml, /HTML blocks/);
   assert.match(manualHtml, /renders a sanitized preview/);
   assert.match(manualHtml, /Canvas Files/);
@@ -1494,6 +1503,17 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(app, /renderToolbarIcon\("refresh"\)/);
   assert.match(app, /renderToolbarIcon\(task\.completed \? "task-done" : "task-open"\)/);
   assert.match(app, /result\.isContentMatch/);
+  assert.match(app, /const visibleSearchResults = useMemo\(\(\) => \{/);
+  assert.match(app, /const seenPaths = new Set<string>\(\)/);
+  assert.match(app, /const matchCounts = searchResults\.reduce/);
+  assert.match(app, /counts\.set\(result\.relativePath, \(counts\.get\(result\.relativePath\) \?\? 0\) \+ 1\)/);
+  assert.match(app, /seenPaths\.has\(result\.relativePath\)/);
+  assert.match(app, /\.sort\(\(left, right\) => \(right\.modifiedMs \?\? 0\) - \(left\.modifiedMs \?\? 0\)\)/);
+  assert.match(app, /matchCount: matchCounts\.get\(result\.relativePath\) \?\? 1/);
+  assert.match(app, /visibleSearchResults\.map\(\(\{ matchCount, result \}, index\) =>/);
+  assert.match(app, /matchCount === 1 \? "1 match" : `\$\{matchCount\} matches`/);
+  assert.match(app, /async function openFile\(\s*relativePath: string,[\s\S]*revealInVaultDrawer\?: boolean/);
+  assert.match(app, /async function openSearchResult\(result: SearchResult\) \{[\s\S]*openFile\(result\.relativePath, \{ revealInVaultDrawer: false \}\)/);
   assert.match(css, /\.vault-tasks/);
   assert.match(css, /\.task-options/);
   assert.match(css, /\.task-list-tools/);

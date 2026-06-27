@@ -1,80 +1,46 @@
 # Glyphary 1.0.0-beta.3 Release Notes
 
-This beta is focused on making Glyphary feel more natural as a local-first
-Markdown editor: cleaner reading, better Obsidian compatibility, richer table
-controls, and release packaging that is ready for notarization.
+This beta adds the pieces that were missing from the previous releases,
+and some of these pieces were definitely must-haves (oops):
+Mermaid diagrams, in-page search, startup update checks, and more complete
+inline Markdown formatting while keeping files plain Markdown on disk.
 
-## What's New Since 1.0.0-beta.1
+## What's New Since 1.0.0-beta.2
 
-### Reading And Editing
+### Markdown And Formatting
 
-- Added View/Edit chrome modes. View mode hides frontmatter and the formatting
-  toolbar while keeping the document editable.
-- Added frontmatter-driven page banners with `banner: '![[image.png]]'`.
-- Banner images now render above the frontmatter area.
-- Added wikilink aliases such as `[[Actual Page|Display Name]]`.
-- Wikilinks render as clean links outside the active line, hiding `[[...]]`
-  syntax and alias targets while preserving the Markdown on disk.
 - Added rendered Mermaid diagrams from fenced `mermaid` code blocks, with an
   Edit control to return to the Markdown source.
-- Added in-page search with `Cmd+F`, match counts, and previous/next navigation.
-- Added plain paste with `Cmd+Shift+V`.
-- Fixed column insertion so new columns insert at the cursor instead of the end
-  of the file.
-- Fixed frontmatter parsing so a document wrapped in `---` is not treated as one
-  giant metadata block.
+- Added an Insert Mermaid Diagram command to the command palette.
+- Added rendered `<kbd>...</kbd>` support for keyboard-style inline text.
+- Added Format commands for keyboard text, strikethrough, highlight,
+  superscript, and subscript.
+- Added inline rendering support for `==highlight==`, `^superscript^`, and
+  `~subscript~`.
+- Fixed keyboard formatting so it wraps the current selection inline instead of
+  adding extra line breaks.
 
-### Tabs And Navigation
+### Search And Navigation
 
-- The last tab can now be closed, leaving the editor center empty.
-- The command palette now stays out of document commands when no note or canvas
-  is open.
-- Added a configurable New Tab file. When set, `Cmd+T` opens that vault note;
-  when unset, Glyphary prompts from the status bar instead of opening a blank tab.
-- Opening a daily note from the calendar now refreshes the file drawer selection
-  to the opened note.
+- Added in-page search with `Cmd+F`, highlighted matches, match counts, and
+  previous/next navigation.
+- Fixed in-page search so matches are selected without hiding the editor cursor.
+- Preserved editor selections when opening and closing the command palette.
+- Search result clicks now keep the left drawer on the Search tab instead of
+  switching back to Files.
+- Vault search results now show one row per file, include the number of matches
+  in that file, and sort from the newest modified page to the oldest.
 
-### File Tree Actions
+### Updates
 
-- Right-clicking empty space in a folder now offers New Note, New Canvas, and New
-  Folder actions for that folder.
-- Markdown files, canvas files, and folders can be renamed from the right-click
-  menu.
-- Canvas files can now be created directly from folder context menus.
-
-### Tables
-
-- Added an editor table context menu with the same row and column operations as
-  the command palette.
-- Added Align Column... with left, center, and right alignment based on Markdown
-  table alignment syntax.
-- Fixed the table menu styling so it is opaque.
-- Fixed the Align Column submenu hover gap.
-- Fixed table column alignment so it does not leave the document selected after
-  applying or undoing the change.
-
-### Documentation
-
-- Added installation instructions at the start of the documentation for macOS
-  GitHub release DMGs and Windows installers.
-- Added a developer setup section covering checkout, dependencies, dev builds,
-  checks, and release targets.
-- Added a Markdown reference page for Glyphary-supported syntax, including table
-  alignment and wikilink aliases.
-- Updated the README and public site copy for page banners, View/Edit mode,
-  configurable New Tab behavior, table context actions, and file-tree actions.
-
-### Packaging
-
-- Version fields are now `1.0.0-beta.3`.
-- Fixed the Windows bundle icon configuration.
-- Updated the release Makefile to build the universal macOS DMG path directly.
-- Fixed macOS release signing so the universal app binary is signed with the
-  Developer ID Application identity, hardened runtime, and secure timestamp
-  before notarization.
+- Glyphary now checks GitHub Releases on startup and shows an update dialog when
+  the newest published release is different from the running app version.
+- The update dialog displays release notes and includes aligned Later and Open
+  Release actions.
 
 ## Notes
 
-`1.0.0-beta.3` is still a beta because these changes touch editing behavior,
-Markdown rendering, table mutation, file-tree actions, and platform packaging.
-Please test with a real vault before replacing your daily build.
+`1.0.0-beta.3` is still a beta because these changes touch Markdown rendering,
+search selection, command-palette selection preservation, startup networking,
+and release packaging. Please test with a real vault before replacing your
+daily build.
