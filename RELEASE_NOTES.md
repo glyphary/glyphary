@@ -1,4 +1,4 @@
-# Glyphary 1.0.0-beta.3 Release Notes
+# Glyphary 1.0.0-beta.4 Release Notes
 
 This beta adds the pieces that were missing from the previous releases,
 and some of these pieces were definitely must-haves (oops):
@@ -40,7 +40,7 @@ inline Markdown formatting while keeping files plain Markdown on disk.
 
 ## Notes
 
-`1.0.0-beta.3` is still a beta because these changes touch Markdown rendering,
+`1.0.0-beta.4` is still a beta because these changes touch Markdown rendering,
 search selection, command-palette selection preservation, startup networking,
 and release packaging. Please test with a real vault before replacing your
 daily build.

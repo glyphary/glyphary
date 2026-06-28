@@ -597,7 +597,7 @@ siteName: Example Site
   assert.match(css, /\.rich-link-content/);
 });
 
-test("startup release checks surface a GitHub release with a different version", () => {
+test("startup release checks compare the latest GitHub release tag", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const css = readFileSync("src/App.css", "utf8");
 
@@ -605,16 +605,17 @@ test("startup release checks surface a GitHub release with a different version",
   assert.match(app, /const currentAppVersion = packageJson\.version/);
   assert.match(
     app,
-    /https:\/\/api\.github\.com\/repos\/glyphary\/glyphary\/releases/,
+    /https:\/\/api\.github\.com\/repos\/glyphary\/glyphary\/releases\/latest/,
   );
   assert.match(app, /function releaseNotificationFromGitHubRelease/);
   assert.match(app, /function normalizedReleaseVersion/);
-  assert.match(app, /fetch\(githubReleasesApiUrl/);
+  assert.doesNotMatch(app, /function releaseVersionParts/);
+  assert.doesNotMatch(app, /function compareReleaseVersions/);
+  assert.match(app, /fetch\(githubLatestReleaseApiUrl/);
   assert.match(app, /application\/vnd\.github\+json/);
-  assert.match(app, /flags\.draft !== true/);
-  assert.match(app, /normalizedReleaseVersion\(release\.tagName\)/);
-  assert.match(app, /normalizedReleaseVersion\(currentAppVersion\)/);
-  assert.match(app, /setReleaseNotification\(nextRelease\)/);
+  assert.match(app, /const latestRelease = releaseNotificationFromGitHubRelease\(/);
+  assert.match(app, /normalizedReleaseVersion\(latestRelease\.tagName\) !==\s+normalizedReleaseVersion\(currentAppVersion\)/);
+  assert.match(app, /setReleaseNotification\(latestRelease\)/);
   assert.match(app, /aria-label="Glyphary update available"/);
   assert.match(app, /Glyphary \{releaseNotification\.tagName\} is available/);
   assert.match(app, /You are running \{currentAppVersion\}/);

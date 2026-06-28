@@ -276,7 +276,8 @@ const codeLanguages = [
 
 const lowlight = createLowlight();
 const currentAppVersion = packageJson.version;
-const githubReleasesApiUrl = "https://api.github.com/repos/glyphary/glyphary/releases";
+const githubLatestReleaseApiUrl =
+  "https://api.github.com/repos/glyphary/glyphary/releases/latest";
 
 // Keep lowlight registration explicit so Markdown language names can be
 // serialized directly from fenced code blocks and still highlight on reload.
@@ -8123,7 +8124,7 @@ function App() {
 
     async function checkForReleaseUpdate() {
       try {
-        const response = await fetch(githubReleasesApiUrl, {
+        const response = await fetch(githubLatestReleaseApiUrl, {
           headers: { Accept: "application/vnd.github+json" },
         });
 
@@ -8131,32 +8132,17 @@ function App() {
           return;
         }
 
-        const releases = await response.json();
+        const latestRelease = releaseNotificationFromGitHubRelease(
+          await response.json(),
+        );
 
-        if (!Array.isArray(releases)) {
-          return;
-        }
-
-        const nextRelease = releases
-          .filter((release) => {
-            if (!release || typeof release !== "object") {
-              return false;
-            }
-
-            const flags = release as Record<string, unknown>;
-
-            return flags.draft !== true;
-          })
-          .map(releaseNotificationFromGitHubRelease)
-          .find(
-            (release): release is ReleaseNotification =>
-              release !== null &&
-              normalizedReleaseVersion(release.tagName) !==
-                normalizedReleaseVersion(currentAppVersion),
-          );
-
-        if (!cancelled && nextRelease) {
-          setReleaseNotification(nextRelease);
+        if (
+          !cancelled &&
+          latestRelease &&
+          normalizedReleaseVersion(latestRelease.tagName) !==
+            normalizedReleaseVersion(currentAppVersion)
+        ) {
+          setReleaseNotification(latestRelease);
         }
       } catch {
         // Update checks should never interrupt local-first editing.
