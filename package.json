@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "e2e:tauri": "node scripts/e2e-tauri-smoke.mjs",
+    "e2e:tauri:self": "node scripts/e2e-tauri-smoke.mjs --self-test",
     "test:frontend": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test tests/*.test.mjs",
     "tauri": "tauri"
   },

@@ -113,3 +113,12 @@ canvas files, AI features, settings, themes, plugins, shortcuts, developer
 setup, and troubleshooting:
 
 [Open the Glyphary documentation](https://glyphary.github.io/)
+
+## Real-App Smoke Test
+
+Run the desktop smoke test with `npm run e2e:tauri`. It uses `tauri-driver` to
+launch the actual app against an owned scratch note in the current vault. Set
+`GLYPHARY_E2E_VAULT=/path/to/vault` to choose the vault explicitly.
+
+The reusable driver path is Windows/Linux only. On macOS, run the app manually
+for now; Tauri does not expose a WebDriver bridge for the native webview there.

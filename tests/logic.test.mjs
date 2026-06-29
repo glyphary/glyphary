@@ -377,6 +377,8 @@ test("block-widget boundaries expose an editable insertion point", () => {
   assert.match(blockBoundary, /view\.state\.tr\.insert\(selection\.from, paragraph\)/);
   assert.match(blockBoundary, /TextSelection\.create\(transaction\.doc, selection\.from \+ 1\)/);
   assert.match(blockBoundary, /function insertParagraphAtPosition/);
+  assert.match(blockBoundary, /function moveTextSelectionNear/);
+  assert.match(blockBoundary, /TextSelection\.near\(resolvedPosition, bias\)/);
   assert.match(blockBoundary, /const blockBoundaryInsertNodeNames = new Set/);
   assert.match(blockBoundary, /"table"/);
   assert.match(blockBoundary, /"htmlBlock"/);
@@ -408,6 +410,13 @@ test("block-widget boundaries expose an editable insertion point", () => {
   assert.match(blockBoundary, /view\.endOfTextblock\("down"\)/);
   assert.match(blockBoundary, /nodeAfterTable\.isTextblock/);
   assert.match(blockBoundary, /moveGapCursorTo\(view, afterTable\)/);
+  assert.match(blockBoundary, /function codeBlockBoundary/);
+  assert.match(blockBoundary, /ancestorDepthByName\(selection\.\$head, "codeBlock"\)/);
+  assert.match(blockBoundary, /function moveCursorOutOfCodeBlock/);
+  assert.match(blockBoundary, /insertParagraphAtPosition\(view, boundary\.after\)/);
+  assert.match(blockBoundary, /moveTextSelectionNear\(view, boundary\.after, 1\)/);
+  assert.match(blockBoundary, /insertParagraphAtPosition\(view, boundary\.before\)/);
+  assert.match(blockBoundary, /moveTextSelectionNear\(view, boundary\.before, -1\)/);
   assert.match(blockBoundary, /function moveGapCursorBeforeSelectedBlock/);
   assert.match(blockBoundary, /function moveGapCursorAfterSelectedBlock/);
   assert.match(blockBoundary, /nodeAfterSelectedBlock\.isTextblock/);
@@ -415,6 +424,8 @@ test("block-widget boundaries expose an editable insertion point", () => {
   assert.match(blockBoundary, /Enter: \(\) =>/);
   assert.match(blockBoundary, /ArrowDown: \(\) =>/);
   assert.match(blockBoundary, /ArrowUp: \(\) =>/);
+  assert.match(blockBoundary, /moveCursorOutOfCodeBlock\(this\.editor\.view, "down"\) \|\|/);
+  assert.match(blockBoundary, /moveCursorOutOfCodeBlock\(this\.editor\.view, "up"\) \|\|/);
   assert.match(blockBoundary, /insertParagraphAtGapCursor\(this\.editor\.view\) \|\|/);
   assert.doesNotMatch(blockBoundary, /insertEmptyParagraphAt/);
   assert.match(editorOptions, /createBlockBoundaryInsertionExtension\(\),\s*TableKit\.configure/);
