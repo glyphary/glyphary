@@ -1,5 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { baseTitle, isBasePath } from "../base/base";
 import { canvasTitle, isCanvasPath } from "../CanvasView";
 import type { DocumentTab, EditorGroupId, EditorGroupState } from "../lib/app-types";
 import { defaultMetaDelimiter } from "../lib/markdown";
@@ -26,7 +27,11 @@ export function tabTitle(tab: DocumentTab) {
 }
 
 export function pageNameForFileName(name: string) {
-  return isCanvasPath(name) ? canvasTitle(name) : fileNameWithoutMarkdownExtension(name);
+  if (isCanvasPath(name)) {
+    return canvasTitle(name);
+  }
+
+  return isBasePath(name) ? baseTitle(name) : fileNameWithoutMarkdownExtension(name);
 }
 
 export function createUntitledTab(markdown = initialMarkdown): DocumentTab {

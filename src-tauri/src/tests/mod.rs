@@ -16,6 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod ai;
 mod ai_history;
 mod assets;
+mod base;
 mod calendar;
 mod plugins;
 mod rich_links;

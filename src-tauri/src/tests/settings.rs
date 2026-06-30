@@ -68,6 +68,7 @@ fn hides_dotfiles_unless_vault_settings_enable_them() {
                 show_files_in_folder_tree: false,
                 show_file_previews_in_folder_tree: true,
                 show_images_in_file_previews: true,
+                base_card_image_layout: "top".into(),
                 show_dotfiles: true,
             },
             ..VaultSettings::default()
@@ -104,6 +105,7 @@ fn reads_default_vault_settings_when_missing() {
     assert!(!settings.files.show_dotfiles);
     assert!(!settings.files.show_files_in_folder_tree);
     assert!(settings.files.show_file_previews_in_folder_tree);
+    assert_eq!(settings.files.base_card_image_layout, DEFAULT_BASE_CARD_IMAGE_LAYOUT);
     assert!(settings.autosave.enabled);
     assert_eq!(settings.tidbits.path_pattern, DEFAULT_TIDBIT_PATH_PATTERN);
     assert!(settings.starred_files.is_empty());
@@ -216,6 +218,7 @@ fn writes_vault_settings_file() {
                 show_files_in_folder_tree: true,
                 show_file_previews_in_folder_tree: false,
                 show_images_in_file_previews: true,
+                base_card_image_layout: "top".into(),
                 show_dotfiles: true,
             },
             autosave: AutosaveSettings { enabled: false },

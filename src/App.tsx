@@ -13,6 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   checkAccessibilityPermission,
   requestAccessibilityPermission,
@@ -25,6 +26,7 @@ import type {
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import "@excalidraw/excalidraw/index.css";
 import { useEditor } from "@tiptap/react";
+import { baseTitle, isBasePath } from "./base/base";
 import {
   canvasTitle,
   isCanvasPath,
@@ -364,6 +366,20 @@ function releaseNotificationFromGitHubRelease(value: unknown) {
 
 function normalizedReleaseVersion(value: string) {
   return value.trim().replace(/^v/i, "");
+}
+
+function remoteSourceUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+function vaultEntryPath(root: string, relativePath: string) {
+  const cleanRoot = root.replace(/[\\/]+$/, "");
+  return relativePath ? `${cleanRoot}/${relativePath}` : cleanRoot;
 }
 
 type TableContextMenuState = {
@@ -2310,7 +2326,9 @@ function App() {
     const tab = group.tabs.find((documentTab) => documentTab.id === group.activeTabId);
     const groupEditor = editorForGroup(groupId);
     const nextMarkdown =
-      tab?.kind === "canvas"
+      !tab
+        ? initialMarkdown
+        : tab.kind !== "markdown"
         ? tab.markdown
         : groupEditor?.getMarkdown() ?? tab?.markdown ?? initialMarkdown;
     const isActiveGroup = groupId === activeGroupIdRef.current;
@@ -2363,7 +2381,7 @@ function App() {
   ) {
     const groupEditor = editorForGroup(groupId);
 
-    if (!groupEditor && tab.kind !== "canvas") {
+    if (!groupEditor && tab.kind === "markdown") {
       return;
     }
 
@@ -2388,7 +2406,7 @@ function App() {
     if (groupId !== activeGroupIdRef.current) {
       // Loading an inactive split pane should update its editor content, but
       // must not move drawers, toolbar state, or persisted workspace focus.
-      if (groupEditor && tab.kind !== "canvas") {
+      if (groupEditor && tab.kind === "markdown") {
         setEditorMarkdownContent(groupEditor, tab.markdown);
       }
       window.setTimeout(() => {
@@ -2405,7 +2423,7 @@ function App() {
     setMarkdownDraft(tab.markdownDraft);
     setDirty(tab.dirty);
     setPageNameEditing(false);
-    if (groupEditor && tab.kind !== "canvas") {
+    if (groupEditor && tab.kind === "markdown") {
       setEditorMarkdownContent(groupEditor, tab.markdown);
     }
     if (options.revealInVaultDrawer !== false) {
@@ -2445,6 +2463,23 @@ function App() {
           relativePath: file.relativePath,
         },
         pageName: canvasTitle(file.name),
+        metaHeader: "",
+        metaDelimiter: defaultMetaDelimiter,
+        markdown: file.content,
+        markdownDraft: file.content,
+        dirty: false,
+      };
+    }
+
+    if (isBasePath(file.relativePath)) {
+      return {
+        id: tabIdForFile(file.relativePath),
+        kind: "base",
+        activeFile: {
+          name: file.name,
+          relativePath: file.relativePath,
+        },
+        pageName: baseTitle(file.name),
         metaHeader: "",
         metaDelimiter: defaultMetaDelimiter,
         markdown: file.content,
@@ -2825,6 +2860,8 @@ function App() {
       (tab) => tab.id === editorGroups[activeGroupId]?.activeTabId,
     ) ?? null;
   const activeDocumentIsCanvas = activeDocumentTab?.kind === "canvas";
+  const activeDocumentIsBase = activeDocumentTab?.kind === "base";
+  const activeDocumentIsMarkdown = activeDocumentTab?.kind === "markdown";
   const starredFiles = useMemo(
     () => normalizeStarredFiles(vaultSettings.starredFiles),
     [vaultSettings.starredFiles],
@@ -2884,7 +2921,7 @@ function App() {
   }
 
   const pageSearch = usePageSearch({
-    activeDocumentIsCanvas,
+    activeDocumentIsCanvas: !activeDocumentIsMarkdown,
     editor,
     markdown,
     primaryEditor,
@@ -4341,7 +4378,7 @@ function App() {
   }
 
   async function saveCurrentFile() {
-    if (!editor || !vaultRoot || !activeFileRef.current || !dirty) {
+    if (!vaultRoot || !activeFileRef.current || !dirty) {
       return;
     }
 
@@ -4349,11 +4386,16 @@ function App() {
     const activeTab = editorGroupsRef.current[groupId].tabs.find(
       (tab) => tab.id === editorGroupsRef.current[groupId].activeTabId,
     );
+
+    if (activeTab?.kind === "markdown" && !editor) {
+      return;
+    }
+
     let file = activeFileRef.current;
     const requestedName = pageNameRef.current.trim();
 
     if (
-      activeTab?.kind !== "canvas" &&
+      activeTab?.kind === "markdown" &&
       requestedName &&
       requestedName !== fileNameWithoutMarkdownExtension(file.name)
     ) {
@@ -4403,16 +4445,17 @@ function App() {
     }
 
     const content =
-      activeTab?.kind === "canvas"
+      activeTab?.kind !== "markdown"
         ? markdownDraft
         : composeMarkdown(
             metaHeaderRef.current,
             metaDelimiterRef.current,
-            editor.getMarkdown(),
+            editor?.getMarkdown() ?? "",
           );
 
     await writeVaultFile(vaultRoot, file.relativePath, content);
-    const savedMarkdown = activeTab?.kind === "canvas" ? markdownDraft : editor.getMarkdown();
+    const savedMarkdown =
+      activeTab?.kind !== "markdown" ? markdownDraft : editor?.getMarkdown() ?? "";
     const savedDraft = markdownDraft;
     const activeTabIdForGroup = editorGroupsRef.current[groupId].activeTabId;
     const savedTabs = editorGroupsRef.current[groupId].tabs.map((tab) =>
@@ -4420,9 +4463,12 @@ function App() {
         ? {
             ...tab,
             activeFile: file,
-            pageName: activeTab?.kind === "canvas"
-              ? canvasTitle(file.name)
-              : fileNameWithoutMarkdownExtension(file.name),
+            pageName:
+              activeTab?.kind === "canvas"
+                ? canvasTitle(file.name)
+                : activeTab?.kind === "base"
+                  ? baseTitle(file.name)
+                  : fileNameWithoutMarkdownExtension(file.name),
             metaHeader: metaHeaderRef.current,
             metaDelimiter: metaDelimiterRef.current,
             markdown: savedMarkdown,
@@ -5608,6 +5654,20 @@ function App() {
     }
   }
 
+  async function revealEntryFromContextMenu(entry: VaultEntry) {
+    if (!vaultRoot) {
+      return;
+    }
+
+    setFolderContextMenu(null);
+
+    try {
+      await revealItemInDir(vaultEntryPath(vaultRoot, entry.relativePath));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function submitFolderActionDialog(event: ReactFormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -5754,7 +5814,7 @@ function App() {
       (tab) => tab.id === editorGroupsRef.current[activeGroupIdRef.current].activeTabId,
     );
 
-    if (activeTab?.kind === "canvas") {
+    if (activeTab?.kind !== "markdown") {
       setMarkdown(markdownDraft);
       updateActiveTab({
         markdown: markdownDraft,
@@ -5762,7 +5822,7 @@ function App() {
         dirty: true,
       });
       setActiveDocumentDirty(true);
-      setStatus(`Unsaved changes in ${activeFileRef.current?.name ?? "canvas"}`);
+      setStatus(`Unsaved changes in ${activeFileRef.current?.name ?? "document"}`);
       return;
     }
 
@@ -6808,7 +6868,7 @@ function App() {
   }
 
   const cursorInsideTable =
-    !activeDocumentIsCanvas &&
+    activeDocumentIsMarkdown &&
     !!editor &&
     (editor.isActive("table") ||
       editor.isActive("tableCell") ||
@@ -7135,7 +7195,9 @@ function App() {
   ];
   const activeInsertCommandPaletteCommands = activeDocumentIsCanvas
     ? canvasInsertCommandPaletteCommands
-    : insertCommandPaletteCommands;
+    : activeDocumentIsMarkdown
+      ? insertCommandPaletteCommands
+      : [];
   const openInsertCommandPalette = () => {
     setCommandPaletteScope("insert");
     setCommandPaletteQuery("");
@@ -7256,19 +7318,21 @@ function App() {
   const commandPaletteCommands = activeDocumentTab
     ? activeDocumentIsCanvas
       ? canvasCommandPaletteCommands
-      : editorCommandPaletteCommands
+      : activeDocumentIsMarkdown
+        ? editorCommandPaletteCommands
+        : []
     : [];
   // All scopes share the same filtering, selection, and rendering pipeline.
   // Adding a new grouped menu should usually mean adding one command list here
   // and a root "Name ..." command that switches to that scope.
   const activeCommandPaletteCommands =
-    commandPaletteScope === "ai" && !activeDocumentIsCanvas
+    commandPaletteScope === "ai" && activeDocumentIsMarkdown
       ? aiCommandPaletteCommands
       : commandPaletteScope === "insert"
         ? activeInsertCommandPaletteCommands
-        : commandPaletteScope === "format" && !activeDocumentIsCanvas
+        : commandPaletteScope === "format" && activeDocumentIsMarkdown
           ? formatCommandPaletteCommands
-        : commandPaletteScope === "table" && !activeDocumentIsCanvas
+        : commandPaletteScope === "table" && activeDocumentIsMarkdown
           ? tableCommandPaletteCommands
           : commandPaletteCommands;
   const activeCommandPaletteScopeTitle = commandPaletteScopeTitle(
@@ -7547,6 +7611,35 @@ function App() {
     });
   }
 
+  async function openRemoteImageSourceFromEditor(event: ReactMouseEvent<HTMLDivElement>) {
+    const target = event.target;
+
+    if (!(target instanceof HTMLImageElement)) {
+      return;
+    }
+
+    const remoteSource = target.getAttribute("data-remote-source") ?? "";
+    const url = remoteSourceUrl(remoteSource);
+
+    if (!url) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      if (isTauri()) {
+        await openUrl(url);
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      console.error("Failed to open remote image source", error);
+      setStatus("Could not open remote image source.");
+    }
+  }
+
   function workspaceWidth() {
     return workspaceRef.current?.getBoundingClientRect().width ?? window.innerWidth;
   }
@@ -7741,6 +7834,7 @@ function App() {
         onMetaHeaderChange={setActiveMetaHeader}
         onOpenFile={openFile}
         onOpenImagePreview={openImagePreviewFromEditor}
+        onOpenRemoteImageSource={openRemoteImageSourceFromEditor}
         onPageNameChange={setActivePageName}
         onSetActiveDocumentDirty={setActiveDocumentDirty}
         onSetEditorFocused={setEditorFocused}
@@ -8496,7 +8590,9 @@ function App() {
                     {drawerItem === "source"
                       ? activeDocumentIsCanvas
                         ? "Canvas JSON source"
-                        : "Markdown source and export"
+                        : activeDocumentIsBase
+                          ? "Base definition and export"
+                          : "Markdown source and export"
                       : drawerItem === "toc"
                         ? "Current document headings"
                         : "Monthly calendar notes"}
@@ -8515,13 +8611,25 @@ function App() {
                 <div className="drawer-panel source-panel">
                   <div className="markdown-import">
                     <div className="pane-header compact">
-                      <h2>{activeDocumentIsCanvas ? "JSON Source" : "Source"}</h2>
+                      <h2>
+                        {activeDocumentIsCanvas
+                          ? "JSON Source"
+                          : activeDocumentIsBase
+                            ? "Base Source"
+                            : "Source"}
+                      </h2>
                       <button className="inline-action" type="button" onClick={applyMarkdown}>
                         Apply
                       </button>
                     </div>
                     <textarea
-                      aria-label={activeDocumentIsCanvas ? "Canvas JSON source" : "Markdown source"}
+                      aria-label={
+                        activeDocumentIsCanvas
+                          ? "Canvas JSON source"
+                          : activeDocumentIsBase
+                            ? "Base definition source"
+                            : "Markdown source"
+                      }
                       value={markdownDraft}
                       onChange={(event) => {
                         const nextDraft = event.currentTarget.value;
@@ -8872,6 +8980,25 @@ function App() {
                         }}
                       />
                       <span>Show images in file previews</span>
+                    </label>
+                    <label>
+                      <span>Base card image layout</span>
+                      <select
+                        disabled={!vaultRoot}
+                        value={fileDisplayDraft.baseCardImageLayout}
+                        onChange={(event) => {
+                          const baseCardImageLayout =
+                            event.currentTarget.value === "top" ? "top" : "side";
+
+                          setFileDisplayDraft((settings) => ({
+                            ...settings,
+                            baseCardImageLayout,
+                          }));
+                        }}
+                      >
+                        <option value="side">Side</option>
+                        <option value="top">Top</option>
+                      </select>
                     </label>
                     <label>
                       <span>Tidbit path pattern</span>
@@ -10534,6 +10661,15 @@ function App() {
               >
                 Create Folder
               </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  void revealEntryFromContextMenu(folderContextMenu.entry);
+                }}
+              >
+                Reveal in Finder
+              </button>
               {!folderContextMenu.createOnly ? (
                 <>
                   <button
@@ -10578,6 +10714,15 @@ function App() {
                 }}
               >
                 Move
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  void revealEntryFromContextMenu(folderContextMenu.entry);
+                }}
+              >
+                Reveal in Finder
               </button>
               <button
                 type="button"

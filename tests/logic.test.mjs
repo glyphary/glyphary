@@ -786,13 +786,13 @@ test("canvas files open as editable React Flow graph tabs", () => {
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
   const settings = readFileSync("src/lib/settings.ts", "utf8");
 
-  assert.match(appTypes, /kind: "markdown" \| "canvas"/);
+  assert.match(appTypes, /kind: "markdown" \| "canvas" \| "base"/);
   assert.match(app, /canvasTitle,[\s\S]*isCanvasPath,[\s\S]*type CanvasCommandAction,[\s\S]*type CanvasCommandRequest,[\s\S]*from "\.\/CanvasView"/);
   assert.match(editorPane, /import \{ CanvasView, type CanvasCommandRequest \} from "\.\.\/CanvasView"/);
   assert.match(app, /if \(isCanvasPath\(file\.relativePath\)\) \{/);
   assert.match(app, /kind: "canvas"/);
-  assert.match(app, /tab\?\.kind === "canvas"\s*\?\s*tab\.markdown/);
-  assert.match(app, /activeTab\?\.kind !== "canvas"/);
+  assert.match(app, /!tab\s*\?\s*initialMarkdown[\s\S]*tab\.kind !== "markdown"\s*\?\s*tab\.markdown/);
+  assert.match(app, /activeTab\?\.kind !== "markdown"/);
   assert.match(editorPane, /<CanvasView[\s\S]*commandRequest=\{isActiveGroup \? canvasCommandRequest : null\}[\s\S]*content=\{paneMarkdown\}/);
   assert.match(app, /Canvas JSON source/);
   assert.match(vaultIcons, /function CanvasFileIcon/);
@@ -1651,6 +1651,10 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(css, /\.task-result-text/);
   assert.match(css, /\.task-results/);
   assert.doesNotMatch(app, /className="file-context"/);
+  assert.match(app, /import \{ openUrl, revealItemInDir \} from "@tauri-apps\/plugin-opener"/);
+  assert.match(app, /function vaultEntryPath/);
+  assert.match(app, /async function revealEntryFromContextMenu/);
+  assert.match(app, /Reveal in Finder/);
   assert.match(app, /displayVaultRelativePath\(activeFile\?\.relativePath \?\? currentDir, vaultRoot\)/);
   assert.match(editorPane, /frontmatterScalarValue\(paneMetaHeader, "banner"\)/);
   assert.match(app, /useState<"edit" \| "view">\("edit"\)/);
@@ -1662,8 +1666,8 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(app, /setDocumentDisplayMode\("view"\)/);
   assert.match(app, /setDocumentDisplayMode\("edit"\)/);
   assert.match(editorPane, /const showEditingChrome = documentDisplayMode === "edit"/);
-  assert.match(editorPane, /!isCanvasTab && showEditingChrome/);
-  assert.match(editorPane, /isActiveGroup && !isCanvasTab && showEditingChrome/);
+  assert.match(editorPane, /isMarkdownTab && showEditingChrome/);
+  assert.match(editorPane, /isActiveGroup && isMarkdownTab && showEditingChrome/);
   assert.match(editorPane, /className="document-banner"/);
   assert.match(editorPane, /className="document-banner"[\s\S]*className="metadata-shell"/);
   assert.match(editorPane, /<img alt="" src=\{bannerSrc\} \/>/);
@@ -1812,6 +1816,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   const documentsState = readFileSync("src/app-state/documents.ts", "utf8");
   const editorPane = readFileSync("src/editor/EditorPane.tsx", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
+  const vaultImages = readFileSync("src/editor/vault-images.ts", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
   const settings = readFileSync("src/lib/settings.ts", "utf8");
   const config = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
@@ -1924,12 +1929,21 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(documentsState, /defaultVaultImageDirectory/);
   assert.match(documentsState, /convertFileSrc\(`\$\{root\}\/\$\{defaultVaultImageDirectory\}\/\$\{cleanReference\}`\)/);
   assert.match(editorOptions, /createVaultImageExtension\(resolveVaultImageSrc, resolveVaultAssetSrc\)/);
+  assert.match(vaultImages, /function youtubeThumbnailUrl/);
+  assert.match(vaultImages, /https:\/\/img\.youtube\.com\/vi\/\$\{videoId\}\/hqdefault\.jpg/);
+  assert.match(vaultImages, /remoteSource/);
+  assert.match(vaultImages, /youtubeThumbnailUrl\(href\) \?\? href/);
+  assert.match(app, /import \{ openUrl, revealItemInDir \} from "@tauri-apps\/plugin-opener"/);
+  assert.match(app, /function openRemoteImageSourceFromEditor/);
+  assert.match(editorPane, /onClick=\{onOpenRemoteImageSource\}/);
+  assert.match(css, /img\[data-remote-source\]/);
   assert.match(app, /assetDirectory: defaultVaultImageDirectory/);
   assert.match(settings, /defaultFileDisplaySettings/);
   assert.match(settings, /showDotfiles: false/);
   assert.match(settings, /showFilesInFolderTree: false/);
   assert.match(settings, /showFilePreviewsInFolderTree: true/);
   assert.match(settings, /showImagesInFilePreviews: true/);
+  assert.match(settings, /baseCardImageLayout: "side"/);
   assert.match(settings, /defaultNewTabFile = ""/);
   assert.match(settings, /function normalizeNewTabFile/);
   assert.match(settings, /function sameNewTabFile/);
@@ -1954,6 +1968,9 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(app, /Show files in folder trees/);
   assert.match(app, /Show file previews/);
   assert.match(app, /Show images in file previews/);
+  assert.match(app, /Base card image layout/);
+  assert.match(app, /value=\{fileDisplayDraft\.baseCardImageLayout\}/);
+  assert.match(app, /baseCardImageLayout,/);
   assert.match(app, /settings-check-control settings-sub-check-control/);
   assert.match(app, /disabled=\{!vaultRoot \|\| !fileDisplayDraft\.showFilePreviewsInFolderTree\}/);
   assert.match(app, /const checked = event\.currentTarget\.checked/);
@@ -2213,8 +2230,8 @@ test("quick command palette exposes initial editor commands", () => {
   assert.match(app, /editorCommandPaletteCommands/);
   assert.match(app, /function hasActiveDocumentTab\(\)/);
   assert.match(app, /Open or create a note before using the command palette/);
-  assert.match(app, /activeDocumentTab[\s\S]*activeDocumentIsCanvas[\s\S]*canvasCommandPaletteCommands[\s\S]*editorCommandPaletteCommands[\s\S]*\[\]/);
-  assert.match(app, /activeDocumentIsCanvas\s*\?\s*canvasInsertCommandPaletteCommands\s*:\s*insertCommandPaletteCommands/);
+  assert.match(app, /activeDocumentTab[\s\S]*activeDocumentIsCanvas[\s\S]*activeDocumentIsMarkdown[\s\S]*canvasCommandPaletteCommands[\s\S]*editorCommandPaletteCommands[\s\S]*\[\]/);
+  assert.match(app, /activeDocumentIsCanvas\s*\?\s*canvasInsertCommandPaletteCommands\s*:\s*activeDocumentIsMarkdown\s*\?\s*insertCommandPaletteCommands\s*:\s*\[\]/);
   assert.match(app, /activeCommandPaletteCommands/);
   assert.match(app, /setCanvasCommandRequest/);
   assert.match(editorPane, /commandRequest=\{isActiveGroup \? canvasCommandRequest : null\}/);
@@ -2745,6 +2762,62 @@ test("tauri starts with the requested default window size", () => {
 
   assert.equal(windowConfig.width, 1470);
   assert.equal(windowConfig.height, 956);
+});
+
+test("base files query markdown properties and render dedicated views", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
+  const appCss = readFileSync("src/App.css", "utf8");
+  const appDocuments = readFileSync("src/app-state/documents.ts", "utf8");
+  const baseHelpers = readFileSync("src/base/base.ts", "utf8");
+  const baseView = readFileSync("src/base/BaseView.tsx", "utf8");
+  const editorPane = readFileSync("src/editor/EditorPane.tsx", "utf8");
+  const persistence = readFileSync("src/vault/persistence.ts", "utf8");
+  const backend = readFileSync("src-tauri/src/base.rs", "utf8");
+  const backendModels = readFileSync("src-tauri/src/models.rs", "utf8");
+  const backendLib = readFileSync("src-tauri/src/lib.rs", "utf8");
+  const backendTests = readFileSync("src-tauri/src/tests/base.rs", "utf8");
+
+  assert.match(appTypes, /kind: "markdown" \| "canvas" \| "base"/);
+  assert.match(appTypes, /export type BaseQueryResult/);
+  assert.match(baseHelpers, /export function isBasePath/);
+  assert.match(baseHelpers, /export function baseFieldValue/);
+  assert.match(appDocuments, /isBasePath\(name\) \? baseTitle\(name\)/);
+  assert.match(app, /if \(isBasePath\(file\.relativePath\)\) \{/);
+  assert.match(app, /kind: "base"/);
+  assert.match(app, /!tab\s*\?\s*initialMarkdown[\s\S]*tab\.kind !== "markdown"\s*\?\s*tab\.markdown/);
+  assert.match(app, /activeDocumentIsMarkdown/);
+  assert.match(editorPane, /import \{ BaseView \} from "\.\.\/base\/BaseView"/);
+  assert.match(editorPane, /const isBaseTab = groupActiveTab\?\.kind === "base"/);
+  assert.match(editorPane, /<BaseView/);
+  assert.match(editorPane, /assetDirectory=\{vaultSettings\.assetDirectory\}/);
+  assert.match(editorPane, /imageLayout=\{vaultSettings\.files\?\.baseCardImageLayout === "top" \? "top" : "side"\}/);
+  assert.match(baseView, /queryBase\(vaultRoot, relativePath\)/);
+  assert.match(baseView, /imageLayout: "side" \| "top"/);
+  assert.match(baseView, /imageLayout === "top" \? "image-top"/);
+  assert.match(baseView, /import \{ isUrlLike \} from "\.\.\/lib\/paths"/);
+  assert.match(baseView, /function baseImageSources/);
+  assert.match(baseView, /reference === "null" \|\| reference === "~"/);
+  assert.match(baseView, /if \(isUrlLike\(reference\)\) \{[\s\S]*return \[reference\]/);
+  assert.match(baseView, /vaultImagePathCandidates\(root, reference/);
+  assert.match(baseView, /relativePath: row\.relativePath/);
+  assert.match(baseView, /setImageIndex\(nextIndex\)/);
+  assert.match(baseView, /activeView\.type === "table"/);
+  assert.match(persistence, /"query_base"/);
+  assert.match(appCss, /\.base-card-grid/);
+  assert.match(appCss, /\.base-card\.image-top/);
+  assert.match(appCss, /\.base-table/);
+  assert.match(backendModels, /struct BaseQueryResult/);
+  assert.match(backendModels, /struct BaseViewResult/);
+  assert.match(backendModels, /struct BaseRow/);
+  assert.match(backendLib, /mod base;/);
+  assert.match(backendLib, /query_base/);
+  assert.match(backend, /fn parse_base_definition/);
+  assert.match(backend, /fn parse_note_properties/);
+  assert.match(backend, /BaseCondition::HasProperty/);
+  assert.match(backend, /BaseCondition::Equals/);
+  assert.match(backend, /walk_files/);
+  assert.match(backendTests, /queries_base_views_from_note_frontmatter/);
 });
 
 test("split editor groups find an already open file across both panes", () => {

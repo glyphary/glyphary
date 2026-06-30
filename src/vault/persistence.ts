@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  BaseQueryResult,
   OpenedFile,
   RenamedDirectory,
   SearchResult,
@@ -132,4 +133,8 @@ export function searchVaultFiles(
     query,
     ...options,
   });
+}
+
+export function queryBase(root: string, relative: string) {
+  return invoke<BaseQueryResult>("query_base", { root, relative });
 }

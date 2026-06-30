@@ -32,6 +32,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
     let tidbits = clean_tidbit_settings(settings.tidbits);
     let appearance = clean_appearance_settings(settings.appearance);
     let editor = clean_editor_settings(settings.editor);
+    let files = clean_file_display_settings(settings.files);
     let css_snippets = clean_css_snippet_settings(settings.css_snippets)?;
     let plugins = clean_plugin_settings(settings.plugins)?;
     let ai = clean_ai_settings(settings.ai)?;
@@ -45,7 +46,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
             new_tab_file,
             starred_files,
             frontmatter_pills,
-            files: settings.files,
+            files,
             autosave: settings.autosave,
             tidbits,
             editor,
@@ -57,6 +58,16 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
             canvas,
             theme,
         })
+    }
+}
+pub(crate) fn clean_file_display_settings(settings: FileDisplaySettings) -> FileDisplaySettings {
+    FileDisplaySettings {
+        base_card_image_layout: if settings.base_card_image_layout == "top" {
+            "top".into()
+        } else {
+            DEFAULT_BASE_CARD_IMAGE_LAYOUT.into()
+        },
+        ..settings
     }
 }
 pub(crate) fn clean_editor_settings(settings: EditorSettings) -> EditorSettings {

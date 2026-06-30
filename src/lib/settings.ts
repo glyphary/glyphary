@@ -68,6 +68,7 @@ export const defaultFileDisplaySettings: FileDisplaySettings = {
   showFilesInFolderTree: false,
   showFilePreviewsInFolderTree: true,
   showImagesInFilePreviews: true,
+  baseCardImageLayout: "side",
   showDotfiles: false,
 };
 
@@ -231,7 +232,12 @@ export function sameEditorBehaviorSettings(
   return sameNormalizedSettings(normalizeEditorBehaviorSettings, left, right);
 }
 
-export function normalizeFileDisplaySettings(settings: FileDisplaySettings | undefined | null) {
+export function normalizeFileDisplaySettings(
+  settings: FileDisplaySettings | undefined | null,
+): FileDisplaySettings {
+  const baseCardImageLayout: FileDisplaySettings["baseCardImageLayout"] =
+    settings?.baseCardImageLayout === "top" ? "top" : "side";
+
   return {
     showFilesInFolderTree:
       settings?.showFilesInFolderTree ?? defaultFileDisplaySettings.showFilesInFolderTree,
@@ -240,6 +246,7 @@ export function normalizeFileDisplaySettings(settings: FileDisplaySettings | und
       defaultFileDisplaySettings.showFilePreviewsInFolderTree,
     showImagesInFilePreviews:
       settings?.showImagesInFilePreviews ?? defaultFileDisplaySettings.showImagesInFilePreviews,
+    baseCardImageLayout,
     showDotfiles: settings?.showDotfiles ?? defaultFileDisplaySettings.showDotfiles,
   };
 }

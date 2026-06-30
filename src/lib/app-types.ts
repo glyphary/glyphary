@@ -192,6 +192,7 @@ export type FileDisplaySettings = {
   showFilesInFolderTree: boolean;
   showFilePreviewsInFolderTree: boolean;
   showImagesInFilePreviews: boolean;
+  baseCardImageLayout: "side" | "top";
   showDotfiles: boolean;
 };
 
@@ -267,7 +268,7 @@ export type ActiveFile = {
 
 export type DocumentTab = {
   id: string;
-  kind: "markdown" | "canvas";
+  kind: "markdown" | "canvas" | "base";
   activeFile: ActiveFile | null;
   pageName: string;
   metaHeader: string;
@@ -291,6 +292,29 @@ export type SearchResult = {
   lineText?: string;
   isContentMatch: boolean;
   modifiedMs?: number;
+};
+
+export type BaseViewType = "cards" | "table";
+
+export type BaseRow = {
+  name: string;
+  relativePath: string;
+  properties: Record<string, string>;
+  imageReference?: string | null;
+};
+
+export type BaseViewResult = {
+  name: string;
+  type: BaseViewType;
+  order: string[];
+  image?: string | null;
+  rows: BaseRow[];
+};
+
+export type BaseQueryResult = {
+  relativePath: string;
+  name: string;
+  views: BaseViewResult[];
 };
 
 export type WikiLinkPickerState = {

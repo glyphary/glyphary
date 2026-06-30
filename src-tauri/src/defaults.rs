@@ -27,6 +27,7 @@ pub(crate) const MAX_GLASS_OPACITY: f64 = 0.9;
 pub(crate) const DEFAULT_CALENDAR_PREVIEW_DELAY_MS: u32 = 2000;
 pub(crate) const MIN_CALENDAR_PREVIEW_DELAY_MS: u32 = 0;
 pub(crate) const MAX_CALENDAR_PREVIEW_DELAY_MS: u32 = 5000;
+pub(crate) const DEFAULT_BASE_CARD_IMAGE_LAYOUT: &str = "side";
 pub(crate) const DEFAULT_CANVAS_NODE_BORDER_WIDTH: f64 = 1.0;
 pub(crate) const MIN_CANVAS_NODE_BORDER_WIDTH: f64 = 0.0;
 pub(crate) const MAX_CANVAS_NODE_BORDER_WIDTH: f64 = 6.0;
@@ -141,6 +142,10 @@ pub(crate) fn default_tidbit_global_shortcut() -> String {
     "CommandOrControl+Shift+Space".into()
 }
 
+pub(crate) fn default_base_card_image_layout() -> String {
+    DEFAULT_BASE_CARD_IMAGE_LAYOUT.into()
+}
+
 pub(crate) fn default_ai_base_url() -> String {
     DEFAULT_AI_BASE_URL.into()
 }
@@ -247,6 +252,7 @@ impl Default for FileDisplaySettings {
             show_files_in_folder_tree: false,
             show_file_previews_in_folder_tree: true,
             show_images_in_file_previews: true,
+            base_card_image_layout: DEFAULT_BASE_CARD_IMAGE_LAYOUT.into(),
             show_dotfiles: false,
         }
     }

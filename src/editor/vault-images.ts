@@ -47,6 +47,12 @@ export function createVaultImageExtension(
           renderHTML: (attrs) =>
             attrs.assetReference ? { "data-asset-reference": attrs.assetReference } : {},
         },
+        remoteSource: {
+          default: null,
+          parseHTML: (element) => element.getAttribute("data-remote-source"),
+          renderHTML: (attrs) =>
+            attrs.remoteSource ? { "data-remote-source": attrs.remoteSource } : {},
+        },
       };
     },
 
@@ -94,11 +100,12 @@ export function createVaultImageExtension(
         : null;
       const href = String(token.href ?? token.src ?? "");
       const assetReference = !vaultTarget ? cleanVaultAssetReference(href) : null;
+      const remoteSource = !vaultTarget && !assetReference ? href : null;
       const src = vaultTarget
         ? resolveVaultImageSrc(vaultTarget)
         : assetReference
           ? resolveVaultAssetSrc(assetReference)
-          : href;
+          : youtubeThumbnailUrl(href) ?? href;
 
       if (!src && !vaultTarget && !assetReference) {
         return [];
@@ -110,6 +117,7 @@ export function createVaultImageExtension(
         title: token.title ?? null,
         vaultTarget,
         assetReference,
+        remoteSource,
       });
     },
 
@@ -132,7 +140,9 @@ function imageNodeMarkdownAttrs(attrs: Record<string, unknown>) {
     typeof attrs.assetReference === "string"
       ? cleanVaultAssetReference(attrs.assetReference)
       : null;
-  const src = assetReference ?? (typeof attrs.src === "string" ? attrs.src : "");
+  const remoteSource = typeof attrs.remoteSource === "string" ? attrs.remoteSource : "";
+  const src =
+    assetReference ?? (remoteSource || (typeof attrs.src === "string" ? attrs.src : ""));
   const title = typeof attrs.title === "string" ? attrs.title : "";
   const titlePart = title ? ` "${title.replace(/"/g, '\\"')}"` : "";
 
@@ -141,4 +151,26 @@ function imageNodeMarkdownAttrs(attrs: Record<string, unknown>) {
 
 export function imageNodeMarkdown(node: ProseMirrorNode) {
   return imageNodeMarkdownAttrs(node.attrs ?? {});
+}
+
+function youtubeThumbnailUrl(value: string) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^www\./, "");
+    let videoId = "";
+
+    if (host === "youtu.be") {
+      videoId = url.pathname.split("/").filter(Boolean)[0] ?? "";
+    } else if (host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
+      videoId =
+        url.searchParams.get("v") ??
+        (url.pathname.match(/^\/(?:embed|shorts)\/([^/?#]+)/)?.[1] || "");
+    }
+
+    return /^[A-Za-z0-9_-]{11}$/.test(videoId)
+      ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+      : null;
+  } catch {
+    return null;
+  }
 }

@@ -7,6 +7,7 @@ import type {
 } from "react";
 import type { Editor } from "@tiptap/core";
 import { EditorContent } from "@tiptap/react";
+import { BaseView } from "../base/BaseView";
 import { CanvasView, type CanvasCommandRequest } from "../CanvasView";
 import { renderToolbarIcon, type ToolbarIconName } from "../toolbar-icons";
 import {
@@ -67,6 +68,7 @@ export function EditorPane({
   onMetaHeaderChange,
   onOpenFile,
   onOpenImagePreview,
+  onOpenRemoteImageSource,
   onPageNameChange,
   onSetActiveDocumentDirty,
   onSetEditorFocused,
@@ -105,6 +107,7 @@ export function EditorPane({
   onMetaHeaderChange: (nextMetaHeader: string) => void;
   onOpenFile: (relativePath: string) => void;
   onOpenImagePreview: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  onOpenRemoteImageSource: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onPageNameChange: (nextPageName: string) => void;
   onSetActiveDocumentDirty: (dirty: boolean) => void;
   onSetEditorFocused: (focused: boolean) => void;
@@ -127,6 +130,8 @@ export function EditorPane({
   const paneMarkdown = isActiveGroup ? markdown : groupActiveTab?.markdown ?? "";
   const paneActiveFile = isActiveGroup ? activeFile : groupActiveTab?.activeFile ?? null;
   const isCanvasTab = groupActiveTab?.kind === "canvas";
+  const isBaseTab = groupActiveTab?.kind === "base";
+  const isMarkdownTab = groupActiveTab?.kind === "markdown";
   const showEditingChrome = documentDisplayMode === "edit";
   const frontmatterPillSettings = normalizeFrontmatterPillSettings(
     vaultSettings.frontmatterPills,
@@ -134,7 +139,7 @@ export function EditorPane({
   const frontmatterPills = frontmatterPillSettings.enabled
     ? frontmatterListValues(paneMetaHeader, frontmatterPillSettings.headerName)
     : [];
-  const bannerSrc = !isCanvasTab
+  const bannerSrc = isMarkdownTab
     ? joinVaultRelativeImagePath(vaultRoot, frontmatterScalarValue(paneMetaHeader, "banner"))
     : "";
 
@@ -196,13 +201,21 @@ export function EditorPane({
           </div>
         </div>
       ) : (
-        <div className={isCanvasTab ? "editor-pane canvas-editor-pane" : "editor-pane"}>
+        <div
+          className={
+            isCanvasTab
+              ? "editor-pane canvas-editor-pane"
+              : isBaseTab
+                ? "editor-pane base-editor-pane"
+                : "editor-pane"
+          }
+        >
           {bannerSrc ? (
             <figure className="document-banner">
               <img alt="" src={bannerSrc} />
             </figure>
           ) : null}
-          {!isCanvasTab && showEditingChrome ? (
+          {isMarkdownTab && showEditingChrome ? (
             <div className="metadata-shell" aria-label="Metadata editor">
               <div className="page-name-control">
                 {pageNameEditing && isActiveGroup ? (
@@ -281,11 +294,11 @@ export function EditorPane({
             </div>
           ) : null}
 
-          {isActiveGroup && !isCanvasTab && showEditingChrome ? (
+          {isActiveGroup && isMarkdownTab && showEditingChrome ? (
             <Toolbar actions={toolbarActions} onSetEditorFocused={onSetEditorFocused} />
           ) : null}
 
-          {isActiveGroup && !isCanvasTab && pageSearch.open ? (
+          {isActiveGroup && isMarkdownTab && pageSearch.open ? (
             <PageSearchBar pageSearch={pageSearch} />
           ) : null}
 
@@ -299,11 +312,20 @@ export function EditorPane({
               onChange={(nextContent) => onCanvasChange(groupId, nextContent)}
               onOpenFile={onOpenFile}
             />
+          ) : isBaseTab ? (
+            <BaseView
+              assetDirectory={vaultSettings.assetDirectory}
+              imageLayout={vaultSettings.files?.baseCardImageLayout === "top" ? "top" : "side"}
+              relativePath={paneActiveFile?.relativePath ?? ""}
+              vaultRoot={vaultRoot}
+              onOpenFile={onOpenFile}
+            />
           ) : (
             <div className="editor-surface-frame">
               <EditorContent
                 className="editor-surface markdown-rendered markdown-preview-view"
                 editor={groupEditor}
+                onClick={onOpenRemoteImageSource}
                 onDoubleClick={onOpenImagePreview}
                 onErrorCapture={handleEditorImageError}
                 onContextMenu={(event) => onEditorContextMenu(event, groupEditor, groupId)}

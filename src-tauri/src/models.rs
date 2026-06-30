@@ -95,6 +95,8 @@ pub(crate) struct FileDisplaySettings {
     pub(crate) show_file_previews_in_folder_tree: bool,
     #[serde(default = "crate::defaults::default_true")]
     pub(crate) show_images_in_file_previews: bool,
+    #[serde(default = "crate::defaults::default_base_card_image_layout")]
+    pub(crate) base_card_image_layout: String,
     #[serde(default)]
     pub(crate) show_dotfiles: bool,
 }
@@ -234,6 +236,33 @@ pub(crate) struct SearchResult {
     pub(crate) line_text: Option<String>,
     pub(crate) is_content_match: bool,
     pub(crate) modified_ms: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BaseQueryResult {
+    pub(crate) relative_path: String,
+    pub(crate) name: String,
+    pub(crate) views: Vec<BaseViewResult>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BaseViewResult {
+    pub(crate) name: String,
+    pub(crate) r#type: String,
+    pub(crate) order: Vec<String>,
+    pub(crate) image: Option<String>,
+    pub(crate) rows: Vec<BaseRow>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BaseRow {
+    pub(crate) name: String,
+    pub(crate) relative_path: String,
+    pub(crate) properties: HashMap<String, String>,
+    pub(crate) image_reference: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

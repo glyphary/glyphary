@@ -34,6 +34,8 @@ mod ai;
 mod ai_history;
 #[macro_use]
 mod assets;
+#[macro_use]
+mod base;
 mod defaults;
 #[macro_use]
 mod calendar;
@@ -60,6 +62,7 @@ mod windowing;
 use ai::*;
 use ai_history::*;
 use assets::*;
+use base::*;
 use calendar::*;
 use defaults::*;
 use models::*;
@@ -271,6 +274,7 @@ pub fn run() {
             set_window_glass_effect,
             save_vault_asset,
             import_remote_vault_image_asset,
+            query_base,
             search_vault,
             fetch_rich_link_metadata,
             list_ai_models,
