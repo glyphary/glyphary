@@ -135,6 +135,8 @@ import {
   normalizePluginSettings,
   normalizeTidbitSettings,
   normalizeVaultAppearanceSettings,
+  maximumCalendarPreviewDelayMs,
+  minimumCalendarPreviewDelayMs,
   readPersistedAppearance,
   readPersistedWorkspace,
   resolveAppearance,
@@ -166,6 +168,7 @@ import {
   selectedGalleryImages,
 } from "./editor/commands";
 import { EditorPane, type ToolbarAction } from "./editor/EditorPane";
+import { CanvasMarkdownPreview } from "./canvas/CanvasNodes";
 import {
   useWikiLinkState,
   wikiLinkDisplayName,
@@ -380,6 +383,15 @@ type ImagePreviewState = {
   alt: string;
 };
 
+type CalendarDayPreviewState = {
+  dateKey: string;
+  markdown: string;
+  relativePath: string;
+  title: string;
+  x: number;
+  y: number;
+};
+
 type AiReviewState = {
   title: string;
   output: string;
@@ -400,6 +412,8 @@ type AiPageBuilderAssetReviewState = {
 const aiPageBuilderMarkdownContextLimit = 12000;
 const maxAiBuilderHistoryTurnsPerFile = 20;
 const maxAiBuilderPromptHistoryTurns = 5;
+const calendarPreviewWidth = 320;
+const calendarPreviewHeight = 260;
 
 type WasmPluginResponse =
   | {
@@ -1378,6 +1392,8 @@ function App() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [calendarNoteDateKeys, setCalendarNoteDateKeys] = useState<string[]>([]);
+  const [calendarDayPreview, setCalendarDayPreview] =
+    useState<CalendarDayPreviewState | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("main");
   const [settingsOffset, setSettingsOffset] = useState({ x: 0, y: 0 });
@@ -1456,6 +1472,8 @@ function App() {
     isMacOsPlatform(window.navigator.platform, window.navigator.userAgent) ||
     isWindowsPlatform(window.navigator.platform, window.navigator.userAgent);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const calendarPreviewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const calendarPreviewRequestId = useRef(0);
   const activeFileRef = useRef<ActiveFile | null>(null);
   const currentDirRef = useRef("");
   const recentFilesRef = useRef<ActiveFile[]>([]);
@@ -1823,6 +1841,9 @@ function App() {
     return () => {
       if (clickTimer.current) {
         clearTimeout(clickTimer.current);
+      }
+      if (calendarPreviewTimer.current) {
+        clearTimeout(calendarPreviewTimer.current);
       }
     };
   }, []);
@@ -3088,6 +3109,127 @@ function App() {
       cancelled = true;
     };
   }, [calendarDays, vaultRoot]);
+
+  function clearCalendarPreviewTimer() {
+    if (calendarPreviewTimer.current) {
+      clearTimeout(calendarPreviewTimer.current);
+      calendarPreviewTimer.current = null;
+    }
+  }
+
+  function closeCalendarDayPreview() {
+    clearCalendarPreviewTimer();
+    calendarPreviewRequestId.current += 1;
+    setCalendarDayPreview(null);
+  }
+
+  function calendarPreviewPosition(event: ReactMouseEvent<HTMLButtonElement> | ReactPointerEvent<HTMLButtonElement>) {
+    const x =
+      event.clientX + 14 + calendarPreviewWidth <= window.innerWidth
+        ? event.clientX + 14
+        : Math.max(12, event.clientX - calendarPreviewWidth - 14);
+    const y =
+      event.clientY + 14 + calendarPreviewHeight <= window.innerHeight
+        ? event.clientY + 14
+        : Math.max(12, event.clientY - calendarPreviewHeight - 14);
+
+    return { x, y };
+  }
+
+  function scheduleCalendarDayPreview(
+    date: Date,
+    event: ReactMouseEvent<HTMLButtonElement> | ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    const dateKey = calendarDateKey(date);
+    const position = calendarPreviewPosition(event);
+
+    clearCalendarPreviewTimer();
+    setCalendarDayPreview(null);
+
+    if (!vaultRootRef.current) {
+      return;
+    }
+
+    const relativePath = calendarDayRelativePath(date);
+    const title = calendarDayTitle(date);
+    const hasExistingNote = calendarNoteDateKeySet.has(dateKey);
+
+    calendarPreviewTimer.current = setTimeout(() => {
+      const requestId = calendarPreviewRequestId.current + 1;
+      calendarPreviewRequestId.current = requestId;
+      calendarPreviewTimer.current = null;
+
+      if (!hasExistingNote) {
+        setCalendarDayPreview({
+          dateKey,
+          markdown: "No calendar note yet. Double-click this day to create it.",
+          relativePath,
+          title,
+          ...position,
+        });
+        return;
+      }
+
+      void readVaultFile(vaultRootRef.current, relativePath)
+        .then((file) => {
+          if (calendarPreviewRequestId.current !== requestId) {
+            return;
+          }
+
+          setCalendarDayPreview({
+            dateKey,
+            markdown: file.content,
+            relativePath,
+            title,
+            ...position,
+          });
+        })
+        .catch((error) => {
+          if (calendarPreviewRequestId.current === requestId) {
+            setStatus(error instanceof Error ? error.message : String(error));
+          }
+        });
+    }, editorBehavior.calendarPreviewDelayMs);
+  }
+
+  function moveCalendarDayPreview(
+    date: Date,
+    event: ReactMouseEvent<HTMLButtonElement> | ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    const dateKey = calendarDateKey(date);
+    const position = calendarPreviewPosition(event);
+
+    if (calendarDayPreview?.dateKey === dateKey) {
+      setCalendarDayPreview((preview) => (preview ? { ...preview, ...position } : preview));
+      return;
+    }
+
+    if (!calendarPreviewTimer.current) {
+      scheduleCalendarDayPreview(date, event);
+    }
+  }
+
+  useEffect(() => {
+    if (!calendarDayPreview) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeCalendarDayPreview();
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", closeCalendarDayPreview);
+    window.addEventListener("scroll", closeCalendarDayPreview, true);
+
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", closeCalendarDayPreview);
+      window.removeEventListener("scroll", closeCalendarDayPreview, true);
+    };
+  }, [calendarDayPreview]);
 
   const toolbarActions: ToolbarAction[] = useMemo(() => {
     if (!editor) {
@@ -7507,7 +7649,7 @@ function App() {
               </div>
             </div>
           ) : null}
-          <button
+        <button
             className="secondary-action icon-action"
             disabled={!activeFile || !dirty}
             type="button"
@@ -8221,6 +8363,11 @@ function App() {
                           key={date.toISOString()}
                           type="button"
                           onDoubleClick={() => openCalendarDay(date)}
+                          onMouseEnter={(event) => scheduleCalendarDayPreview(date, event)}
+                          onMouseLeave={closeCalendarDayPreview}
+                          onMouseMove={(event) => moveCalendarDayPreview(date, event)}
+                          onPointerEnter={(event) => scheduleCalendarDayPreview(date, event)}
+                          onPointerLeave={closeCalendarDayPreview}
                           title={`Double-click to open ${calendarDayTitle(date)}`}
                         >
                           <span>{date.getDate()}</span>
@@ -8260,6 +8407,17 @@ function App() {
           </div>
         </section>
       )}
+      {calendarDayPreview ? (
+        <aside
+          className="calendar-day-preview"
+          style={{ left: calendarDayPreview.x, top: calendarDayPreview.y }}
+          aria-label={`Preview ${calendarDayPreview.title}`}
+        >
+          <strong>{calendarDayPreview.title}</strong>
+          <span>{calendarDayPreview.relativePath}</span>
+          <CanvasMarkdownPreview markdown={calendarDayPreview.markdown} />
+        </aside>
+      ) : null}
       {settingsOpen ? (
         <div className="settings-screen" role="dialog" aria-modal="true" aria-label="Settings">
           <div className="settings-card" style={settingsCardStyle}>
@@ -8532,12 +8690,35 @@ function App() {
                         disabled={!vaultRoot}
                         type="checkbox"
                         onChange={(event) =>
-                          setEditorBehaviorDraft({
+                          setEditorBehaviorDraft((settings) => ({
+                            ...settings,
                             vimMode: event.currentTarget.checked,
-                          })
+                          }))
                         }
                       />
                       <span>Use Vim keybindings</span>
+                    </label>
+                    <label>
+                      <span>Calendar preview delay</span>
+                      <input
+                        disabled={!vaultRoot}
+                        type="number"
+                        min={minimumCalendarPreviewDelayMs}
+                        max={maximumCalendarPreviewDelayMs}
+                        step={100}
+                        value={editorBehaviorDraft.calendarPreviewDelayMs}
+                        onChange={(event) => {
+                          const calendarPreviewDelayMs = Number(event.currentTarget.value);
+
+                          setEditorBehaviorDraft((settings) =>
+                            normalizeEditorBehaviorSettings({
+                              ...settings,
+                              calendarPreviewDelayMs,
+                            }),
+                          );
+                        }}
+                      />
+                      <small>Milliseconds to wait before showing calendar note previews.</small>
                     </label>
                     <label className="settings-check-control">
                       <input

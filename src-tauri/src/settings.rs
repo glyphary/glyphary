@@ -30,6 +30,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
     let frontmatter_pills = clean_frontmatter_pill_settings(settings.frontmatter_pills)?;
     let tidbits = clean_tidbit_settings(settings.tidbits);
     let appearance = clean_appearance_settings(settings.appearance);
+    let editor = clean_editor_settings(settings.editor);
     let css_snippets = clean_css_snippet_settings(settings.css_snippets)?;
     let plugins = clean_plugin_settings(settings.plugins)?;
     let ai = clean_ai_settings(settings.ai)?;
@@ -45,7 +46,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
             files: settings.files,
             autosave: settings.autosave,
             tidbits,
-            editor: settings.editor,
+            editor,
             appearance,
             debug: settings.debug,
             css_snippets,
@@ -54,6 +55,14 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
             canvas,
             theme,
         })
+    }
+}
+pub(crate) fn clean_editor_settings(settings: EditorSettings) -> EditorSettings {
+    EditorSettings {
+        calendar_preview_delay_ms: settings
+            .calendar_preview_delay_ms
+            .clamp(MIN_CALENDAR_PREVIEW_DELAY_MS, MAX_CALENDAR_PREVIEW_DELAY_MS),
+        vim_mode: settings.vim_mode,
     }
 }
 pub(crate) fn clean_optional_relative(relative: &str) -> Result<String, String> {

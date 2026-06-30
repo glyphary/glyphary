@@ -76,9 +76,11 @@ pub(crate) struct VaultSettings {
     pub(crate) theme: Option<VaultTheme>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct EditorSettings {
+    #[serde(default = "crate::defaults::default_calendar_preview_delay_ms")]
+    pub(crate) calendar_preview_delay_ms: u32,
     pub(crate) vim_mode: bool,
 }
 

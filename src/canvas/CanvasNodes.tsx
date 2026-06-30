@@ -99,7 +99,7 @@ function CanvasHandles() {
   );
 }
 
-function CanvasMarkdownPreview({ markdown }: { markdown: string }) {
+export function CanvasMarkdownPreview({ markdown }: { markdown: string }) {
   const blocks = markdownPreviewBlocks(markdown);
 
   if (blocks.length === 0) {

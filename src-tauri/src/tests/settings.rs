@@ -101,6 +101,10 @@ fn reads_default_vault_settings_when_missing() {
     assert!(!settings.files.show_dotfiles);
     assert!(settings.autosave.enabled);
     assert_eq!(settings.tidbits.path_pattern, DEFAULT_TIDBIT_PATH_PATTERN);
+    assert_eq!(
+        settings.editor.calendar_preview_delay_ms,
+        DEFAULT_CALENDAR_PREVIEW_DELAY_MS
+    );
     assert!(!settings.editor.vim_mode);
     assert!(!settings.appearance.glass_effect);
     assert_eq!(settings.appearance.glass_opacity, DEFAULT_GLASS_OPACITY);
@@ -184,7 +188,10 @@ fn writes_vault_settings_file() {
                 global_shortcut_enabled: true,
                 global_shortcut: "CommandOrControl+Shift+Space".into(),
             },
-            editor: EditorSettings { vim_mode: true },
+            editor: EditorSettings {
+                calendar_preview_delay_ms: 1400,
+                vim_mode: true,
+            },
             appearance: AppearanceSettings {
                 glass_effect: true,
                 glass_opacity: 0.42,
@@ -213,6 +220,7 @@ fn writes_vault_settings_file() {
         settings.tidbits.path_pattern,
         "Inbox/tidbit-{{date:YYYY-MM-DD-HH-mm-ss}}.md"
     );
+    assert_eq!(settings.editor.calendar_preview_delay_ms, 1400);
     assert!(settings.editor.vim_mode);
     assert!(settings.appearance.glass_effect);
     assert_eq!(settings.appearance.glass_opacity, 0.42);
@@ -227,6 +235,31 @@ fn writes_vault_settings_file() {
     assert!(fs::read_to_string(vault_settings_path(&root))
         .expect("settings should be readable")
         .contains("media/images"));
+
+    fs::remove_dir_all(root).expect("test root should be removed");
+}
+
+#[test]
+fn clamps_editor_settings() {
+    let root = test_root();
+
+    let settings = write_vault_settings(
+        root.to_string_lossy().into_owned(),
+        VaultSettings {
+            editor: EditorSettings {
+                calendar_preview_delay_ms: 10_000,
+                vim_mode: true,
+            },
+            ..VaultSettings::default()
+        },
+    )
+    .expect("settings should write");
+
+    assert_eq!(
+        settings.editor.calendar_preview_delay_ms,
+        MAX_CALENDAR_PREVIEW_DELAY_MS
+    );
+    assert!(settings.editor.vim_mode);
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }

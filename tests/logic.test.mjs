@@ -290,6 +290,9 @@ test("desktop platform detection controls platform-specific window actions", () 
 
 test("calendar filenames match the requested note naming scheme and dot marker keys", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+  const settings = readFileSync("src/lib/settings.ts", "utf8");
   const openCalendarDay = app.slice(
     app.indexOf("async function openCalendarDay"),
     app.indexOf("async function openDirectoryShadow"),
@@ -304,6 +307,36 @@ test("calendar filenames match the requested note naming scheme and dot marker k
   assert.match(openCalendarDay, /await revealFileInVaultDrawer\(existing\.tab\.activeFile\)/);
   assert.match(openCalendarDay, /await revealFileInVaultDrawer\(tab\.activeFile\)/);
   assert.doesNotMatch(openCalendarDay, /await loadEntries\(vaultRoot, currentDir\)/);
+  assert.match(settings, /minimumCalendarPreviewDelayMs = 0/);
+  assert.match(settings, /maximumCalendarPreviewDelayMs = 5000/);
+  assert.match(settings, /defaultEditorBehaviorSettings: EditorBehaviorSettings = \{\s*calendarPreviewDelayMs: 2000,/);
+  assert.match(appTypes, /export type EditorBehaviorSettings = \{\s*calendarPreviewDelayMs: number;\s*vimMode: boolean;/);
+  assert.match(app, /const calendarPreviewWidth = 320/);
+  assert.match(app, /function calendarPreviewPosition\(event: ReactMouseEvent<HTMLButtonElement> \| ReactPointerEvent<HTMLButtonElement>\)/);
+  assert.match(app, /function scheduleCalendarDayPreview\(\s*date: Date,\s*event: ReactMouseEvent<HTMLButtonElement> \| ReactPointerEvent<HTMLButtonElement>,\s*\)/);
+  assert.match(app, /function moveCalendarDayPreview\(/);
+  assert.match(app, /const hasExistingNote = calendarNoteDateKeySet\.has\(dateKey\)/);
+  assert.match(app, /No calendar note yet\. Double-click this day to create it\./);
+  assert.match(app, /calendarPreviewTimer\.current = setTimeout/);
+  assert.match(app, /\}, editorBehavior\.calendarPreviewDelayMs\)/);
+  assert.match(app, /readVaultFile\(vaultRootRef\.current, relativePath\)/);
+  assert.match(app, /onMouseEnter=\{\(event\) => scheduleCalendarDayPreview\(date, event\)\}/);
+  assert.match(app, /onMouseLeave=\{closeCalendarDayPreview\}/);
+  assert.match(app, /onMouseMove=\{\(event\) => moveCalendarDayPreview\(date, event\)\}/);
+  assert.match(app, /onPointerEnter=\{\(event\) => scheduleCalendarDayPreview\(date, event\)\}/);
+  assert.match(app, /onPointerLeave=\{closeCalendarDayPreview\}/);
+  assert.match(app, /className="calendar-day-preview"/);
+  assert.match(app, /style=\{\{ left: calendarDayPreview\.x, top: calendarDayPreview\.y \}\}/);
+  assert.match(app, /<CanvasMarkdownPreview markdown=\{calendarDayPreview\.markdown\} \/>/);
+  assert.match(app, /aria-label=\{`Preview \$\{calendarDayPreview\.title\}`\}/);
+  assert.match(app, /Calendar preview delay/);
+  assert.match(app, /value=\{editorBehaviorDraft\.calendarPreviewDelayMs\}/);
+  assert.match(readFileSync("src/canvas/CanvasNodes.tsx", "utf8"), /export function CanvasMarkdownPreview/);
+  assert.match(css, /\.calendar-day-preview/);
+  assert.match(css, /width: 320px/);
+  assert.match(css, /background: var\(--surface\)/);
+  assert.match(css, /\.calendar-day-preview \.canvas-markdown-preview/);
+  assert.match(css, /pointer-events: none/);
 });
 
 test("markdown headings produce a table of contents and ignore fenced code", () => {

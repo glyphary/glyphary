@@ -51,6 +51,8 @@ export const minimumCanvasNodeBorderWidth = 0;
 export const maximumCanvasNodeBorderWidth = 6;
 export const minimumCanvasEdgeThickness = 0.5;
 export const maximumCanvasEdgeThickness = 8;
+export const minimumCalendarPreviewDelayMs = 0;
+export const maximumCalendarPreviewDelayMs = 5000;
 
 export const defaultFrontmatterPillSettings: FrontmatterPillSettings = {
   enabled: true,
@@ -58,6 +60,7 @@ export const defaultFrontmatterPillSettings: FrontmatterPillSettings = {
 };
 
 export const defaultEditorBehaviorSettings: EditorBehaviorSettings = {
+  calendarPreviewDelayMs: 2000,
   vimMode: false,
 };
 
@@ -200,7 +203,15 @@ export function sameFrontmatterPillSettings(
 export function normalizeEditorBehaviorSettings(
   settings: EditorBehaviorSettings | undefined | null,
 ) {
+  const delay = Number(settings?.calendarPreviewDelayMs);
+
   return {
+    calendarPreviewDelayMs: Number.isFinite(delay)
+      ? Math.min(
+          maximumCalendarPreviewDelayMs,
+          Math.max(minimumCalendarPreviewDelayMs, Math.round(delay)),
+        )
+      : defaultEditorBehaviorSettings.calendarPreviewDelayMs,
     vimMode: settings?.vimMode ?? defaultEditorBehaviorSettings.vimMode,
   };
 }

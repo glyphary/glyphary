@@ -184,6 +184,7 @@ export type FrontmatterPillSettings = {
 };
 
 export type EditorBehaviorSettings = {
+  calendarPreviewDelayMs: number;
   vimMode: boolean;
 };
 

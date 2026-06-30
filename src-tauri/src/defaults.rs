@@ -24,6 +24,9 @@ pub(crate) const DEFAULT_CSS_SNIPPET_DIRECTORY: &str = "_snippets_";
 pub(crate) const DEFAULT_GLASS_OPACITY: f64 = 0.58;
 pub(crate) const MIN_GLASS_OPACITY: f64 = 0.24;
 pub(crate) const MAX_GLASS_OPACITY: f64 = 0.9;
+pub(crate) const DEFAULT_CALENDAR_PREVIEW_DELAY_MS: u32 = 2000;
+pub(crate) const MIN_CALENDAR_PREVIEW_DELAY_MS: u32 = 0;
+pub(crate) const MAX_CALENDAR_PREVIEW_DELAY_MS: u32 = 5000;
 pub(crate) const DEFAULT_CANVAS_NODE_BORDER_WIDTH: f64 = 1.0;
 pub(crate) const MIN_CANVAS_NODE_BORDER_WIDTH: f64 = 0.0;
 pub(crate) const MAX_CANVAS_NODE_BORDER_WIDTH: f64 = 6.0;
@@ -154,6 +157,10 @@ pub(crate) fn default_glass_opacity() -> f64 {
     DEFAULT_GLASS_OPACITY
 }
 
+pub(crate) fn default_calendar_preview_delay_ms() -> u32 {
+    DEFAULT_CALENDAR_PREVIEW_DELAY_MS
+}
+
 pub(crate) fn default_status_bar_visible() -> bool {
     true
 }
@@ -247,6 +254,15 @@ impl Default for TidbitSettings {
             path_pattern: DEFAULT_TIDBIT_PATH_PATTERN.into(),
             global_shortcut_enabled: false,
             global_shortcut: default_tidbit_global_shortcut(),
+        }
+    }
+}
+
+impl Default for EditorSettings {
+    fn default() -> Self {
+        Self {
+            calendar_preview_delay_ms: DEFAULT_CALENDAR_PREVIEW_DELAY_MS,
+            vim_mode: false,
         }
     }
 }
