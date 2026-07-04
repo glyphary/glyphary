@@ -239,6 +239,12 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_macos_permissions::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            if let Err(err) = apply_macos_titlebar_chrome(app.handle()) {
+                eprintln!("Could not apply macOS titlebar chrome: {err}");
+            }
+            Ok(())
+        })
         .manage(TidbitShortcutState::default())
         .invoke_handler(tauri::generate_handler![
             list_vault_dir,

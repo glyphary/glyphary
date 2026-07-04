@@ -180,9 +180,9 @@ fn condition_matches(properties: &HashMap<String, String>, condition: &BaseCondi
         BaseCondition::HasProperty(property) => properties
             .get(property)
             .is_some_and(|value| !value.trim().is_empty()),
-        BaseCondition::Equals(property, expected) => {
-            properties.get(property).is_some_and(|value| value == expected)
-        }
+        BaseCondition::Equals(property, expected) => properties
+            .get(property)
+            .is_some_and(|value| value == expected),
         BaseCondition::Unsupported => false,
     }
 }

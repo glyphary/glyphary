@@ -631,9 +631,9 @@ function App() {
   const [folderActionDialog, setFolderActionDialog] = useState<FolderActionDialogState | null>(null);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState("No vault open");
+  const isMacOs = isMacOsPlatform(window.navigator.platform, window.navigator.userAgent);
   const hideDuplicateDocumentActions =
-    isMacOsPlatform(window.navigator.platform, window.navigator.userAgent) ||
-    isWindowsPlatform(window.navigator.platform, window.navigator.userAgent);
+    isMacOs || isWindowsPlatform(window.navigator.platform, window.navigator.userAgent);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const calendarPreviewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const calendarPreviewRequestId = useRef(0);
@@ -6916,6 +6916,20 @@ function App() {
     );
   }
 
+  function startTitlebarDrag(event: ReactMouseEvent<HTMLElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    const target = event.target;
+
+    if (target instanceof Element && target.closest("button, input, select, textarea, a")) {
+      return;
+    }
+
+    void getCurrentWindow().startDragging();
+  }
+
   const workspaceStyle = {
     "--vault-width": `${vaultDrawerOpen ? vaultDrawerWidth : closedDrawerWidth}px`,
     "--drawer-width": `${drawerOpen ? inspectorDrawerWidth : closedDrawerWidth}px`,
@@ -6936,6 +6950,7 @@ function App() {
     `section-corners-${normalizedVaultAppearanceDraft.sectionCorners}`,
     `workspace-margin-${normalizedVaultAppearanceDraft.workspaceMargin}`,
     `ui-weight-${normalizedVaultAppearanceDraft.uiFontWeight}`,
+    isMacOs ? "platform-macos" : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -6982,7 +6997,24 @@ function App() {
           </option>
         ))}
       </datalist>
-      <header className="titlebar">
+      <header className="titlebar" data-tauri-drag-region onMouseDown={startTitlebarDrag}>
+        <div className="titlebar-drag-region" data-tauri-drag-region />
+        {isMacOs ? (
+          <div className="titlebar-native-actions">
+            <button
+              className="secondary-action icon-action titlebar-drawer-toggle"
+              type="button"
+              aria-label={vaultDrawerOpen ? "Close files drawer" : "Open files drawer"}
+              title={vaultDrawerOpen ? "Close Files" : "Open Files"}
+              onClick={() => toggleVaultDrawerItem("files")}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <rect x="4" y="5" width="16" height="14" rx="2" />
+                <path d="M9 5v14" />
+              </svg>
+            </button>
+          </div>
+        ) : null}
         <div className="app-actions">
           {!hideDuplicateDocumentActions ? (
             <div className="file-menu">

@@ -44,18 +44,12 @@ views:
         "---\nsourcetype: article\nreviewed: yes\ncover: '![[cover one.png]]'\n---\n# Article\n",
     )
     .expect("article should be created");
-    fs::write(
-        root.join("Link.md"),
-        "---\nsourcetype: link\n---\n# Link\n",
-    )
-    .expect("link should be created");
+    fs::write(root.join("Link.md"), "---\nsourcetype: link\n---\n# Link\n")
+        .expect("link should be created");
     fs::write(root.join("Loose.md"), "# Loose\n").expect("loose note should be created");
 
-    let result = query_base(
-        root.to_string_lossy().into_owned(),
-        "Sources.base".into(),
-    )
-    .expect("base query should succeed");
+    let result = query_base(root.to_string_lossy().into_owned(), "Sources.base".into())
+        .expect("base query should succeed");
 
     let all = result
         .views
@@ -77,7 +71,10 @@ views:
     assert_eq!(all.rows.len(), 2);
     assert_eq!(articles.rows.len(), 1);
     assert_eq!(articles.rows[0].relative_path, "Article.md");
-    assert_eq!(articles.rows[0].image_reference.as_deref(), Some("![[cover one.png]]"));
+    assert_eq!(
+        articles.rows[0].image_reference.as_deref(),
+        Some("![[cover one.png]]")
+    );
     assert_eq!(links.r#type, "table");
     assert_eq!(links.rows[0].relative_path, "Link.md");
 

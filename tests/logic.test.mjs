@@ -266,6 +266,8 @@ test("desktop platform detection controls platform-specific window actions", () 
   const capabilities = JSON.parse(readFileSync("src-tauri/capabilities/default.json", "utf8"));
   const config = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8"));
   const windowsConfig = JSON.parse(readFileSync("src-tauri/tauri.windows.conf.json", "utf8"));
+  const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
+  const windowingBackend = readFileSync("src-tauri/src/windowing.rs", "utf8");
 
   assert.equal(isMacOsPlatform("MacIntel"), true);
   assert.equal(isMacOsPlatform("", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"), true);
@@ -278,18 +280,50 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.match(app, /isWindowsPlatform/);
   assert.match(css, /\.titlebar[\s\S]*background: var\(--surface\)/);
   assert.doesNotMatch(css, /data-window-glass="enabled"] \.document-tabs,\n:root\[data-window-glass="enabled"] \.titlebar/);
-  assert.match(css, /data-window-glass="enabled"] \.titlebar[\s\S]*backdrop-filter: none/);
+  assert.match(css, /data-window-glass="enabled"] \.app-shell:not\(\.platform-macos\) \.titlebar[\s\S]*backdrop-filter: none/);
   assert.match(app, /getCurrentWindow\(\)\.setTheme\(resolvedAppearance\)/);
   assert.doesNotMatch(app, /mac-window-title/);
   assert.doesNotMatch(app, /app-brand/);
   assert.ok(capabilities.permissions.includes("core:window:allow-set-theme"));
+  assert.ok(capabilities.permissions.includes("core:window:allow-start-dragging"));
+  assert.equal(config.app.windows[0].decorations, true);
   assert.equal(config.app.windows[0].theme, "Dark");
+  assert.equal(config.app.windows[0].hiddenTitle, true);
+  assert.equal(config.app.windows[0].titleBarStyle, "Overlay");
+  assert.deepEqual(config.app.windows[0].trafficLightPosition, { x: 20, y: 18 });
   assert.equal(config.app.windows[0].transparent, true);
   assert.equal(windowsConfig.app.windows[0].transparent, false);
   assert.ok(config.bundle.icon.includes("icons/icon.ico"));
   assert.equal(config.bundle.windows.nsis.installerIcon, "icons/icon.ico");
   assert.equal(config.bundle.windows.nsis.uninstallerIcon, "icons/icon.ico");
-  assert.notEqual(config.app.windows[0].hiddenTitle, true);
+  assert.match(app, /const isMacOs = isMacOsPlatform/);
+  assert.match(app, /platform-macos/);
+  assert.match(app, /titlebar-drag-region/);
+  assert.match(app, /function startTitlebarDrag/);
+  assert.match(app, /getCurrentWindow\(\)\.startDragging\(\)/);
+  assert.match(app, /onMouseDown=\{startTitlebarDrag\}/);
+  assert.match(app, /<header className="titlebar" data-tauri-drag-region onMouseDown=\{startTitlebarDrag\}>/);
+  assert.match(app, /titlebar-drawer-toggle/);
+  assert.match(css, /\.titlebar \{[\s\S]*app-region: drag/);
+  assert.match(css, /\.titlebar-drawer-toggle svg \{[\s\S]*width: 22px/);
+  assert.match(css, /\.app-actions \{[\s\S]*app-region: no-drag/);
+  assert.match(css, /\.platform-macos \.titlebar \{[\s\S]*position: absolute/);
+  assert.match(css, /\.platform-macos \.titlebar \{[\s\S]*top: 0/);
+  assert.match(css, /\.platform-macos \.titlebar \{[\s\S]*left: 0/);
+  assert.match(css, /\.platform-macos \.titlebar \{[\s\S]*background: transparent/);
+  assert.match(css, /data-window-glass="enabled"] \.platform-macos \.titlebar \{[\s\S]*background: transparent/);
+  assert.match(css, /\.platform-macos \.titlebar[\s\S]*padding: 8px 10px 8px 0/);
+  assert.doesNotMatch(css, /\.platform-macos::before/);
+  assert.match(css, /\.platform-macos \.titlebar-native-actions \{[\s\S]*left: max\(86px, calc\(var\(--vault-width, 320px\) \+ var\(--vault-resizer-width, 10px\) \+ 8px\)\)/);
+  assert.doesNotMatch(css, /\.platform-macos \.workspace \{[\s\S]*margin-top: -46px/);
+  assert.match(css, /\.platform-macos \.vault-rail \{[\s\S]*padding: 46px 7px 12px/);
+  assert.match(css, /\.platform-macos \.vault-content \{[\s\S]*padding-top: 46px/);
+  assert.match(css, /\.platform-macos \.document-tabs \{[\s\S]*margin-top: 46px/);
+  assert.match(backend, /apply_macos_titlebar_chrome\(app\.handle\(\)\)/);
+  assert.match(windowingBackend, /NSWindowStyleMask::FullSizeContentView/);
+  assert.match(windowingBackend, /Could not make macOS window background transparent/);
+  assert.match(windowingBackend, /setTitlebarAppearsTransparent\(true\)/);
+  assert.match(windowingBackend, /setTitleVisibility\(NSWindowTitleVisibility::Hidden\)/);
 });
 
 test("calendar filenames match the requested note naming scheme and dot marker keys", () => {
@@ -1819,7 +1853,7 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(vaultBackend, /pub\(crate\) fn move_vault_directory/);
   assert.match(vaultBackend, /pub\(crate\) fn move_vault_file/);
   assert.match(vaultBackend, /pub\(crate\) fn delete_vault_file/);
-  assert.notEqual(config.app.windows[0].hiddenTitle, true);
+  assert.equal(config.app.windows[0].hiddenTitle, true);
 });
 
 test("native webview context menu is suppressed so chrome does not show refresh", () => {
@@ -2114,6 +2148,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.equal(config.bundle.publisher, "Glyphary contributors");
   assert.match(config.bundle.copyright, /Glyphary contributors/);
   assert.match(cargo, /macos-private-api/);
+  assert.match(cargo, /objc2-app-kit = \{ version = "0\.3\.2", default-features = false, features = \["NSWindow"\] \}/);
   assert.match(backend, /name: Some\("Glyphary"\.into\(\)\)/);
   assert.match(backend, /A local-first Markdown workspace/);
   assert.match(backend, /Built with Tauri, React, Tiptap/);

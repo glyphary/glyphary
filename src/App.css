@@ -357,7 +357,7 @@ body {
   background: transparent;
 }
 
-:root[data-window-glass="enabled"] .titlebar {
+:root[data-window-glass="enabled"] .app-shell:not(.platform-macos) .titlebar {
   background: var(--surface);
   backdrop-filter: none;
 }
@@ -500,13 +500,99 @@ button {
   background: var(--surface);
   box-shadow: 0 10px 28px var(--shadow);
   padding: 4px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebar-drag-region {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.titlebar-native-actions,
+.app-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .app-actions {
-  display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.titlebar-native-actions {
+  gap: 8px;
+}
+
+.titlebar-drawer-toggle {
+  min-width: 30px;
+  width: 30px;
+  height: 30px;
+}
+
+.titlebar-drawer-toggle svg {
+  width: 22px;
+  height: 22px;
+}
+
+.platform-macos {
+  --glyphary-shell-padding-top: 0px;
+}
+
+.platform-macos .titlebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 46px;
+  min-height: 0;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 8px 10px 8px 0;
+}
+
+:root[data-window-glass="enabled"] .platform-macos .titlebar {
+  background: transparent;
+}
+
+.platform-macos .titlebar-native-actions {
+  position: absolute;
+  top: 8px;
+  left: max(86px, calc(var(--vault-width, 320px) + var(--vault-resizer-width, 10px) + 8px));
+}
+
+.platform-macos .app-actions {
+  margin-left: auto;
+}
+
+.platform-macos .workspace {
+  flex: 1;
+}
+
+.platform-macos .vault-pane {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.platform-macos .vault-rail {
+  padding: 46px 7px 12px;
+}
+
+.platform-macos .vault-content {
+  padding-top: 46px;
+}
+
+.platform-macos .document-tabs {
+  margin-top: 46px;
 }
 
 .workspace-margin-compact {

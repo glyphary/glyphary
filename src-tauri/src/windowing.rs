@@ -14,6 +14,37 @@
 use tauri::Manager;
 
 #[cfg(target_os = "macos")]
+pub(crate) fn apply_macos_titlebar_chrome(app: &tauri::AppHandle) -> Result<(), String> {
+    use objc2_app_kit::{NSWindow, NSWindowStyleMask, NSWindowTitleVisibility};
+    use tauri::window::Color;
+
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window is not available".to_string())?;
+    window
+        .set_background_color(Some(Color(0, 0, 0, 0)))
+        .map_err(|err| format!("Could not make macOS window background transparent: {err}"))?;
+    let ns_window_ptr = window
+        .ns_window()
+        .map_err(|err| format!("Could not access macOS window handle: {err}"))?;
+    let ns_window = unsafe { ns_window_ptr.cast::<NSWindow>().as_ref() }
+        .ok_or_else(|| "macOS window handle is null".to_string())?;
+    let mut style_mask = ns_window.styleMask();
+
+    style_mask.insert(NSWindowStyleMask::FullSizeContentView);
+    ns_window.setStyleMask(style_mask);
+    ns_window.setTitlebarAppearsTransparent(true);
+    ns_window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn apply_macos_titlebar_chrome(_app: &tauri::AppHandle) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
 pub(crate) fn apply_window_glass_effect(
     app: &tauri::AppHandle,
     enabled: bool,

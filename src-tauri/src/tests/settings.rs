@@ -106,7 +106,10 @@ fn reads_default_vault_settings_when_missing() {
     assert!(!settings.files.show_dotfiles);
     assert!(!settings.files.show_files_in_folder_tree);
     assert!(settings.files.show_file_previews_in_folder_tree);
-    assert_eq!(settings.files.base_card_image_layout, DEFAULT_BASE_CARD_IMAGE_LAYOUT);
+    assert_eq!(
+        settings.files.base_card_image_layout,
+        DEFAULT_BASE_CARD_IMAGE_LAYOUT
+    );
     assert!(settings.autosave.enabled);
     assert_eq!(settings.tidbits.path_pattern, DEFAULT_TIDBIT_PATH_PATTERN);
     assert!(settings.starred_files.is_empty());
