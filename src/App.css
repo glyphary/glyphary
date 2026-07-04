@@ -305,9 +305,18 @@ body {
   background: color-mix(in srgb, var(--surface) 78%, transparent);
 }
 
+:root[data-window-glass="enabled"] .command-palette-screen,
+:root[data-window-glass="enabled"] .wikilink-search-screen,
+:root[data-window-glass="enabled"] .rich-link-dialog-screen,
+:root[data-window-glass="enabled"] .excalidraw-create-dialog-screen,
+:root[data-window-glass="enabled"] .release-update-screen,
+:root[data-window-glass="enabled"] .folder-action-dialog-screen {
+  background: transparent;
+}
+
 :root[data-window-glass="enabled"] .settings-screen {
-  background: color-mix(in srgb, var(--app-bg) 78%, transparent);
-  backdrop-filter: blur(12px) saturate(1.08);
+  background: transparent;
+  backdrop-filter: none;
 }
 
 :root[data-window-glass="enabled"] .settings-card {
