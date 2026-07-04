@@ -5827,9 +5827,6 @@ function App() {
         root,
         pathPattern: settings.pathPattern,
       };
-      const captureAppearance = normalizeVaultAppearanceSettings(
-        vaultSettingsRef.current.appearance,
-      );
       const existing = await WebviewWindow.getByLabel("tidbit-capture");
 
       if (existing) {
@@ -5856,7 +5853,7 @@ function App() {
         focus: true,
         resizable: true,
         skipTaskbar: true,
-        transparent: captureAppearance.glassEffect,
+        transparent: false,
       });
 
       captureWindow.once("tauri://created", () => {

@@ -11,6 +11,7 @@ import { TaskList } from "@tiptap/extension-task-list";
 import { defaultTidbitPathPattern } from "./lib/defaults";
 import { expandDateTemplate } from "./lib/dates";
 import { normalizeVaultAppearanceSettings } from "./lib/settings";
+import { normalizeThemeTokens } from "./settings/theme-options";
 import type { VaultAppearanceSettings } from "./lib/app-types";
 
 type AppearanceMode = "auto" | "light" | "dark";
@@ -37,7 +38,6 @@ type VaultSettings = {
 };
 
 const appearanceStorageKey = "glyphary.appearance";
-const allowedThemeTokenPrefixes = ["--glyphary-", "--syntax-"];
 
 function contextFromUrl(): TidbitCaptureContext {
   const params = new URLSearchParams(window.location.search);
@@ -60,23 +60,6 @@ function resolveAppearance(appearance: AppearanceMode): Exclude<AppearanceMode, 
   }
 
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-function normalizeCaptureThemeTokens(tokens: Record<string, string> | undefined | null) {
-  const normalized: Record<string, string> = {};
-
-  for (const [token, value] of Object.entries(tokens ?? {})) {
-    const cleanValue = value.trim();
-
-    if (
-      allowedThemeTokenPrefixes.some((prefix) => token.startsWith(prefix)) &&
-      cleanValue
-    ) {
-      normalized[token] = cleanValue;
-    }
-  }
-
-  return normalized;
 }
 
 function applyCaptureAppearance(appearance: AppearanceMode) {
@@ -241,7 +224,7 @@ export default function TidbitCapture() {
         const settings = await invoke<VaultSettings>("read_vault_settings", {
           root: context.root,
         });
-        const tokens = normalizeCaptureThemeTokens(settings.theme?.tokens);
+        const tokens = normalizeThemeTokens(settings.theme?.tokens);
 
         if (cancelled) {
           return;
