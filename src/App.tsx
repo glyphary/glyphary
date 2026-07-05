@@ -7155,6 +7155,20 @@ function App() {
               </svg>
             </button>
           </div>
+          {isMacOs ? (
+            <button
+              className="secondary-action icon-action titlebar-drawer-toggle titlebar-inspector-toggle"
+              type="button"
+              aria-label={drawerOpen ? "Close right drawer" : "Open right drawer"}
+              title={drawerOpen ? "Close Right Drawer" : "Open Right Drawer"}
+              onClick={() => toggleDrawerItem(drawerItem)}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <rect x="4" y="5" width="16" height="14" rx="2" />
+                <path d="M15 5v14" />
+              </svg>
+            </button>
+          ) : null}
         </div>
       </header>
 

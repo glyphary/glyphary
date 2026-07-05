@@ -290,7 +290,7 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.equal(config.app.windows[0].theme, "Dark");
   assert.equal(config.app.windows[0].hiddenTitle, true);
   assert.equal(config.app.windows[0].titleBarStyle, "Overlay");
-  assert.deepEqual(config.app.windows[0].trafficLightPosition, { x: 20, y: 18 });
+  assert.deepEqual(config.app.windows[0].trafficLightPosition, { x: 20, y: 28 });
   assert.equal(config.app.windows[0].transparent, true);
   assert.equal(windowsConfig.app.windows[0].transparent, false);
   assert.ok(config.bundle.icon.includes("icons/icon.ico"));
@@ -304,6 +304,8 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.match(app, /onMouseDown=\{startTitlebarDrag\}/);
   assert.match(app, /<header className="titlebar" data-tauri-drag-region onMouseDown=\{startTitlebarDrag\}>/);
   assert.match(app, /titlebar-drawer-toggle/);
+  assert.match(app, /titlebar-inspector-toggle/);
+  assert.match(app, /onClick=\{\(\) => toggleDrawerItem\(drawerItem\)\}/);
   assert.match(css, /\.titlebar \{[\s\S]*app-region: drag/);
   assert.match(css, /\.titlebar-drawer-toggle svg \{[\s\S]*width: 22px/);
   assert.match(css, /\.app-actions \{[\s\S]*app-region: no-drag/);
@@ -318,9 +320,13 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.doesNotMatch(css, /\.platform-macos \.workspace \{[\s\S]*margin-top: -46px/);
   assert.match(css, /\.platform-macos \.vault-rail \{[\s\S]*padding: 46px 7px 12px/);
   assert.match(css, /\.platform-macos \.vault-content \{[\s\S]*padding-top: 46px/);
+  assert.match(css, /\.platform-macos \.drawer-rail,\n\.platform-macos \.drawer-content \{[\s\S]*padding-top: 46px/);
   assert.match(css, /\.platform-macos \.document-tabs \{[\s\S]*margin-top: 46px/);
   assert.match(backend, /apply_macos_titlebar_chrome\(app\.handle\(\)\)/);
   assert.match(windowingBackend, /NSWindowStyleMask::FullSizeContentView/);
+  assert.match(windowingBackend, /move_traffic_lights\(ns_window, 20\.0, 28\.0\)/);
+  assert.match(windowingBackend, /standardWindowButton\(NSWindowButton::CloseButton\)/);
+  assert.match(windowingBackend, /titlebar\.setFrame\(titlebar_rect\)/);
   assert.match(windowingBackend, /Could not make macOS window background transparent/);
   assert.match(windowingBackend, /setTitlebarAppearsTransparent\(true\)/);
   assert.match(windowingBackend, /setTitleVisibility\(NSWindowTitleVisibility::Hidden\)/);
@@ -1246,7 +1252,10 @@ test("motion layer keeps interface animations short and reduced-motion aware", (
   assert.match(css, /--glyphary-motion-duration-fast: 120ms/);
   assert.match(css, /--glyphary-motion-duration-base: 160ms/);
   assert.match(css, /--glyphary-motion-duration-slow: 180ms/);
-  assert.match(css, /transition: grid-template-columns var\(--motion-duration-slow\) var\(--motion-ease\)/);
+  assert.match(css, /--glyphary-sidebar-motion-duration: 240ms/);
+  assert.match(css, /--glyphary-sidebar-motion-ease: cubic-bezier\(0\.25, 0\.1, 0\.25, 1\)/);
+  assert.match(css, /transition: grid-template-columns var\(--sidebar-motion-duration\) var\(--sidebar-motion-ease\)/);
+  assert.match(css, /opacity var\(--sidebar-motion-duration\) var\(--sidebar-motion-ease\)/);
   assert.match(css, /animation: glyphary-pop-in var\(--motion-duration-base\) var\(--motion-ease\)/);
   assert.match(css, /@keyframes glyphary-status-update/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
@@ -2148,7 +2157,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.equal(config.bundle.publisher, "Glyphary contributors");
   assert.match(config.bundle.copyright, /Glyphary contributors/);
   assert.match(cargo, /macos-private-api/);
-  assert.match(cargo, /objc2-app-kit = \{ version = "0\.3\.2", default-features = false, features = \["NSWindow"\] \}/);
+  assert.match(cargo, /objc2-app-kit = \{ version = "0\.3\.2", default-features = false, features = \["NSButton", "NSControl", "NSView", "NSWindow"\] \}/);
   assert.match(backend, /name: Some\("Glyphary"\.into\(\)\)/);
   assert.match(backend, /A local-first Markdown workspace/);
   assert.match(backend, /Built with Tauri, React, Tiptap/);

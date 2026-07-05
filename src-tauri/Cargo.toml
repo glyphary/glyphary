@@ -29,4 +29,4 @@ tauri-plugin-macos-permissions = "2.3.0"
 grep = "0.3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSWindow"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSButton", "NSControl", "NSView", "NSWindow"] }

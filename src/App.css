@@ -34,6 +34,8 @@
   --glyphary-motion-duration-base: 160ms;
   --glyphary-motion-duration-slow: 180ms;
   --glyphary-motion-ease: cubic-bezier(0.2, 0, 0, 1);
+  --glyphary-sidebar-motion-duration: 240ms;
+  --glyphary-sidebar-motion-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
   --glyphary-heading-h1-size: 2rem;
   --glyphary-heading-h2-size: 1.45rem;
   --glyphary-code-font-size: 0.92em;
@@ -124,6 +126,8 @@
   --motion-duration-base: var(--glyphary-motion-duration-base);
   --motion-duration-slow: var(--glyphary-motion-duration-slow);
   --motion-ease: var(--glyphary-motion-ease);
+  --sidebar-motion-duration: var(--glyphary-sidebar-motion-duration);
+  --sidebar-motion-ease: var(--glyphary-sidebar-motion-ease);
   --radius-sm: var(--glyphary-radius-sm);
   --radius-md: var(--glyphary-radius-md);
   --radius-lg: var(--glyphary-radius-lg);
@@ -591,6 +595,11 @@ button {
   padding-top: 46px;
 }
 
+.platform-macos .drawer-rail,
+.platform-macos .drawer-content {
+  padding-top: 46px;
+}
+
 .platform-macos .document-tabs {
   margin-top: 46px;
 }
@@ -818,7 +827,7 @@ h2 {
     var(--drawer-width, 48px);
   /* Gaps are represented by resizer columns so pointer targets have stable width. */
   gap: 0;
-  transition: grid-template-columns var(--motion-duration-slow) var(--motion-ease);
+  transition: grid-template-columns var(--sidebar-motion-duration) var(--sidebar-motion-ease);
 }
 
 .vault-onboarding {
@@ -1066,8 +1075,8 @@ body.workspace-resizing * {
     linear-gradient(180deg, color-mix(in srgb, var(--surface-muted) 78%, transparent), color-mix(in srgb, var(--surface) 58%, transparent));
   opacity: 1;
   transition:
-    opacity var(--motion-duration-base) var(--motion-ease),
-    transform var(--motion-duration-base) var(--motion-ease);
+    opacity var(--sidebar-motion-duration) var(--sidebar-motion-ease),
+    transform var(--sidebar-motion-duration) var(--sidebar-motion-ease);
 }
 
 .workspace.vault-drawer-closed .vault-content {
@@ -4174,8 +4183,8 @@ body.workspace-resizing * {
   background: color-mix(in srgb, var(--surface) 34%, transparent);
   opacity: 1;
   transition:
-    opacity var(--motion-duration-base) var(--motion-ease),
-    transform var(--motion-duration-base) var(--motion-ease);
+    opacity var(--sidebar-motion-duration) var(--sidebar-motion-ease),
+    transform var(--sidebar-motion-duration) var(--sidebar-motion-ease);
 }
 
 .workspace.drawer-closed .drawer-content {

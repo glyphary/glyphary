@@ -35,6 +35,42 @@ pub(crate) fn apply_macos_titlebar_chrome(app: &tauri::AppHandle) -> Result<(), 
     ns_window.setStyleMask(style_mask);
     ns_window.setTitlebarAppearsTransparent(true);
     ns_window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+    move_traffic_lights(ns_window, 20.0, 28.0)?;
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn move_traffic_lights(ns_window: &objc2_app_kit::NSWindow, x: f64, y: f64) -> Result<(), String> {
+    use objc2_app_kit::{NSView, NSWindowButton};
+
+    let close = ns_window
+        .standardWindowButton(NSWindowButton::CloseButton)
+        .ok_or_else(|| "Close traffic-light button is not available".to_string())?;
+    let miniaturize = ns_window
+        .standardWindowButton(NSWindowButton::MiniaturizeButton)
+        .ok_or_else(|| "Minimize traffic-light button is not available".to_string())?;
+    let zoom = ns_window
+        .standardWindowButton(NSWindowButton::ZoomButton)
+        .ok_or_else(|| "Zoom traffic-light button is not available".to_string())?;
+    let titlebar = unsafe { close.superview() }
+        .and_then(|view| unsafe { view.superview() })
+        .ok_or_else(|| "Traffic-light titlebar container is not available".to_string())?;
+    let close_rect = NSView::frame(&close);
+    let mut titlebar_rect = NSView::frame(&titlebar);
+    let titlebar_height = close_rect.size.height + y;
+
+    titlebar_rect.size.height = titlebar_height;
+    titlebar_rect.origin.y = ns_window.frame().size.height - titlebar_height;
+    titlebar.setFrame(titlebar_rect);
+
+    let spacing = NSView::frame(&miniaturize).origin.x - close_rect.origin.x;
+
+    for (index, button) in [close, miniaturize, zoom].into_iter().enumerate() {
+        let mut rect = NSView::frame(&button);
+        rect.origin.x = x + (index as f64 * spacing);
+        button.setFrameOrigin(rect.origin);
+    }
 
     Ok(())
 }
