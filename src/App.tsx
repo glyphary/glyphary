@@ -13,7 +13,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { open } from "@tauri-apps/plugin-dialog";
-import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   checkAccessibilityPermission,
   requestAccessibilityPermission,
@@ -296,6 +296,11 @@ import type {
 } from "./lib/app-types";
 import { SettingsDialog } from "./settings/SettingsDialog";
 import { useSettingsState } from "./settings/useSettingsState";
+import {
+  nativeMenuSeparator,
+  popupNativeMenu,
+  type NativeMenuEntry,
+} from "./native/native-menus";
 import {
   calloutIconGlyph,
   defaultThemeCalloutSettings,
@@ -724,6 +729,7 @@ function App() {
   const appliedThemeTokensRef = useRef<Set<string>>(new Set());
   const windowGlassPreviewAppliedRef = useRef(false);
   const restoredWorkspace = useRef(false);
+  const nativeCommandRunnerRef = useRef<(commandId: string) => void>(() => undefined);
 
   useEffect(() => {
     activeFileRef.current = activeFile;
@@ -3835,6 +3841,44 @@ function App() {
     }
   };
 
+  function openCommandPaletteRoot() {
+    if (!hasActiveDocumentTab()) {
+      setStatus("Open or create a note before using the command palette");
+      return;
+    }
+
+    setCommandPaletteScope("root");
+    setCommandPaletteQuery("");
+    setCommandPaletteSelectedIndex(0);
+    captureCommandPaletteSelection();
+    setCommandPaletteOpen(true);
+  }
+
+  async function pastePlainAtCursor() {
+    const targetEditor = activeEditorRef.current;
+
+    if (!targetEditor) {
+      setStatus("Open or create a note before pasting");
+      return;
+    }
+
+    if (!navigator.clipboard?.readText) {
+      setStatus("Plain paste is not available in this webview");
+      return;
+    }
+
+    try {
+      const text = await navigator.clipboard.readText();
+
+      if (text) {
+        targetEditor.view.pasteText(text);
+        targetEditor.commands.focus();
+      }
+    } catch {
+      setStatus("Could not read clipboard for plain paste");
+    }
+  }
+
   useEffect(() => {
     const handleGlobalSaveShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.key.toLowerCase() !== "s") {
@@ -3858,16 +3902,7 @@ function App() {
       }
 
       event.preventDefault();
-      if (!hasActiveDocumentTab()) {
-        setStatus("Open or create a note before using the command palette");
-        return;
-      }
-
-      setCommandPaletteScope("root");
-      setCommandPaletteQuery("");
-      setCommandPaletteSelectedIndex(0);
-      captureCommandPaletteSelection();
-      setCommandPaletteOpen(true);
+      openCommandPaletteRoot();
     };
     const handleGlobalPageSearchShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.key.toLowerCase() !== "f") {
@@ -4264,6 +4299,16 @@ function App() {
         setStatus(error instanceof Error ? error.message : String(error));
       });
 
+    listen<string>("native-command-requested", (event) => {
+      nativeCommandRunnerRef.current(event.payload);
+    })
+      .then((nextUnlisten) => {
+        unlisteners.push(nextUnlisten);
+      })
+      .catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+
     return () => {
       unlisteners.forEach((unlisten) => unlisten());
     };
@@ -4627,6 +4672,117 @@ function App() {
     }
   }
 
+  function fallbackVaultContextMenu(
+    entry: VaultEntry,
+    event: ReactMouseEvent<HTMLElement>,
+    createOnly = false,
+  ) {
+    setFolderContextMenu({
+      entry,
+      x: event.clientX,
+      y: event.clientY,
+      createOnly,
+    });
+  }
+
+  function vaultNativeContextMenu(entry: VaultEntry, createOnly = false): NativeMenuEntry[] {
+    if (entry.isDir) {
+      return [
+        {
+          id: "vault-create-note",
+          text: "Create Note",
+          action: () => openFolderActionDialog("create-note", entry),
+        },
+        {
+          id: "vault-create-canvas",
+          text: "Create Canvas",
+          action: () => openFolderActionDialog("create-canvas", entry),
+        },
+        {
+          id: "vault-create-folder",
+          text: "Create Folder",
+          action: () => openFolderActionDialog("create-folder", entry),
+        },
+        nativeMenuSeparator,
+        {
+          id: "vault-open-default-app",
+          text: "Open in Default App",
+          action: () => void openEntryFromContextMenu(entry),
+        },
+        {
+          id: "vault-reveal",
+          text: "Reveal in Finder",
+          action: () => void revealEntryFromContextMenu(entry),
+        },
+        ...(createOnly
+          ? []
+          : [
+              nativeMenuSeparator,
+              {
+                id: "vault-rename-folder",
+                text: "Rename",
+                action: () => openFolderActionDialog("rename", entry),
+              },
+              {
+                id: "vault-move-folder",
+                text: "Move",
+                action: () => openFolderActionDialog("move-folder", entry),
+              },
+            ]),
+      ];
+    }
+
+    return [
+      {
+        id: "vault-rename-file",
+        text: isCanvasPath(entry.relativePath) ? "Rename Canvas" : "Rename File",
+        action: () => openFolderActionDialog("rename-file", entry),
+      },
+      {
+        id: "vault-move-file",
+        text: "Move",
+        action: () => openFolderActionDialog("move-file", entry),
+      },
+      nativeMenuSeparator,
+      {
+        id: "vault-open-default-app",
+        text: "Open in Default App",
+        action: () => void openEntryFromContextMenu(entry),
+      },
+      {
+        id: "vault-reveal",
+        text: "Reveal in Finder",
+        action: () => void revealEntryFromContextMenu(entry),
+      },
+      nativeMenuSeparator,
+      {
+        id: "vault-delete-file",
+        text: "Delete",
+        action: () => openFolderActionDialog("delete-file", entry),
+      },
+    ];
+  }
+
+  async function showVaultNativeContextMenu(
+    entry: VaultEntry,
+    event: ReactMouseEvent<HTMLElement>,
+    createOnly = false,
+  ) {
+    try {
+      const opened = await popupNativeMenu(vaultNativeContextMenu(entry, createOnly), {
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      if (!opened) {
+        fallbackVaultContextMenu(entry, event, createOnly);
+      }
+    } catch (error) {
+      fallbackVaultContextMenu(entry, event, createOnly);
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   function handleFolderContextMenu(
     entry: VaultEntry,
     event: ReactMouseEvent<HTMLButtonElement>,
@@ -4637,11 +4793,7 @@ function App() {
     if (clickTimer.current) {
       clearTimeout(clickTimer.current);
     }
-    setFolderContextMenu({
-      entry,
-      x: event.clientX,
-      y: event.clientY,
-    });
+    void showVaultNativeContextMenu(entry, event);
   }
 
   function currentDirectoryEntry(): VaultEntry {
@@ -4655,12 +4807,7 @@ function App() {
   function handleVaultListContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
     event.preventDefault();
     event.stopPropagation();
-    setFolderContextMenu({
-      entry: currentDirectoryEntry(),
-      x: event.clientX,
-      y: event.clientY,
-      createOnly: true,
-    });
+    void showVaultNativeContextMenu(currentDirectoryEntry(), event, true);
   }
 
   function openFolderActionDialog(action: FolderActionKind, entry: VaultEntry) {
@@ -4893,6 +5040,20 @@ function App() {
     }
   }
 
+  async function openEntryFromContextMenu(entry: VaultEntry) {
+    if (!vaultRoot) {
+      return;
+    }
+
+    setFolderContextMenu(null);
+
+    try {
+      await openPath(vaultEntryPath(vaultRoot, entry.relativePath));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function submitFolderActionDialog(event: ReactFormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -4990,6 +5151,84 @@ function App() {
     openDirectoryShadow(entry.relativePath);
   }
 
+  function tableNativeContextMenu(targetEditor: Editor): NativeMenuEntry[] {
+    return [
+      {
+        id: "table-add-row-after",
+        text: "Add row after",
+        action: () => {
+          targetEditor.chain().focus().addRowAfter().run();
+        },
+      },
+      {
+        id: "table-delete-row",
+        text: "Delete row",
+        action: () => {
+          targetEditor.chain().focus().deleteRow().run();
+        },
+      },
+      {
+        id: "table-add-column-after",
+        text: "Add column after",
+        action: () => {
+          targetEditor.chain().focus().addColumnAfter().run();
+        },
+      },
+      {
+        id: "table-delete-column",
+        text: "Delete column",
+        action: () => {
+          targetEditor.chain().focus().deleteColumn().run();
+        },
+      },
+      {
+        id: "table-delete-table",
+        text: "Delete table",
+        action: () => {
+          targetEditor.chain().focus().deleteTable().run();
+        },
+      },
+      nativeMenuSeparator,
+      {
+        kind: "submenu",
+        id: "table-align-column",
+        text: "Align Column...",
+        items: (["left", "center", "right"] as const).map((alignment) => ({
+          id: `table-align-column-${alignment}`,
+          text:
+            alignment === "left"
+              ? "Left align"
+              : alignment === "center"
+                ? "Center align"
+                : "Right align",
+          action: () => {
+            alignCurrentTableColumn(targetEditor, alignment);
+          },
+        })),
+      },
+    ];
+  }
+
+  async function showTableNativeContextMenu(
+    event: ReactMouseEvent<HTMLElement>,
+    targetEditor: Editor,
+    groupId: EditorGroupId,
+  ) {
+    try {
+      const opened = await popupNativeMenu(tableNativeContextMenu(targetEditor), {
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      if (!opened) {
+        setTableContextMenu({ groupId, x: event.clientX, y: event.clientY });
+      }
+    } catch (error) {
+      setTableContextMenu({ groupId, x: event.clientX, y: event.clientY });
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   function handleEditorContextMenu(
     event: ReactMouseEvent<HTMLElement>,
     targetEditor: Editor | null,
@@ -5018,7 +5257,7 @@ function App() {
       targetEditor.isActive("tableCell") ||
       targetEditor.isActive("tableHeader")
     ) {
-      setTableContextMenu({ groupId, x: event.clientX, y: event.clientY });
+      void showTableNativeContextMenu(event, targetEditor, groupId);
     }
   }
 
@@ -6576,6 +6815,54 @@ function App() {
     filteredCommandPaletteCommands,
     commandPaletteSelectedIndex,
   );
+
+  function runNativeCommand(commandId: string) {
+    if (commandId === "command-palette") {
+      openCommandPaletteRoot();
+      return;
+    }
+
+    if (commandId === "find-in-page") {
+      openPageSearchRef.current();
+      return;
+    }
+
+    if (commandId === "paste-plain") {
+      void pastePlainAtCursor();
+      return;
+    }
+
+    if (commandId === "toggle-star-file") {
+      void toggleActiveFileStar();
+      return;
+    }
+
+    const command = activeInsertCommandPaletteCommands
+      .concat(formatCommandPaletteCommands)
+      .concat(tableCommandPaletteCommands)
+      .concat(activeFileCommandPaletteCommands)
+      .concat(editorCommandPaletteCommands)
+      .concat(canvasCommandPaletteCommands)
+      .find((candidate) => candidate.id === commandId);
+
+    if (!command) {
+      setStatus("That command is not available for the current document");
+      return;
+    }
+
+    void Promise.resolve(command.run())
+      .then(() => {
+        setEditorFocused(true);
+        if (shouldReportCommandPaletteStatus(command)) {
+          setStatus(command.title);
+        }
+      })
+      .catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+  }
+
+  nativeCommandRunnerRef.current = runNativeCommand;
 
   useEffect(() => {
     if (!commandPaletteOpen) {
@@ -8765,6 +9052,7 @@ function App() {
           isCanvasFile={isCanvasPath}
           onAction={openFolderActionDialog}
           onReveal={(entry) => void revealEntryFromContextMenu(entry)}
+          onOpenExternal={(entry) => void openEntryFromContextMenu(entry)}
         />
       ) : null}
       {folderActionDialog ? (

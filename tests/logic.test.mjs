@@ -1752,9 +1752,10 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(css, /\.task-result-text/);
   assert.match(css, /\.task-results/);
   assert.doesNotMatch(app, /className="file-context"/);
-  assert.match(app, /import \{ openUrl, revealItemInDir \} from "@tauri-apps\/plugin-opener"/);
+  assert.match(app, /import \{ openPath, openUrl, revealItemInDir \} from "@tauri-apps\/plugin-opener"/);
   assert.match(fileActions, /export function vaultEntryPath/);
   assert.match(app, /async function revealEntryFromContextMenu/);
+  assert.match(app, /async function openEntryFromContextMenu/);
   assert.match(app, /displayVaultRelativePath\(activeFile\?\.relativePath \?\? currentDir, vaultRoot\)/);
   assert.match(editorPane, /frontmatterScalarValue\(paneMetaHeader, "banner"\)/);
   assert.match(app, /useState<"edit" \| "view">\("edit"\)/);
@@ -1807,7 +1808,8 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(app, /function currentDirectoryEntry\(\): VaultEntry/);
   assert.match(app, /function handleVaultListContextMenu\(event: ReactMouseEvent<HTMLDivElement>\)/);
   assert.match(app, /onContextMenu=\{handleVaultListContextMenu\}/);
-  assert.match(app, /createOnly: true/);
+  assert.match(app, /showVaultNativeContextMenu\(currentDirectoryEntry\(\), event, true\)/);
+  assert.match(app, /fallbackVaultContextMenu\(entry, event, createOnly\)/);
   assert.match(vaultContextMenu, /!menu\.createOnly/);
   assert.match(app, /suppressDirectoryClickRef/);
   assert.match(app, /onMouseDown=\{\(event\) => handleVaultEntryMouseDown\(entry, event\)\}/);
@@ -2043,7 +2045,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(vaultImages, /https:\/\/img\.youtube\.com\/vi\/\$\{videoId\}\/hqdefault\.jpg/);
   assert.match(vaultImages, /remoteSource/);
   assert.match(vaultImages, /youtubeThumbnailUrl\(href\) \?\? href/);
-  assert.match(app, /import \{ openUrl, revealItemInDir \} from "@tauri-apps\/plugin-opener"/);
+  assert.match(app, /import \{ openPath, openUrl, revealItemInDir \} from "@tauri-apps\/plugin-opener"/);
   assert.match(app, /function openRemoteImageSourceFromEditor/);
   assert.match(editorPane, /onClick=\{onOpenRemoteImageSource\}/);
   assert.match(css, /img\[data-remote-source\]/);

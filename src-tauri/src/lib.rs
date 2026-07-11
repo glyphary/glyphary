@@ -128,6 +128,57 @@ pub fn run() {
                 MenuItem::with_id(app, "appearance_light", "Style: Light", true, None::<&str>)?;
             let appearance_dark =
                 MenuItem::with_id(app, "appearance_dark", "Style: Dark", true, None::<&str>)?;
+            let command_palette = MenuItem::with_id(
+                app,
+                "command_palette",
+                "Command Palette...",
+                true,
+                Some("CmdOrCtrl+P"),
+            )?;
+            let find_in_page =
+                MenuItem::with_id(app, "find_in_page", "Find...", true, Some("CmdOrCtrl+F"))?;
+            let paste_plain = MenuItem::with_id(
+                app,
+                "paste_plain",
+                "Paste and Match Style",
+                true,
+                Some("CmdOrCtrl+Shift+V"),
+            )?;
+            let insert_rich_link =
+                MenuItem::with_id(app, "insert_rich_link", "Rich Link", true, None::<&str>)?;
+            let insert_excalidraw =
+                MenuItem::with_id(app, "insert_excalidraw", "Excalidraw Drawing", true, None::<&str>)?;
+            let insert_columns =
+                MenuItem::with_id(app, "insert_columns", "Columns", true, None::<&str>)?;
+            let insert_gallery =
+                MenuItem::with_id(app, "insert_gallery", "Gallery Layout", true, None::<&str>)?;
+            let insert_callout =
+                MenuItem::with_id(app, "insert_callout", "Callout", true, None::<&str>)?;
+            let insert_collapse =
+                MenuItem::with_id(app, "insert_collapse", "Collapse", true, None::<&str>)?;
+            let insert_html_block =
+                MenuItem::with_id(app, "insert_html_block", "HTML Block", true, None::<&str>)?;
+            let insert_mermaid =
+                MenuItem::with_id(app, "insert_mermaid", "Mermaid Diagram", true, None::<&str>)?;
+            let insert_table_of_contents = MenuItem::with_id(
+                app,
+                "insert_table_of_contents",
+                "Table of Contents",
+                true,
+                None::<&str>,
+            )?;
+            let format_strikethrough =
+                MenuItem::with_id(app, "format_strikethrough", "Strikethrough", true, None::<&str>)?;
+            let format_highlight =
+                MenuItem::with_id(app, "format_highlight", "Highlight", true, None::<&str>)?;
+            let format_superscript =
+                MenuItem::with_id(app, "format_superscript", "Superscript", true, None::<&str>)?;
+            let format_subscript =
+                MenuItem::with_id(app, "format_subscript", "Subscript", true, None::<&str>)?;
+            let format_keyboard =
+                MenuItem::with_id(app, "format_keyboard", "Keyboard", true, None::<&str>)?;
+            let star_file =
+                MenuItem::with_id(app, "star_file", "Star or Unstar File", true, None::<&str>)?;
             let app_menu = Submenu::with_items(
                 app,
                 package_info.name.clone(),
@@ -169,7 +220,42 @@ pub fn run() {
                     &PredefinedMenuItem::cut(app, None)?,
                     &PredefinedMenuItem::copy(app, None)?,
                     &PredefinedMenuItem::paste(app, None)?,
+                    &paste_plain,
                     &PredefinedMenuItem::select_all(app, None)?,
+                    &PredefinedMenuItem::separator(app)?,
+                    &find_in_page,
+                    &command_palette,
+                ],
+            )?;
+            let insert_menu = Submenu::with_items(
+                app,
+                "Insert",
+                true,
+                &[
+                    &insert_rich_link,
+                    &insert_excalidraw,
+                    &PredefinedMenuItem::separator(app)?,
+                    &insert_columns,
+                    &insert_gallery,
+                    &insert_callout,
+                    &insert_collapse,
+                    &insert_html_block,
+                    &insert_mermaid,
+                    &insert_table_of_contents,
+                ],
+            )?;
+            let format_menu = Submenu::with_items(
+                app,
+                "Format",
+                true,
+                &[
+                    &format_strikethrough,
+                    &format_highlight,
+                    &format_superscript,
+                    &format_subscript,
+                    &format_keyboard,
+                    &PredefinedMenuItem::separator(app)?,
+                    &star_file,
                 ],
             )?;
             let view_menu = Submenu::with_items(
@@ -208,6 +294,8 @@ pub fn run() {
                     &app_menu,
                     &file_menu,
                     &edit_menu,
+                    &insert_menu,
+                    &format_menu,
                     &view_menu,
                     &window_menu,
                     &help_menu,
@@ -233,12 +321,39 @@ pub fn run() {
                 let _ = app.emit("appearance-requested", "light");
             } else if event.id() == "appearance_dark" {
                 let _ = app.emit("appearance-requested", "dark");
+            } else {
+                let command_id = match event.id().as_ref() {
+                    "command_palette" => Some("command-palette"),
+                    "find_in_page" => Some("find-in-page"),
+                    "paste_plain" => Some("paste-plain"),
+                    "insert_rich_link" => Some("insert-rich-link"),
+                    "insert_excalidraw" => Some("insert-excalidraw"),
+                    "insert_columns" => Some("insert-columns"),
+                    "insert_gallery" => Some("gallery-layout"),
+                    "insert_callout" => Some("insert-callout"),
+                    "insert_collapse" => Some("insert-collapse"),
+                    "insert_html_block" => Some("insert-html-block"),
+                    "insert_mermaid" => Some("insert-mermaid-diagram"),
+                    "insert_table_of_contents" => Some("insert-table-of-contents"),
+                    "format_strikethrough" => Some("format-strikethrough"),
+                    "format_highlight" => Some("format-highlight"),
+                    "format_superscript" => Some("format-superscript"),
+                    "format_subscript" => Some("format-subscript"),
+                    "format_keyboard" => Some("format-keyboard"),
+                    "star_file" => Some("toggle-star-file"),
+                    _ => None,
+                };
+
+                if let Some(command_id) = command_id {
+                    let _ = app.emit("native-command-requested", command_id);
+                }
             }
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_macos_permissions::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             if let Err(err) = apply_macos_titlebar_chrome(app.handle()) {
                 eprintln!("Could not apply macOS titlebar chrome: {err}");

@@ -12,6 +12,8 @@
     "dialog:default",
     "global-shortcut:default",
     "macos-permissions:default",
-    "opener:default"
+    "opener:default",
+    "opener:allow-open-path",
+    "window-state:default"
   ]
 }
