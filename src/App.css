@@ -298,6 +298,7 @@ body {
 :root[data-window-glass="enabled"] .editor-pane,
 :root[data-window-glass="enabled"] .drawer-pane,
 :root[data-window-glass="enabled"] .vault-pane,
+:root[data-window-glass="enabled"] .vault-library-card,
 :root[data-window-glass="enabled"] .command-palette-card,
 :root[data-window-glass="enabled"] .rich-link-dialog-card {
   border-color: var(--glass-border-overlay);
@@ -310,6 +311,7 @@ body {
 }
 
 :root[data-window-glass="enabled"] .command-palette-screen,
+:root[data-window-glass="enabled"] .vault-library-screen,
 :root[data-window-glass="enabled"] .wikilink-search-screen,
 :root[data-window-glass="enabled"] .rich-link-dialog-screen,
 :root[data-window-glass="enabled"] .excalidraw-create-dialog-screen,
@@ -1632,6 +1634,213 @@ body.workspace-resizing * {
   color: var(--muted);
   font-size: 0.84rem;
   font-weight: 700;
+}
+
+.vault-library-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 72;
+  display: grid;
+  align-items: start;
+  justify-items: start;
+  background: color-mix(in srgb, var(--app-bg) 36%, transparent);
+  padding: max(66px, calc(var(--glyphary-shell-padding-top) + 52px)) 20px 20px 64px;
+  animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
+}
+
+.vault-library-card {
+  display: flex;
+  width: min(620px, calc(100vw - 84px));
+  max-height: min(680px, calc(100vh - 96px));
+  min-height: 240px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 22px 60px var(--shadow-strong);
+  animation: glyphary-pop-in var(--motion-duration-base) var(--motion-ease);
+}
+
+.vault-library-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-muted);
+  padding: 12px 14px;
+}
+
+.vault-library-card-header h2,
+.vault-library-card-header p {
+  margin: 0;
+}
+
+.vault-library-card-header h2 {
+  color: var(--heading);
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.vault-library-card-header p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.vault-library-card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.vault-library-card .vault-library {
+  padding: 12px 14px 14px;
+}
+
+.vault-library-card .vault-library-shelf {
+  grid-template-columns: repeat(3, minmax(126px, 1fr));
+}
+
+@media (max-width: 640px) {
+  .vault-library-screen {
+    justify-items: stretch;
+    padding: 58px 12px 12px;
+  }
+
+  .vault-library-card {
+    width: 100%;
+    max-height: calc(100vh - 70px);
+  }
+
+  .vault-library-card .vault-library-shelf {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.vault-library {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 10px 12px;
+}
+
+.vault-library-shelf {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-strong) 70%, transparent);
+  padding: 0 0 8px;
+}
+
+.vault-library-item {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.vault-library-book {
+  display: grid;
+  min-width: 0;
+  min-height: 118px;
+  grid-template-rows: 6px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border-soft) 88%, transparent);
+  border-radius: 8px 8px 4px 4px;
+  background: color-mix(in srgb, var(--surface) 78%, var(--surface-muted));
+  color: var(--heading);
+  cursor: default;
+  padding: 0;
+  text-align: left;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease),
+    border-color var(--motion-duration-fast) var(--motion-ease),
+    color var(--motion-duration-fast) var(--motion-ease);
+}
+
+.vault-library-book:hover,
+.vault-library-item.active .vault-library-book {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.vault-library-book.has-cover {
+  grid-template-rows: 64px minmax(0, 1fr);
+}
+
+.vault-library-cover {
+  width: 100%;
+  height: 64px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-soft) 82%, transparent);
+  background: var(--surface-muted);
+  object-fit: cover;
+}
+
+.vault-library-book-mark {
+  background: color-mix(in srgb, var(--accent) 54%, var(--border-strong));
+}
+
+.vault-library-book-text {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 5px;
+  padding: 8px 8px 9px;
+}
+
+.vault-library-book-text strong,
+.vault-library-book-text em,
+.vault-library-book-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vault-library-book-text strong {
+  color: var(--heading);
+  font-size: 0.76rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.vault-library-book-text em {
+  display: -webkit-box;
+  color: var(--text-soft);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  word-break: break-word;
+}
+
+.vault-library-book-text small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.vault-library-forget {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 0 2px;
+}
+
+.vault-library-forget:hover,
+.vault-library-forget:focus-visible {
+  color: var(--heading);
 }
 
 .editor-pane-shell {

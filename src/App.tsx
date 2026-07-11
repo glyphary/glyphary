@@ -8,7 +8,7 @@ import type {
 } from "react";
 import type { Editor } from "@tiptap/core";
 import { Selection } from "@tiptap/pm/state";
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke, isTauri } from "@tauri-apps/api/core";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -138,7 +138,10 @@ import {
   normalizeTidbitSettings,
   normalizeVaultAppearanceSettings,
   readPersistedAppearance,
+  readPersistedVaultLibrary,
   readPersistedWorkspace,
+  readPersistedWorkspaceForVault,
+  removePersistedVaultLibraryEntry,
   resolveAppearance,
   sameAiSettings,
   sameAutosaveSettings,
@@ -153,6 +156,8 @@ import {
   sameTidbitSettings,
   sameVaultAppearanceSettings,
   shortcutFromKeyboardEvent,
+  updatePersistedVaultLibraryEntry,
+  upsertPersistedVaultLibrary,
   workspaceResizeHandleWidth,
   writePersistedAppearance,
   writePersistedWorkspace,
@@ -298,6 +303,7 @@ import type {
   VaultDrawerItem,
   VaultEntry,
   VaultIndexedFile,
+  VaultLibraryEntry,
   VaultSettings,
 } from "./lib/app-types";
 import { SettingsDialog } from "./settings/SettingsDialog";
@@ -589,6 +595,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [vaultDrawerOpen, setVaultDrawerOpen] = useState(defaultVaultDrawerOpen);
   const [vaultDrawerWidth, setVaultDrawerWidth] = useState(defaultVaultDrawerWidth);
   const [vaultDrawerItem, setVaultDrawerItem] = useState<VaultDrawerItem>("files");
+  const [vaultLibrary, setVaultLibrary] = useState<VaultLibraryEntry[]>(readPersistedVaultLibrary);
+  const [vaultLibraryOverlayOpen, setVaultLibraryOverlayOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(defaultDrawerOpen);
   const [inspectorDrawerWidth, setInspectorDrawerWidth] = useState(
     defaultInspectorDrawerWidth,
@@ -2247,6 +2255,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       })),
     [visibleStarredFiles],
   );
+  const vaultLibraryShelves = useMemo(() => {
+    const shelves: VaultLibraryEntry[][] = [];
+
+    for (let index = 0; index < vaultLibrary.length; index += 3) {
+      shelves.push(vaultLibrary.slice(index, index + 3));
+    }
+
+    return shelves;
+  }, [vaultLibrary]);
   const activeFileBackedPath = activeDocumentTab?.activeFile?.relativePath ?? "";
   const activeFileBackedName = activeDocumentTab?.activeFile?.name ?? "";
   const activeFileStarred = activeFileBackedPath
@@ -2494,6 +2511,122 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
   }, [secondaryEditor]);
 
+  async function applyVaultWorkspace(
+    root: string,
+    workspace: PersistedWorkspace | null,
+    statusPrefix: "Opened" | "Restored",
+  ) {
+    const currentDir = workspace?.currentDir ?? "";
+    const recentFiles = workspace?.recentFiles ?? [];
+    const nextVaultDrawerOpen = workspace?.vaultDrawerOpen ?? true;
+    const nextVaultDrawerItem =
+      !workspace || workspace.vaultDrawerItem === "vaults"
+        ? "files"
+        : workspace.vaultDrawerItem;
+    const nextDrawerOpen = workspace?.drawerOpen ?? false;
+    const nextDrawerItem = workspace?.drawerItem ?? "source";
+
+    function persistAppliedWorkspace(activeFile: ActiveFile | null, openFiles: ActiveFile[]) {
+      persistWorkspace({
+        vaultRoot: root,
+        currentDir,
+        activeFile,
+        openFiles,
+        recentFiles,
+        vaultDrawerOpen: nextVaultDrawerOpen,
+        vaultDrawerItem: nextVaultDrawerItem,
+        drawerOpen: nextDrawerOpen,
+        drawerItem: nextDrawerItem,
+        splitOpen: false,
+      });
+    }
+
+    function replacePrimaryTabs(tabs: DocumentTab[], activeTab: DocumentTab) {
+      const nextGroups = createEmptyEditorGroups();
+
+      nextGroups.primary = {
+        id: "primary",
+        tabs,
+        activeTabId: activeTab.id,
+      };
+      activeGroupIdRef.current = "primary";
+      setActiveGroupId("primary");
+      setSplitOpen(false);
+      setEditorGroupsAndRef(nextGroups);
+      return nextGroups;
+    }
+
+    vaultRootRef.current = root;
+    setVaultRoot(root);
+    recordVaultLibraryOpen(root);
+    setVaultDrawerOpen(nextVaultDrawerOpen);
+    setVaultDrawerItem(nextVaultDrawerItem);
+    setDrawerOpen(nextDrawerOpen);
+    setDrawerItem(nextDrawerItem);
+    recentFilesRef.current = recentFiles;
+    setRecentFiles(recentFiles);
+    await loadVaultSettings(root);
+    await loadAiBuilderHistory(root);
+    currentDirRef.current = currentDir;
+    setCurrentDir(currentDir);
+    setSearchQuery("");
+    setSearchResults([]);
+    setTaskResults([]);
+    setEntries([]);
+    await loadEntries(root, currentDir);
+    setWikiLinkIndexAndRef([]);
+    await rebuildWikiLinkIndex(root);
+
+    if (workspace?.openFiles.length) {
+      const tabs: DocumentTab[] = [];
+
+      for (const persistedFile of workspace.openFiles) {
+        try {
+          tabs.push(
+            createDocumentTabFromFile(await readVaultFile(root, persistedFile.relativePath)),
+          );
+        } catch {
+          // Missing files are skipped so one stale path does not block restoring
+          // the rest of the vault session.
+        }
+      }
+
+      if (tabs.length > 0) {
+        const activePath = workspace.activeFile?.relativePath;
+        const activeTab =
+          tabs.find((tab) => tab.activeFile?.relativePath === activePath) ?? tabs[0];
+        const nextGroups = replacePrimaryTabs(tabs, activeTab);
+
+        hydrateDocumentTab(activeTab, "primary");
+        persistAppliedWorkspace(activeTab.activeFile, fileBackedTabs(nextGroups));
+        setStatus(`${statusPrefix} ${tabs.length} tab${tabs.length === 1 ? "" : "s"}`);
+        return;
+      }
+    }
+
+    if (workspace?.activeFile) {
+      try {
+        const file = await readVaultFile(root, workspace.activeFile.relativePath);
+        const tab = createDocumentTabFromFile(file);
+
+        replacePrimaryTabs([tab], tab);
+        hydrateDocumentTab(tab, "primary");
+        persistAppliedWorkspace(tab.activeFile, tab.activeFile ? [tab.activeFile] : []);
+        setStatus(`${statusPrefix} ${file.relativePath}`);
+        return;
+      } catch {
+        // A stale active-file path should not prevent opening the vault itself.
+      }
+    }
+
+    const tab = createUntitledTab();
+
+    replacePrimaryTabs([tab], tab);
+    hydrateDocumentTab(tab, "primary");
+    persistAppliedWorkspace(null, []);
+    setStatus(`${statusPrefix} vault ${root}`);
+  }
+
   useEffect(() => {
     if (!isEditorReady(primaryEditor) || restoredWorkspace.current || !isTauri()) {
       return;
@@ -2514,78 +2647,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     async function restoreWorkspace() {
       try {
         setStatus("Restoring previous vault");
-        vaultRootRef.current = workspace.vaultRoot;
-        setVaultRoot(workspace.vaultRoot);
-        setVaultDrawerOpen(workspace.vaultDrawerOpen);
-        setVaultDrawerItem(workspace.vaultDrawerItem);
-        setDrawerOpen(workspace.drawerOpen);
-        setDrawerItem(workspace.drawerItem);
-        recentFilesRef.current = workspace.recentFiles;
-        setRecentFiles(workspace.recentFiles);
-        await loadVaultSettings(workspace.vaultRoot);
-        await loadAiBuilderHistory(workspace.vaultRoot);
-        setCurrentDir(workspace.currentDir);
-        setSearchQuery("");
-        setSearchResults([]);
-        setTaskResults([]);
-        await loadEntries(workspace.vaultRoot, workspace.currentDir);
-        await rebuildWikiLinkIndex(workspace.vaultRoot);
-
-        if (workspace.openFiles.length > 0) {
-          const tabs: DocumentTab[] = [];
-
-          for (const persistedFile of workspace.openFiles) {
-            try {
-              tabs.push(
-                createDocumentTabFromFile(
-                  await readVaultFile(workspace.vaultRoot, persistedFile.relativePath),
-                ),
-              );
-            } catch {
-              // Missing files are skipped so one stale path does not block
-              // restoring the rest of the workspace.
-            }
-          }
-
-          if (tabs.length > 0) {
-            const activePath = workspace.activeFile?.relativePath;
-            const activeTab =
-              tabs.find((tab) => tab.activeFile?.relativePath === activePath) ?? tabs[0];
-            const nextGroups = createEmptyEditorGroups();
-
-            nextGroups.primary = {
-              id: "primary",
-              tabs,
-              activeTabId: activeTab.id,
-            };
-            activeGroupIdRef.current = "primary";
-            setActiveGroupId("primary");
-            setSplitOpen(false);
-            setEditorGroupsAndRef(nextGroups);
-            hydrateDocumentTab(activeTab, "primary");
-            setStatus(`Restored ${tabs.length} tab${tabs.length === 1 ? "" : "s"}`);
-            return;
-          }
-        }
-
-        if (workspace.activeFile) {
-          const file = await readVaultFile(
-            workspace.vaultRoot,
-            workspace.activeFile.relativePath,
-          );
-          const tab = createDocumentTabFromFile(file);
-
-          replaceEditorGroupsWithPrimaryTab(tab);
-          hydrateDocumentTab(tab, "primary");
-          setStatus(`Restored ${file.relativePath}`);
-          return;
-        }
-
-        const tab = createUntitledTab();
-
-        replaceEditorGroupsWithPrimaryTab(tab);
-        hydrateDocumentTab(tab, "primary");
-        setStatus(`Restored vault ${workspace.vaultRoot}`);
+        await applyVaultWorkspace(workspace.vaultRoot, workspace, "Restored");
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error));
       } finally {
@@ -3297,7 +3359,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   }
 
   function persistWorkspace(next: Partial<PersistedWorkspace>) {
-    const nextVaultRoot = next.vaultRoot ?? vaultRoot;
+    const nextVaultRoot = next.vaultRoot ?? vaultRootRef.current ?? vaultRoot;
 
     if (!nextVaultRoot) {
       return;
@@ -3305,8 +3367,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     writePersistedWorkspace({
       vaultRoot: nextVaultRoot,
-      currentDir: next.currentDir ?? currentDir,
-      activeFile: next.activeFile === undefined ? activeFile : next.activeFile,
+      currentDir: next.currentDir ?? currentDirRef.current,
+      activeFile: next.activeFile === undefined ? activeFileRef.current : next.activeFile,
       openFiles: next.openFiles ?? fileBackedTabs(),
       recentFiles: next.recentFiles ?? recentFilesRef.current,
       vaultDrawerOpen: next.vaultDrawerOpen ?? vaultDrawerOpen,
@@ -3338,6 +3400,166 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       recentFiles: file ? recordRecentFile(file) : recentFilesRef.current,
     });
   }
+
+  function recordVaultLibraryOpen(root: string) {
+    setVaultLibrary((entries) => upsertPersistedVaultLibrary(entries, root));
+  }
+
+  function forgetVaultLibraryEntry(root: string) {
+    setVaultLibrary((entries) => removePersistedVaultLibraryEntry(entries, root));
+    setStatus("Removed vault from library");
+  }
+
+  function vaultLibraryCoverSrc(entry: VaultLibraryEntry) {
+    return entry.coverImage ? convertFileSrc(entry.coverImage) : "";
+  }
+
+  async function chooseVaultLibraryCover(entry: VaultLibraryEntry) {
+    try {
+      const selected = await open({
+        directory: false,
+        multiple: false,
+        title: `Choose Cover for ${entry.name}`,
+        filters: [
+          {
+            name: "Images",
+            extensions: ["png", "jpg", "jpeg", "gif", "webp", "avif", "svg"],
+          },
+        ],
+      });
+
+      if (typeof selected !== "string") {
+        return;
+      }
+
+      const coverImage = isTauri()
+        ? await invoke<string>("import_vault_library_cover", { source: selected })
+        : selected;
+
+      setVaultLibrary((entries) =>
+        updatePersistedVaultLibraryEntry(entries, entry.root, { coverImage }),
+      );
+      setStatus(`Updated cover for ${entry.name}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function removeVaultLibraryCover(entry: VaultLibraryEntry) {
+    setVaultLibrary((entries) =>
+      updatePersistedVaultLibraryEntry(entries, entry.root, { coverImage: null }),
+    );
+    setStatus(`Removed cover for ${entry.name}`);
+  }
+
+  async function showVaultLibraryEntryMenu(
+    entry: VaultLibraryEntry,
+    event: ReactMouseEvent<HTMLElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const opened = await popupNativeMenu(
+      [
+        {
+          id: "vault-library-open",
+          text: "Open Vault",
+          action: () => void openVaultRoot(entry.root),
+        },
+        nativeMenuSeparator,
+        {
+          id: "vault-library-cover",
+          text: "Choose Cover Image...",
+          action: () => void chooseVaultLibraryCover(entry),
+        },
+        {
+          id: "vault-library-remove-cover",
+          text: "Remove Cover Image",
+          enabled: Boolean(entry.coverImage),
+          action: () => removeVaultLibraryCover(entry),
+        },
+        nativeMenuSeparator,
+        {
+          id: "vault-library-forget",
+          text: "Forget Vault",
+          action: () => forgetVaultLibraryEntry(entry.root),
+        },
+      ],
+      {
+        x: event.clientX,
+        y: event.clientY,
+      },
+    );
+
+    if (!opened) {
+      setStatus("Vault options are available in the desktop app");
+    }
+  }
+
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function prepareVaultLibraryCovers() {
+      try {
+        await invoke("allow_vault_library_covers");
+      } catch {
+        return;
+      }
+
+      const entriesWithCovers = vaultLibrary.filter(
+        (entry): entry is VaultLibraryEntry & { coverImage: string } =>
+          typeof entry.coverImage === "string" && entry.coverImage.length > 0,
+      );
+
+      if (entriesWithCovers.length === 0) {
+        return;
+      }
+
+      const migratedEntries = (
+        await Promise.all(
+          entriesWithCovers.map(async (entry) => {
+            try {
+              const coverImage = await invoke<string>("import_vault_library_cover", {
+                source: entry.coverImage,
+              });
+
+              if (coverImage === entry.coverImage) {
+                return null;
+              }
+
+              return { root: entry.root, coverImage };
+            } catch {
+              return null;
+            }
+          }),
+        )
+      ).filter((entry): entry is { root: string; coverImage: string } => Boolean(entry));
+
+      if (cancelled || migratedEntries.length === 0) {
+        return;
+      }
+
+      setVaultLibrary((entries) =>
+        migratedEntries.reduce(
+          (nextEntries, migratedEntry) =>
+            updatePersistedVaultLibraryEntry(nextEntries, migratedEntry.root, {
+              coverImage: migratedEntry.coverImage,
+            }),
+          entries,
+        ),
+      );
+    }
+
+    void prepareVaultLibraryCovers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     persistWorkspace({
@@ -3620,6 +3842,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   async function loadEntries(root: string, relative: string) {
     const nextEntries = await listVaultDir(root, relative);
 
+    if (vaultRootRef.current !== root) {
+      return;
+    }
+
     setEntries(nextEntries);
   }
 
@@ -3633,6 +3859,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     const fileDirectory = parentDirectory(file.relativePath);
 
     setVaultDrawerItem("files");
+    currentDirRef.current = fileDirectory;
     setCurrentDir(fileDirectory);
     persistWorkspace({
       currentDir: fileDirectory,
@@ -4189,9 +4416,18 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     return () => window.clearInterval(interval);
   }, [vaultRoot, autosaveSettings.enabled]);
 
-  async function openVault() {
+  async function openVaultRoot(root: string) {
     try {
       await saveCurrentFile();
+      await applyVaultWorkspace(root, readPersistedWorkspaceForVault(root), "Opened");
+      setVaultLibraryOverlayOpen(false);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function openVault() {
+    try {
       const selected = await open({
         directory: true,
         multiple: false,
@@ -4202,33 +4438,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         return;
       }
 
-      vaultRootRef.current = selected;
-      setVaultRoot(selected);
-      setVaultDrawerOpen(true);
-      setVaultDrawerItem("files");
-      setDrawerOpen(false);
-      recentFilesRef.current = [];
-      setRecentFiles([]);
-      await loadVaultSettings(selected);
-      await loadAiBuilderHistory(selected);
-      setCurrentDir("");
-      const tab = createUntitledTab();
-
-      replaceEditorGroupsWithPrimaryTab(tab);
-      hydrateDocumentTab(tab, "primary");
-      setSearchQuery("");
-      setSearchResults([]);
-      setTaskResults([]);
-      await loadEntries(selected, "");
-      setWikiLinkIndexAndRef([]);
-      await rebuildWikiLinkIndex(selected);
-      persistWorkspace({
-        vaultRoot: selected,
-        currentDir: "",
-        activeFile: null,
-        recentFiles: [],
-      });
-      setStatus(`Opened vault ${selected}`);
+      await openVaultRoot(selected);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -7591,7 +7801,43 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setVaultDrawerOpen(true);
   }
 
+  function openVaultLibraryOverlay() {
+    if (vaultDrawerItem === "vaults") {
+      setVaultDrawerItem("files");
+    }
+
+    setVaultLibraryOverlayOpen(true);
+  }
+
+  function toggleVaultLibraryOverlay() {
+    if (vaultLibraryOverlayOpen) {
+      setVaultLibraryOverlayOpen(false);
+      return;
+    }
+
+    openVaultLibraryOverlay();
+  }
+
+  useEffect(() => {
+    if (!vaultLibraryOverlayOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setVaultLibraryOverlayOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [vaultLibraryOverlayOpen]);
+
   function vaultDrawerTitle() {
+    if (vaultDrawerItem === "vaults") {
+      return "Vaults";
+    }
+
     if (vaultDrawerItem === "files") {
       return "Files";
     }
@@ -7612,6 +7858,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   }
 
   function vaultDrawerSubtitle() {
+    if (vaultDrawerItem === "vaults") {
+      return vaultLibrary.length === 0 ? "Add vault folders" : "Switch workspaces";
+    }
+
     if (vaultDrawerItem === "files") {
       return vaultRoot
         ? displayVaultRelativePath(activeFile?.relativePath ?? currentDir, vaultRoot)
@@ -7631,6 +7881,14 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
 
     return "Find in vault";
+  }
+
+  function vaultLibraryOpenedLabel(entry: VaultLibraryEntry) {
+    if (!entry.lastOpenedAt) {
+      return "Not opened yet";
+    }
+
+    return `Opened ${new Date(entry.lastOpenedAt).toLocaleDateString()}`;
   }
 
   const visibleTaskResults = useMemo(
@@ -8387,6 +8645,23 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         <aside className="vault-pane" aria-label="Vault drawer">
           <div className="vault-rail" aria-label="Vault drawer items">
             <button
+              className={vaultLibraryOverlayOpen ? "vault-tab active" : "vault-tab"}
+              type="button"
+              aria-label={
+                vaultLibraryOverlayOpen
+                  ? "Close vault switcher"
+                  : "Open vault switcher"
+              }
+              title={vaultLibraryOverlayOpen ? "Close Vaults" : "Switch Vaults"}
+              onClick={toggleVaultLibraryOverlay}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M4 5.5h3.5v13H4z" />
+                <path d="M9.5 4.5H13v14H9.5z" />
+                <path d="M15.5 6h3.2l1.3 12.5h-3.4z" />
+              </svg>
+            </button>
+            <button
               className={vaultDrawerItem === "files" && vaultDrawerOpen ? "vault-tab active" : "vault-tab"}
               type="button"
               aria-label={
@@ -8479,6 +8754,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                   <p>{vaultDrawerSubtitle()}</p>
                 </div>
                 <div className="vault-header-actions">
+                  {vaultDrawerItem === "vaults" ? (
+                    <button
+                      className="inline-action"
+                      type="button"
+                      onClick={openVault}
+                    >
+                      Add
+                    </button>
+                  ) : null}
                   {vaultDrawerItem === "files" ? (
                     <button
                       className="inline-action"
@@ -8491,7 +8775,66 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                   ) : null}
                 </div>
               </div>
-              {vaultDrawerItem === "files" ? (
+              {vaultDrawerItem === "vaults" ? (
+                <div className="vault-library" role="list" aria-label="Vault library">
+                  {vaultLibraryShelves.map((shelf, shelfIndex) => (
+                    <div className="vault-library-shelf" key={`shelf-${shelfIndex}`}>
+                      {shelf.map((entry) => (
+                        <div
+                          className={
+                            entry.root === vaultRoot
+                              ? "vault-library-item active"
+                              : "vault-library-item"
+                          }
+                          key={entry.root}
+                          role="listitem"
+                        >
+                          <button
+                            className={
+                              entry.coverImage
+                                ? "vault-library-book has-cover"
+                                : "vault-library-book"
+                            }
+                            type="button"
+                            onClick={() => openVaultRoot(entry.root)}
+                            onContextMenu={(event) => void showVaultLibraryEntryMenu(entry, event)}
+                          >
+                            {entry.coverImage ? (
+                              <img
+                                className="vault-library-cover"
+                                src={vaultLibraryCoverSrc(entry)}
+                                alt=""
+                              />
+                            ) : (
+                              <span className="vault-library-book-mark" aria-hidden="true" />
+                            )}
+                            <span className="vault-library-book-text">
+                              <strong>{entry.name}</strong>
+                              <em>{entry.root}</em>
+                              <small>{vaultLibraryOpenedLabel(entry)}</small>
+                            </span>
+                          </button>
+                          <button
+                            className="vault-library-forget"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              forgetVaultLibraryEntry(entry.root);
+                            }}
+                          >
+                            Forget
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {vaultLibrary.length === 0 ? (
+                    <p className="empty-vault">
+                      Add vault folders here, then switch between them without reopening the system picker.
+                    </p>
+                  ) : null}
+                </div>
+              ) : vaultDrawerItem === "files" ? (
                 <>
                   <div className="vault-path">
                     {displayVaultRelativePath(activeFile?.relativePath ?? currentDir, vaultRoot)}
@@ -9150,6 +9493,99 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           <span>{calendarDayPreview.relativePath}</span>
           <CanvasMarkdownPreview markdown={calendarDayPreview.markdown} />
         </aside>
+      ) : null}
+      {vaultLibraryOverlayOpen ? (
+        <div
+          className="vault-library-screen"
+          role="presentation"
+          onMouseDown={() => setVaultLibraryOverlayOpen(false)}
+        >
+          <section
+            className="vault-library-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Switch vault"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="vault-library-card-header">
+              <div>
+                <h2>Vaults</h2>
+                <p>{vaultLibrary.length === 0 ? "Add vault folders" : "Switch workspaces"}</p>
+              </div>
+              <div className="vault-library-card-actions">
+                <button className="inline-action" type="button" onClick={openVault}>
+                  Add
+                </button>
+                <button
+                  className="inline-action"
+                  type="button"
+                  onClick={() => setVaultLibraryOverlayOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </header>
+            <div className="vault-library" role="list" aria-label="Vault library">
+              {vaultLibraryShelves.map((shelf, shelfIndex) => (
+                <div className="vault-library-shelf" key={`overlay-shelf-${shelfIndex}`}>
+                  {shelf.map((entry) => (
+                    <div
+                      className={
+                        entry.root === vaultRoot
+                          ? "vault-library-item active"
+                          : "vault-library-item"
+                      }
+                      key={entry.root}
+                      role="listitem"
+                    >
+                      <button
+                        className={
+                          entry.coverImage
+                            ? "vault-library-book has-cover"
+                            : "vault-library-book"
+                        }
+                        type="button"
+                        aria-current={entry.root === vaultRoot ? "page" : undefined}
+                        onClick={() => void openVaultRoot(entry.root)}
+                        onContextMenu={(event) => void showVaultLibraryEntryMenu(entry, event)}
+                      >
+                        {entry.coverImage ? (
+                          <img
+                            className="vault-library-cover"
+                            src={vaultLibraryCoverSrc(entry)}
+                            alt=""
+                          />
+                        ) : (
+                          <span className="vault-library-book-mark" aria-hidden="true" />
+                        )}
+                        <span className="vault-library-book-text">
+                          <strong>{entry.name}</strong>
+                          <em>{entry.root}</em>
+                          <small>{vaultLibraryOpenedLabel(entry)}</small>
+                        </span>
+                      </button>
+                      <button
+                        className="vault-library-forget"
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          forgetVaultLibraryEntry(entry.root);
+                        }}
+                      >
+                        Forget
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              {vaultLibrary.length === 0 ? (
+                <p className="empty-vault">
+                  Add vault folders here, then switch between them without reopening the system picker.
+                </p>
+              ) : null}
+            </div>
+          </section>
+        </div>
       ) : null}
       {settingsDialog}
       <ExcalidrawDialog

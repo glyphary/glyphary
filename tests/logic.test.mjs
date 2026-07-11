@@ -25,6 +25,11 @@ import {
   escapeMarkdownUrl,
 } from "../.test-dist/paths.js";
 import {
+  expandedFolderPathsForSelection,
+  folderExpansionPaths,
+  mergeExpandedFolderPaths,
+} from "../.test-dist/folder-tree.js";
+import {
   defaultDrawerOpen,
   defaultExcalidrawDirectory,
   defaultFrontmatterPillHeader,
@@ -67,6 +72,16 @@ import {
 } from "../.test-dist/rich-links.js";
 import {
   normalizeStarredFiles,
+  readPersistedVaultLibrary,
+  readPersistedWorkspace,
+  readPersistedWorkspaceForVault,
+  removePersistedVaultLibraryEntry,
+  updatePersistedVaultLibraryEntry,
+  upsertPersistedVaultLibrary,
+  vaultLibraryStorageKey,
+  workspaceSessionsStorageKey,
+  workspaceStorageKey,
+  writePersistedWorkspace,
 } from "../.test-dist/settings.js";
 
 test("frontmatter is split out of the editor body and composed back without losing it", () => {
@@ -142,6 +157,19 @@ test("vault paths display relative to the vault root without markdown extensions
     ),
     "/",
   );
+});
+
+test("folder tree expansion follows selected folder and active file parents", () => {
+  assert.deepEqual(folderExpansionPaths("Meta/Sub"), ["Meta", "Meta/Sub"]);
+  assert.deepEqual(
+    expandedFolderPathsForSelection("Calendar", "Meta/Sub/Home.md"),
+    ["", "Calendar", "Meta", "Meta/Sub"],
+  );
+  assert.deepEqual(mergeExpandedFolderPaths(["", "Meta"], ["", "Meta/Sub"]), [
+    "",
+    "Meta",
+    "Meta/Sub",
+  ]);
 });
 
 test("frontmatter tags are extracted as display pills", () => {
@@ -1483,6 +1511,115 @@ test("recent files are newest-first unique and capped", () => {
   assert.equal(withNewFile.at(-1)?.relativePath, "notes/note-18.md");
 });
 
+test("vault library entries persist alphabetically and can be removed", () => {
+  const store = new Map();
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => store.get(key) ?? null,
+      setItem: (key, value) => store.set(key, String(value)),
+    },
+  };
+
+  try {
+    let entries = upsertPersistedVaultLibrary([], "/Users/chris/Notes/CFR", 1000);
+    entries = upsertPersistedVaultLibrary(entries, "/Users/chris/Notes/Research", 3000);
+
+    assert.deepEqual(entries.map((entry) => entry.root), [
+      "/Users/chris/Notes/CFR",
+      "/Users/chris/Notes/Research",
+    ]);
+    assert.equal(entries[0].name, "CFR");
+    assert.equal(JSON.parse(store.get(vaultLibraryStorageKey)).length, 2);
+    assert.equal(readPersistedVaultLibrary()[0].name, "CFR");
+    assert.equal(readPersistedVaultLibrary()[1].lastOpenedAt, 3000);
+
+    entries = updatePersistedVaultLibraryEntry(entries, "/Users/chris/Notes/CFR", {
+      coverImage: "/Users/chris/Pictures/cfr-cover.png",
+    });
+    entries = upsertPersistedVaultLibrary(entries, "/Users/chris/Notes/Research", 4000);
+
+    assert.equal(entries[0].coverImage, "/Users/chris/Pictures/cfr-cover.png");
+    assert.equal(readPersistedVaultLibrary()[0].coverImage, "/Users/chris/Pictures/cfr-cover.png");
+
+    entries = removePersistedVaultLibraryEntry(entries, "/Users/chris/Notes/CFR");
+
+    assert.deepEqual(entries.map((entry) => entry.root), ["/Users/chris/Notes/Research"]);
+  } finally {
+    if (previousWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
+  }
+});
+
+test("workspace sessions are persisted independently per vault", () => {
+  const store = new Map();
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => store.get(key) ?? null,
+      setItem: (key, value) => store.set(key, String(value)),
+    },
+  };
+
+  try {
+    writePersistedWorkspace({
+      vaultRoot: "/Users/chris/Notes/CFR",
+      currentDir: "Meta",
+      activeFile: { name: "Home.md", relativePath: "Meta/Home.md" },
+      openFiles: [
+        { name: "Home.md", relativePath: "Meta/Home.md" },
+        { name: "Roadmap.md", relativePath: "Meta/Roadmap.md" },
+      ],
+      recentFiles: [{ name: "Home.md", relativePath: "Meta/Home.md" }],
+      vaultDrawerOpen: true,
+      vaultDrawerItem: "files",
+      drawerOpen: false,
+      drawerItem: "source",
+      splitOpen: false,
+    });
+    writePersistedWorkspace({
+      vaultRoot: "/Users/chris/Notes/Research",
+      currentDir: "Sources",
+      activeFile: { name: "Sources.base", relativePath: "Sources.base" },
+      openFiles: [{ name: "Sources.base", relativePath: "Sources.base" }],
+      recentFiles: [],
+      vaultDrawerOpen: true,
+      vaultDrawerItem: "vaults",
+      drawerOpen: true,
+      drawerItem: "calendar",
+      splitOpen: false,
+    });
+
+    const sessions = JSON.parse(store.get(workspaceSessionsStorageKey));
+
+    assert.equal(sessions.activeVaultRoot, "/Users/chris/Notes/Research");
+    assert.equal(readPersistedWorkspace()?.vaultRoot, "/Users/chris/Notes/Research");
+    assert.deepEqual(
+      readPersistedWorkspaceForVault("/Users/chris/Notes/CFR")?.openFiles.map(
+        (file) => file.relativePath,
+      ),
+      ["Meta/Home.md", "Meta/Roadmap.md"],
+    );
+    assert.equal(
+      readPersistedWorkspaceForVault("/Users/chris/Notes/Research")?.drawerItem,
+      "calendar",
+    );
+    assert.equal(
+      JSON.parse(store.get(workspaceStorageKey)).vaultRoot,
+      "/Users/chris/Notes/Research",
+    );
+  } finally {
+    if (previousWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = previousWindow;
+    }
+  }
+});
+
 test("global tidbit capture is vault-gated and opens a lightweight editor window", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
@@ -1686,16 +1823,46 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(appTypes, /export type TaskSort = "name" \| "date"/);
   assert.match(appTypes, /modifiedMs\?: number/);
   assert.match(appTypes, /starredFiles\?: string\[\] \| null/);
-  assert.match(appTypes, /export type VaultDrawerItem = "files" \| "search" \| "starred" \| "recent" \| "tasks"/);
+  assert.match(appTypes, /export type VaultDrawerItem = "vaults" \| "files" \| "search" \| "starred" \| "recent" \| "tasks"/);
+  assert.match(appTypes, /export type VaultLibraryEntry/);
+  assert.match(appTypes, /coverImage\?: string \| null/);
   assert.match(settings, /export const defaultStarredFiles: string\[\] = \[\]/);
+  assert.match(settings, /vaultLibraryStorageKey/);
+  assert.match(settings, /upsertPersistedVaultLibrary/);
+  assert.match(settings, /updatePersistedVaultLibraryEntry/);
   assert.match(settings, /export function normalizeStarredFiles/);
   assert.match(app, /recentFilesWithOpenedFile/);
+  assert.match(app, /readPersistedVaultLibrary/);
+  assert.match(app, /vaultLibraryShelves/);
   assert.match(appTypes, /recentFiles: ActiveFile\[\]/);
+  assert.match(app, /Switch workspaces/);
+  assert.match(app, /vaultLibraryOverlayOpen/);
+  assert.match(app, /toggleVaultLibraryOverlay/);
+  assert.doesNotMatch(app, /toggleVaultDrawerItem\("vaults"\)/);
+  assert.match(app, /openVaultRoot\(entry\.root\)/);
+  assert.match(app, /readPersistedWorkspaceForVault\(root\)/);
+  assert.match(app, /const nextVaultRoot = next\.vaultRoot \?\? vaultRootRef\.current \?\? vaultRoot/);
+  assert.match(app, /currentDir: next\.currentDir \?\? currentDirRef\.current/);
+  assert.match(app, /activeFile: next\.activeFile === undefined \? activeFileRef\.current : next\.activeFile/);
+  assert.match(app, /if \(vaultRootRef\.current !== root\) \{\s*return;\s*\}/);
+  assert.match(settings, /workspaceSessionsStorageKey/);
+  assert.match(app, /forgetVaultLibraryEntry\(entry\.root\)/);
+  assert.match(app, /showVaultLibraryEntryMenu/);
+  assert.match(app, /Choose Cover Image\.\.\./);
+  assert.match(app, /Remove Cover Image/);
+  assert.match(app, /import_vault_library_cover/);
+  assert.match(app, /allow_vault_library_covers/);
   assert.match(app, /Recently opened files/);
   assert.match(app, /starredFiles: defaultStarredFiles/);
   assert.match(app, /toggleVaultDrawerItem\("recent"\)/);
   assert.match(app, /toggleVaultDrawerItem\("starred"\)/);
   assert.match(app, /toggleVaultDrawerItem\("tasks"\)/);
+  assert.match(css, /\.vault-library-screen/);
+  assert.match(css, /\.vault-library-card/);
+  assert.match(css, /\.vault-library-shelf/);
+  assert.match(css, /\.vault-library-book/);
+  assert.match(css, /\.vault-library-book\.has-cover/);
+  assert.match(css, /\.vault-library-cover/);
   assert.match(app, /Starred files/);
   assert.match(app, /const activeFileBackedPath = activeDocumentTab\?\.activeFile\?\.relativePath \?\? ""/);
   assert.match(app, /id: activeFileStarred \? "unstar-file" : "star-file"/);
@@ -1852,6 +2019,13 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(app, /deleteFileFromContextMenu/);
   assert.match(vaultTree, /function VaultFolderTree/);
   assert.match(vaultTree, /isMoveFolderDestinationDisabled/);
+  assert.match(vaultTree, /expandedFolderPathsForSelection/);
+  assert.match(vaultTree, /mergeExpandedFolderPaths/);
+  assert.match(vaultTree, /treeScopeRef/);
+  assert.match(vaultTree, /treeScopeRef\.current\.root !== root/);
+  assert.match(vaultTree, /setExpandedPaths\(paths\)/);
+  assert.match(vaultTree, /loadChildren\(path, scopeChanged\)/);
+  assert.match(vaultTree, /setExpandedPaths\(\(current\) => mergeExpandedFolderPaths\(current, paths\)\)/);
   assert.match(vaultTree, /showFiles \? children : children\.filter\(\(entry\) => entry\.isDir\)/);
   assert.match(vaultTree, /function TreeFilePreview/);
   assert.match(vaultTree, /readVaultFile\(root, relativePath\)/);
@@ -3040,11 +3214,11 @@ test("split editor groups find an already open file across both panes", () => {
   assert.match(app, /const fileDirectory = parentDirectory\(file\.relativePath\)/);
   assert.match(app, /void revealFileInVaultDrawer\(tab\.activeFile\)/);
   assert.match(appTypes, /openFiles: ActiveFile\[\]/);
-  assert.match(settings, /openFiles: readFiles\(parsed\.openFiles\)/);
+  assert.match(settings, /openFiles: readFiles\(workspace\.openFiles\)/);
   assert.match(app, /function fileBackedTabs\(groups = editorGroupsRef\.current\)/);
   assert.match(app, /openFiles: next\.openFiles \?\? fileBackedTabs\(\)/);
-  assert.match(app, /if \(workspace\.openFiles\.length > 0\)/);
-  assert.match(app, /Restored \$\{tabs\.length\} tab/);
+  assert.match(app, /if \(workspace\?\.openFiles\.length\)/);
+  assert.match(app, /\$\{statusPrefix\} \$\{tabs\.length\} tab/);
   assert.match(documentsState, /function setEditorMarkdownContent\(targetEditor: Editor, markdown: string\)/);
   assert.match(documentsState, /targetEditor\.commands\.setContent\(\{\s*type: "doc"/);
   assert.match(app, /function hydrateDocumentTabAfterCommit\(tab: DocumentTab/);

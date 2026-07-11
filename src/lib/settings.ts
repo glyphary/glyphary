@@ -37,10 +37,13 @@ import type {
   PluginSettings,
   TidbitSettings,
   VaultAppearanceSettings,
+  VaultLibraryEntry,
 } from "./app-types.js";
 
 export const workspaceStorageKey = "glyphary.workspace";
+export const workspaceSessionsStorageKey = "glyphary.workspaceSessions";
 export const appearanceStorageKey = "glyphary.appearance";
+export const vaultLibraryStorageKey = "glyphary.vaultLibrary";
 export const closedDrawerWidth = 48;
 export const workspaceResizeHandleWidth = 10;
 export const defaultCssSnippetDirectory = "_snippets_";
@@ -124,70 +127,254 @@ export const defaultAiSettings: AiSettings = {
 export const defaultNewTabFile = "";
 export const defaultStarredFiles: string[] = [];
 
-export function readPersistedWorkspace() {
+type PersistedWorkspaceSessions = {
+  activeVaultRoot: string;
+  workspaces: Record<string, PersistedWorkspace>;
+};
+
+function normalizePersistedWorkspace(
+  workspace: Partial<PersistedWorkspace> | undefined | null,
+) {
+  if (typeof workspace?.vaultRoot !== "string" || !workspace.vaultRoot) {
+    return null;
+  }
+
+  const readFiles = (files: unknown) =>
+    Array.isArray(files)
+      ? files
+          .filter(
+            (file): file is PersistedWorkspace["recentFiles"][number] =>
+              file &&
+              typeof file.name === "string" &&
+              typeof file.relativePath === "string",
+          )
+          .slice(0, 20)
+      : [];
+  const vaultDrawerItem: PersistedWorkspace["vaultDrawerItem"] =
+    workspace.vaultDrawerItem === "search" ||
+    workspace.vaultDrawerItem === "vaults" ||
+    workspace.vaultDrawerItem === "starred" ||
+    workspace.vaultDrawerItem === "recent" ||
+    workspace.vaultDrawerItem === "tasks"
+      ? workspace.vaultDrawerItem
+      : "files";
+  const drawerItem: PersistedWorkspace["drawerItem"] =
+    workspace.drawerItem === "toc" || workspace.drawerItem === "calendar"
+      ? workspace.drawerItem
+      : "source";
+
+  return {
+    vaultRoot: workspace.vaultRoot,
+    currentDir: typeof workspace.currentDir === "string" ? workspace.currentDir : "",
+    activeFile:
+      workspace.activeFile &&
+      typeof workspace.activeFile.name === "string" &&
+      typeof workspace.activeFile.relativePath === "string"
+        ? {
+            name: workspace.activeFile.name,
+            relativePath: workspace.activeFile.relativePath,
+          }
+        : null,
+    openFiles: readFiles(workspace.openFiles),
+    recentFiles: readFiles(workspace.recentFiles),
+    vaultDrawerOpen: workspace.vaultDrawerOpen !== false,
+    vaultDrawerItem,
+    drawerOpen: workspace.drawerOpen === true,
+    drawerItem,
+    splitOpen: workspace.splitOpen === true,
+  };
+}
+
+function readWorkspaceSessions(): PersistedWorkspaceSessions {
+  try {
+    const raw = window.localStorage.getItem(workspaceSessionsStorageKey);
+    const parsed = raw ? JSON.parse(raw) : null;
+
+    if (!parsed || typeof parsed !== "object") {
+      return { activeVaultRoot: "", workspaces: {} };
+    }
+
+    const workspaces =
+      parsed.workspaces && typeof parsed.workspaces === "object"
+        ? Object.fromEntries(
+            Object.entries(parsed.workspaces)
+              .map(([root, workspace]) => [
+                root,
+                normalizePersistedWorkspace(workspace as Partial<PersistedWorkspace>),
+              ])
+              .filter((entry): entry is [string, PersistedWorkspace] => Boolean(entry[1])),
+          )
+        : {};
+
+    return {
+      activeVaultRoot:
+        typeof parsed.activeVaultRoot === "string" ? parsed.activeVaultRoot : "",
+      workspaces,
+    };
+  } catch {
+    return { activeVaultRoot: "", workspaces: {} };
+  }
+}
+
+function readLegacyPersistedWorkspace() {
   try {
     const raw = window.localStorage.getItem(workspaceStorageKey);
 
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw) as Partial<PersistedWorkspace>;
-
-    if (typeof parsed.vaultRoot !== "string" || !parsed.vaultRoot) {
-      return null;
-    }
-
-    const readFiles = (files: unknown) =>
-      Array.isArray(files)
-        ? files
-            .filter(
-              (file): file is PersistedWorkspace["recentFiles"][number] =>
-                file &&
-                typeof file.name === "string" &&
-                typeof file.relativePath === "string",
-            )
-            .slice(0, 20)
-        : [];
-    const vaultDrawerItem: PersistedWorkspace["vaultDrawerItem"] =
-      parsed.vaultDrawerItem === "search" ||
-      parsed.vaultDrawerItem === "starred" ||
-      parsed.vaultDrawerItem === "recent" ||
-      parsed.vaultDrawerItem === "tasks"
-        ? parsed.vaultDrawerItem
-        : "files";
-    const drawerItem: PersistedWorkspace["drawerItem"] =
-      parsed.drawerItem === "toc" || parsed.drawerItem === "calendar"
-        ? parsed.drawerItem
-        : "source";
-
-    return {
-      vaultRoot: parsed.vaultRoot,
-      currentDir: typeof parsed.currentDir === "string" ? parsed.currentDir : "",
-      activeFile:
-        parsed.activeFile &&
-        typeof parsed.activeFile.name === "string" &&
-        typeof parsed.activeFile.relativePath === "string"
-          ? {
-              name: parsed.activeFile.name,
-              relativePath: parsed.activeFile.relativePath,
-            }
-          : null,
-      openFiles: readFiles(parsed.openFiles),
-      recentFiles: readFiles(parsed.recentFiles),
-      vaultDrawerOpen: parsed.vaultDrawerOpen !== false,
-      vaultDrawerItem,
-      drawerOpen: parsed.drawerOpen === true,
-      drawerItem,
-      splitOpen: parsed.splitOpen === true,
-    };
+    return raw ? normalizePersistedWorkspace(JSON.parse(raw)) : null;
   } catch {
     return null;
   }
 }
 
+export function readPersistedWorkspace() {
+  const sessions = readWorkspaceSessions();
+  const activeWorkspace = sessions.activeVaultRoot
+    ? sessions.workspaces[sessions.activeVaultRoot]
+    : null;
+
+  return activeWorkspace ?? readLegacyPersistedWorkspace();
+}
+
+export function readPersistedWorkspaceForVault(root: string) {
+  return readWorkspaceSessions().workspaces[root] ?? null;
+}
+
 export function writePersistedWorkspace(workspace: PersistedWorkspace) {
+  const sessions = readWorkspaceSessions();
+  const nextSessions = {
+    activeVaultRoot: workspace.vaultRoot,
+    workspaces: {
+      ...sessions.workspaces,
+      [workspace.vaultRoot]: workspace,
+    },
+  };
+
+  window.localStorage.setItem(workspaceSessionsStorageKey, JSON.stringify(nextSessions));
   window.localStorage.setItem(workspaceStorageKey, JSON.stringify(workspace));
+}
+
+function vaultNameFromRoot(root: string) {
+  const cleanRoot = root.replace(/[\\/]+$/, "");
+  const segments = cleanRoot.split(/[\\/]/).filter(Boolean);
+
+  return segments.at(-1) ?? cleanRoot;
+}
+
+function sortVaultLibraryEntries(entries: VaultLibraryEntry[]) {
+  return [...entries].sort((left, right) => {
+    const byName = left.name.localeCompare(right.name, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+
+    return byName || left.root.localeCompare(right.root, undefined, { sensitivity: "base" });
+  });
+}
+
+export function readPersistedVaultLibrary(): VaultLibraryEntry[] {
+  try {
+    const raw = window.localStorage.getItem(vaultLibraryStorageKey);
+
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    const entries = parsed
+      .filter(
+        (entry): entry is Partial<VaultLibraryEntry> =>
+          entry &&
+          typeof entry === "object" &&
+          typeof entry.root === "string" &&
+          entry.root.length > 0,
+      )
+      .map((entry) => ({
+        name:
+          typeof entry.name === "string" && entry.name.trim()
+            ? entry.name.trim()
+            : vaultNameFromRoot(entry.root ?? ""),
+        root: entry.root ?? "",
+        lastOpenedAt:
+          typeof entry.lastOpenedAt === "number" && Number.isFinite(entry.lastOpenedAt)
+            ? entry.lastOpenedAt
+            : 0,
+        coverImage:
+          typeof entry.coverImage === "string" && entry.coverImage.trim()
+            ? entry.coverImage.trim()
+            : null,
+      }));
+
+    return sortVaultLibraryEntries(entries);
+  } catch {
+    return [];
+  }
+}
+
+export function writePersistedVaultLibrary(entries: VaultLibraryEntry[]) {
+  window.localStorage.setItem(vaultLibraryStorageKey, JSON.stringify(entries));
+}
+
+export function upsertPersistedVaultLibrary(
+  entries: VaultLibraryEntry[],
+  root: string,
+  openedAt = Date.now(),
+): VaultLibraryEntry[] {
+  const existing = entries.find((entry) => entry.root === root);
+  const nextEntry = {
+    name: existing?.name?.trim() || vaultNameFromRoot(root),
+    root,
+    lastOpenedAt: openedAt,
+    coverImage: existing?.coverImage ?? null,
+  };
+  const nextEntries = sortVaultLibraryEntries([
+    nextEntry,
+    ...entries.filter((entry) => entry.root !== root),
+  ]);
+
+  writePersistedVaultLibrary(nextEntries);
+  return nextEntries;
+}
+
+export function updatePersistedVaultLibraryEntry(
+  entries: VaultLibraryEntry[],
+  root: string,
+  patch: Partial<Pick<VaultLibraryEntry, "name" | "coverImage">>,
+): VaultLibraryEntry[] {
+  const nextEntries = sortVaultLibraryEntries(
+    entries.map((entry) =>
+      entry.root === root
+        ? {
+            ...entry,
+            ...patch,
+            name: patch.name?.trim() || entry.name,
+            coverImage:
+              patch.coverImage === undefined
+                ? entry.coverImage ?? null
+                : patch.coverImage?.trim() || null,
+          }
+        : entry,
+    ),
+  );
+
+  writePersistedVaultLibrary(nextEntries);
+  return nextEntries;
+}
+
+export function removePersistedVaultLibraryEntry(
+  entries: VaultLibraryEntry[],
+  root: string,
+): VaultLibraryEntry[] {
+  const nextEntries = sortVaultLibraryEntries(
+    entries.filter((entry) => entry.root !== root),
+  );
+
+  writePersistedVaultLibrary(nextEntries);
+  return nextEntries;
 }
 
 export function readPersistedAppearance(): AppearanceMode {

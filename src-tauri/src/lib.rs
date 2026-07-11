@@ -248,6 +248,8 @@ pub fn run() {
             read_plugin_template,
             read_plugin_wasm,
             allow_vault_assets,
+            allow_vault_library_covers,
+            import_vault_library_cover,
             set_window_glass_effect,
             save_vault_asset,
             import_remote_vault_image_asset,

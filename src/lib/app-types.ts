@@ -23,6 +23,13 @@ export type VaultEntry = {
   isDir: boolean;
 };
 
+export type VaultLibraryEntry = {
+  name: string;
+  root: string;
+  lastOpenedAt: number;
+  coverImage?: string | null;
+};
+
 export type OpenedFile = {
   name: string;
   relativePath: string;
@@ -332,7 +339,7 @@ export type TaskSort = "name" | "date";
 export type AppearanceMode = "auto" | "light" | "dark";
 export type SettingsTab = "main" | "appearance" | "canvas" | "plugins" | "ai" | "debug";
 export type DrawerItem = "source" | "toc" | "calendar";
-export type VaultDrawerItem = "files" | "search" | "starred" | "recent" | "tasks";
+export type VaultDrawerItem = "vaults" | "files" | "search" | "starred" | "recent" | "tasks";
 export type ResizeSide = "vault" | "drawer";
 
 export type FolderContextMenuState = {

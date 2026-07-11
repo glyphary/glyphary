@@ -13,6 +13,92 @@
 //!   concern because it depends on the active editor selection and review step.
 use super::*;
 
+const VAULT_LIBRARY_COVER_DIRECTORY: &str = "vault-covers";
+const COVER_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "avif", "svg"];
+
+fn vault_library_covers_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|err| format!("Could not resolve app data directory: {err}"))?
+        .join(VAULT_LIBRARY_COVER_DIRECTORY))
+}
+
+fn is_cover_image_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| COVER_IMAGE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+pub(crate) fn copy_vault_library_cover_to_dir(
+    covers_dir: &Path,
+    source: &Path,
+) -> Result<String, String> {
+    fs::create_dir_all(covers_dir)
+        .map_err(|err| format!("Could not create vault cover directory: {err}"))?;
+
+    let source =
+        fs::canonicalize(source).map_err(|err| format!("Could not read cover image: {err}"))?;
+
+    if !source.is_file() {
+        return Err("Cover image must be a file".into());
+    }
+
+    if !is_cover_image_path(&source) {
+        return Err("Cover image must be a supported image file".into());
+    }
+
+    let covers_dir = fs::canonicalize(covers_dir)
+        .map_err(|err| format!("Could not resolve vault cover directory: {err}"))?;
+
+    if source.starts_with(&covers_dir) {
+        return Ok(source.to_string_lossy().into_owned());
+    }
+
+    let bytes = fs::read(&source).map_err(|err| format!("Could not read cover image: {err}"))?;
+
+    if bytes.is_empty() {
+        return Err("Cover image file is empty".into());
+    }
+
+    if bytes.len() > MAX_ASSET_BYTES {
+        return Err("Cover image file is larger than 50 MB".into());
+    }
+
+    let file_name = source
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "Vault cover.png".into());
+    let path = unique_asset_path(&covers_dir, &sanitize_asset_file_name(&file_name));
+
+    fs::write(&path, bytes).map_err(|err| format!("Could not write cover image: {err}"))?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub(crate) fn allow_vault_library_covers(app: tauri::AppHandle) -> Result<(), String> {
+    let covers_dir = vault_library_covers_dir(&app)?;
+
+    fs::create_dir_all(&covers_dir)
+        .map_err(|err| format!("Could not create vault cover directory: {err}"))?;
+    app.asset_protocol_scope()
+        .allow_directory(&covers_dir, true)
+        .map_err(|err| format!("Could not allow vault covers: {err}"))
+}
+
+#[tauri::command]
+pub(crate) fn import_vault_library_cover(
+    app: tauri::AppHandle,
+    source: String,
+) -> Result<String, String> {
+    let covers_dir = vault_library_covers_dir(&app)?;
+    let cover = copy_vault_library_cover_to_dir(&covers_dir, Path::new(source.trim()))?;
+
+    allow_vault_library_covers(app)?;
+    Ok(cover)
+}
+
 #[tauri::command]
 pub(crate) fn allow_vault_assets(
     app: tauri::AppHandle,

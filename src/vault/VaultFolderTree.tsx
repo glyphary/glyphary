@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import { vaultImagePathCandidates } from "../app-state/documents";
+import {
+  expandedFolderPathsForSelection,
+  mergeExpandedFolderPaths,
+} from "../lib/folder-tree";
 import { splitMetaHeader } from "../lib/markdown";
 import { cleanVaultAssetReference, displayPath } from "../lib/paths";
 import type { VaultEntry, VaultFolderTreeNodeState } from "../lib/app-types";
@@ -57,6 +61,7 @@ export function VaultFolderTree({
 }: VaultFolderTreeProps) {
   const [nodes, setNodes] = useState<Record<string, VaultFolderTreeNodeState>>({});
   const [expandedPaths, setExpandedPaths] = useState<string[]>([""]);
+  const treeScopeRef = useRef({ root, showFiles });
 
   async function loadChildren(relativePath: string, force = false) {
     const existing = nodes[relativePath];
@@ -78,6 +83,10 @@ export function VaultFolderTree({
     try {
       const children = await listVaultDir(root, relativePath);
 
+      if (treeScopeRef.current.root !== root || treeScopeRef.current.showFiles !== showFiles) {
+        return;
+      }
+
       setNodes((current) => ({
         ...current,
         [relativePath]: {
@@ -89,6 +98,10 @@ export function VaultFolderTree({
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+
+      if (treeScopeRef.current.root !== root || treeScopeRef.current.showFiles !== showFiles) {
+        return;
+      }
 
       setNodes((current) => ({
         ...current,
@@ -104,10 +117,23 @@ export function VaultFolderTree({
   }
 
   useEffect(() => {
-    setNodes({});
-    setExpandedPaths([""]);
-    void loadChildren("", true);
-  }, [root, showFiles]);
+    const paths = expandedFolderPathsForSelection(selectedPath, activeFilePath);
+    const scopeChanged =
+      treeScopeRef.current.root !== root || treeScopeRef.current.showFiles !== showFiles;
+
+    treeScopeRef.current = { root, showFiles };
+
+    if (scopeChanged) {
+      setNodes({});
+      setExpandedPaths(paths);
+    } else {
+      setExpandedPaths((current) => mergeExpandedFolderPaths(current, paths));
+    }
+
+    for (const path of paths) {
+      void loadChildren(path, scopeChanged);
+    }
+  }, [root, showFiles, selectedPath, activeFilePath]);
 
   function toggleExpanded(relativePath: string) {
     setExpandedPaths((paths) =>
