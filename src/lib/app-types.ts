@@ -219,6 +219,7 @@ export type TidbitShortcutStatus = {
 export type VaultAppearanceSettings = {
   glassEffect: boolean;
   glassOpacity: number;
+  showDocumentProxy: boolean;
   statusBarVisible: boolean;
   sectionCorners: "rounded" | "square";
   workspaceMargin: "compact" | "comfortable" | "spacious";
@@ -370,6 +371,11 @@ export type PersistedWorkspace = {
   activeFile: ActiveFile | null;
   openFiles: ActiveFile[];
   recentFiles: ActiveFile[];
+  vaultDrawerOpen: boolean;
+  vaultDrawerItem: VaultDrawerItem;
+  drawerOpen: boolean;
+  drawerItem: DrawerItem;
+  splitOpen: boolean;
 };
 
 export type ThemeTokenControl = {

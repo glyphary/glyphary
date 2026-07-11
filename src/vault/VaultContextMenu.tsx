@@ -17,6 +17,7 @@ type VaultContextMenuProps = {
   onAction: (action: FolderActionKind, entry: VaultEntry) => void;
   onReveal: (entry: VaultEntry) => void;
   onOpenExternal: (entry: VaultEntry) => void;
+  onCopyPath: (entry: VaultEntry) => void;
 };
 
 export function VaultContextMenu({
@@ -25,6 +26,7 @@ export function VaultContextMenu({
   onAction,
   onReveal,
   onOpenExternal,
+  onCopyPath,
 }: VaultContextMenuProps) {
   return (
     <div
@@ -43,6 +45,7 @@ export function VaultContextMenu({
           <MenuButton onClick={() => onAction("create-folder", menu.entry)}>Create Folder</MenuButton>
           <MenuButton onClick={() => onOpenExternal(menu.entry)}>Open in Default App</MenuButton>
           <MenuButton onClick={() => onReveal(menu.entry)}>Reveal in Finder</MenuButton>
+          <MenuButton onClick={() => onCopyPath(menu.entry)}>Copy Path</MenuButton>
           {!menu.createOnly ? (
             <>
               <MenuButton onClick={() => onAction("rename", menu.entry)}>Rename</MenuButton>
@@ -58,6 +61,7 @@ export function VaultContextMenu({
           <MenuButton onClick={() => onAction("move-file", menu.entry)}>Move</MenuButton>
           <MenuButton onClick={() => onOpenExternal(menu.entry)}>Open in Default App</MenuButton>
           <MenuButton onClick={() => onReveal(menu.entry)}>Reveal in Finder</MenuButton>
+          <MenuButton onClick={() => onCopyPath(menu.entry)}>Copy Path</MenuButton>
           <MenuButton onClick={() => onAction("delete-file", menu.entry)}>Delete</MenuButton>
         </>
       )}

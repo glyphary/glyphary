@@ -1067,6 +1067,21 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     />
                     <span>Use glass window effect</span>
                   </label>
+                  <label className="settings-check-control">
+                    <input
+                      checked={normalizedVaultAppearanceDraft.showDocumentProxy}
+                      disabled={!vaultRoot}
+                      type="checkbox"
+                      onChange={(event) => {
+                        const showDocumentProxy = event.currentTarget.checked;
+                        setVaultAppearanceDraft((settings) => ({
+                          ...normalizeVaultAppearanceSettings(settings),
+                          showDocumentProxy,
+                        }));
+                      }}
+                    />
+                    <span>Show document proxy in title bar</span>
+                  </label>
                   <label className="settings-range-control">
                     <span>
                       Glass opacity

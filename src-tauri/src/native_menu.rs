@@ -29,6 +29,10 @@ pub(crate) struct NativeMenuState {
     active_file_name: Option<String>,
     active_file_starred: bool,
     markdown_editor_active: bool,
+    document_display_mode: String,
+    vault_drawer_open: bool,
+    inspector_drawer_open: bool,
+    split_open: bool,
     recent_files: Vec<NativeMenuFile>,
 }
 
@@ -48,6 +52,10 @@ impl Default for NativeMenuState {
             active_file_name: None,
             active_file_starred: false,
             markdown_editor_active: true,
+            document_display_mode: "edit".into(),
+            vault_drawer_open: true,
+            inspector_drawer_open: false,
+            split_open: false,
             recent_files: Vec::new(),
         }
     }
@@ -222,7 +230,7 @@ fn build_file_menu<R: Runtime>(
     state: &NativeMenuState,
 ) -> tauri::Result<Submenu<R>> {
     let new_tab = menu_item(app, "new_tab", "New Tab", true, Some("CmdOrCtrl+T"))?;
-    let new_document = menu_item(app, "new_document", "New", true, Some("CmdOrCtrl+N"))?;
+    let new_document = menu_item(app, "new_document", "New Note", true, Some("CmdOrCtrl+N"))?;
     let open_vault = menu_item(
         app,
         "open_vault",
@@ -254,6 +262,13 @@ fn build_file_menu<R: Runtime>(
         state.has_active_file,
         None,
     )?;
+    let close_tab = menu_item(
+        app,
+        "close_tab_file",
+        "Close Tab",
+        true,
+        Some("CmdOrCtrl+W"),
+    )?;
 
     Submenu::with_items(
         app,
@@ -271,6 +286,7 @@ fn build_file_menu<R: Runtime>(
             &open_active_file_default,
             &copy_active_file_path,
             &PredefinedMenuItem::separator(app)?,
+            &close_tab,
             &PredefinedMenuItem::close_window(app, None)?,
         ],
     )
@@ -375,6 +391,51 @@ fn build_format_menu<R: Runtime>(
         editor_item(app, "format_superscript", "Superscript", markdown_enabled)?;
     let format_subscript = editor_item(app, "format_subscript", "Subscript", markdown_enabled)?;
     let format_keyboard = editor_item(app, "format_keyboard", "Keyboard", markdown_enabled)?;
+    let table_add_row_after = editor_item(
+        app,
+        "table_add_row_after",
+        "Add Row After",
+        markdown_enabled,
+    )?;
+    let table_delete_row = editor_item(app, "table_delete_row", "Delete Row", markdown_enabled)?;
+    let table_add_column_after = editor_item(
+        app,
+        "table_add_column_after",
+        "Add Column After",
+        markdown_enabled,
+    )?;
+    let table_delete_column = editor_item(
+        app,
+        "table_delete_column",
+        "Delete Column",
+        markdown_enabled,
+    )?;
+    let table_delete_table =
+        editor_item(app, "table_delete_table", "Delete Table", markdown_enabled)?;
+    let table_align_left = editor_item(app, "table_align_left", "Left Align", markdown_enabled)?;
+    let table_align_center =
+        editor_item(app, "table_align_center", "Center Align", markdown_enabled)?;
+    let table_align_right = editor_item(app, "table_align_right", "Right Align", markdown_enabled)?;
+    let table_align = Submenu::with_items(
+        app,
+        "Align Column...",
+        markdown_enabled,
+        &[&table_align_left, &table_align_center, &table_align_right],
+    )?;
+    let table = Submenu::with_items(
+        app,
+        "Table",
+        markdown_enabled,
+        &[
+            &table_add_row_after,
+            &table_delete_row,
+            &table_add_column_after,
+            &table_delete_column,
+            &table_delete_table,
+            &PredefinedMenuItem::separator(app)?,
+            &table_align,
+        ],
+    )?;
     let star_file = menu_item(
         app,
         "star_file",
@@ -398,12 +459,18 @@ fn build_format_menu<R: Runtime>(
             &format_subscript,
             &format_keyboard,
             &PredefinedMenuItem::separator(app)?,
+            &table,
+            &PredefinedMenuItem::separator(app)?,
             &star_file,
         ],
     )
 }
 
-fn build_view_menu<R: Runtime>(app: &AppHandle<R>, appearance: &str) -> tauri::Result<Submenu<R>> {
+fn build_view_menu<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &NativeMenuState,
+    appearance: &str,
+) -> tauri::Result<Submenu<R>> {
     let appearance_auto = CheckMenuItem::with_id(
         app,
         "appearance_auto",
@@ -428,12 +495,59 @@ fn build_view_menu<R: Runtime>(app: &AppHandle<R>, appearance: &str) -> tauri::R
         appearance == "dark",
         None::<&str>,
     )?;
+    let view_mode = CheckMenuItem::with_id(
+        app,
+        "view_mode",
+        "View Mode",
+        true,
+        state.document_display_mode == "view",
+        None::<&str>,
+    )?;
+    let edit_mode = CheckMenuItem::with_id(
+        app,
+        "edit_mode",
+        "Edit Mode",
+        true,
+        state.document_display_mode != "view",
+        None::<&str>,
+    )?;
+    let toggle_vault_drawer = CheckMenuItem::with_id(
+        app,
+        "toggle_vault_drawer",
+        "Files Drawer",
+        true,
+        state.vault_drawer_open,
+        Some("CmdOrCtrl+Alt+S"),
+    )?;
+    let toggle_inspector = CheckMenuItem::with_id(
+        app,
+        "toggle_inspector",
+        "Inspector",
+        true,
+        state.inspector_drawer_open,
+        Some("CmdOrCtrl+Alt+I"),
+    )?;
+    let toggle_split = CheckMenuItem::with_id(
+        app,
+        "toggle_split_editor",
+        "Split Editor",
+        true,
+        state.split_open,
+        None::<&str>,
+    )?;
 
     Submenu::with_items(
         app,
         "View",
         true,
         &[
+            &view_mode,
+            &edit_mode,
+            &PredefinedMenuItem::separator(app)?,
+            &toggle_vault_drawer,
+            &toggle_inspector,
+            &toggle_split,
+            &PredefinedMenuItem::separator(app)?,
             &appearance_auto,
             &appearance_light,
             &appearance_dark,
@@ -444,9 +558,15 @@ fn build_view_menu<R: Runtime>(app: &AppHandle<R>, appearance: &str) -> tauri::R
 }
 
 fn build_window_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Submenu<R>> {
-    let close_tab = menu_item(app, "close_tab", "Close Tab", true, None)?;
-    let previous_tab = menu_item(app, "previous_tab", "Show Previous Tab", true, None)?;
-    let next_tab = menu_item(app, "next_tab", "Show Next Tab", true, None)?;
+    let close_tab = menu_item(app, "close_tab", "Close Tab", true, Some("CmdOrCtrl+W"))?;
+    let previous_tab = menu_item(
+        app,
+        "previous_tab",
+        "Show Previous Tab",
+        true,
+        Some("Ctrl+Shift+Tab"),
+    )?;
+    let next_tab = menu_item(app, "next_tab", "Show Next Tab", true, Some("Ctrl+Tab"))?;
 
     Submenu::with_id_and_items(
         app,
@@ -480,7 +600,7 @@ pub(crate) fn build_native_menu<R: Runtime>(
     let edit_menu = build_edit_menu(app, markdown_enabled)?;
     let insert_menu = build_insert_menu(app, markdown_enabled)?;
     let format_menu = build_format_menu(app, state)?;
-    let view_menu = build_view_menu(app, appearance)?;
+    let view_menu = build_view_menu(app, state, appearance)?;
     let window_menu = build_window_menu(app)?;
     let help_menu = Submenu::with_id_and_items(app, HELP_SUBMENU_ID, "Help", true, &[])?;
 
@@ -528,7 +648,20 @@ fn native_command_id(menu_id: &str) -> Option<&'static str> {
         "format_superscript" => Some("format-superscript"),
         "format_subscript" => Some("format-subscript"),
         "format_keyboard" => Some("format-keyboard"),
+        "table_add_row_after" => Some("table-add-row-after"),
+        "table_delete_row" => Some("table-delete-row"),
+        "table_add_column_after" => Some("table-add-column-after"),
+        "table_delete_column" => Some("table-delete-column"),
+        "table_delete_table" => Some("table-delete-table"),
+        "table_align_left" => Some("table-align-left"),
+        "table_align_center" => Some("table-align-center"),
+        "table_align_right" => Some("table-align-right"),
         "star_file" => Some("toggle-star-file"),
+        "view_mode" => Some("view-mode"),
+        "edit_mode" => Some("edit-mode"),
+        "toggle_vault_drawer" => Some("toggle-vault-drawer"),
+        "toggle_inspector" => Some("toggle-inspector"),
+        "toggle_split_editor" => Some("toggle-split-editor"),
         _ => None,
     }
 }
@@ -578,7 +711,7 @@ pub(crate) fn handle_native_menu_event<R: Runtime>(app: &AppHandle<R>, menu_id: 
         "copy_active_file_path" => {
             let _ = app.emit("active-file-copy-path-requested", ());
         }
-        "close_tab" => {
+        "close_tab" | "close_tab_file" => {
             let _ = app.emit("close-active-tab-requested", ());
         }
         "previous_tab" => {

@@ -521,6 +521,7 @@ button {
 }
 
 .titlebar-native-actions,
+.titlebar-document-proxy,
 .app-actions {
   position: relative;
   z-index: 1;
@@ -538,6 +539,44 @@ button {
 
 .titlebar-native-actions {
   gap: 8px;
+}
+
+.titlebar-document-proxy {
+  max-width: min(34vw, 360px);
+  min-width: 0;
+  height: 30px;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted-strong);
+  cursor: default;
+  padding: 0 9px;
+}
+
+.titlebar-document-proxy:hover,
+.titlebar-document-proxy:focus-visible {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--heading);
+}
+
+.titlebar-document-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.titlebar-document-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .titlebar-drawer-toggle {
@@ -582,6 +621,10 @@ button {
 
 .platform-macos .app-actions {
   margin-left: auto;
+}
+
+.platform-macos .titlebar-document-proxy {
+  margin-left: max(132px, calc(var(--vault-width, 320px) + var(--vault-resizer-width, 10px) + 48px));
 }
 
 .platform-macos .workspace {

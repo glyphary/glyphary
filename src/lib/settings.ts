@@ -90,6 +90,7 @@ export const defaultTidbitSettings: TidbitSettings = {
 export const defaultVaultAppearanceSettings: VaultAppearanceSettings = {
   glassEffect: false,
   glassOpacity: defaultGlassOpacity,
+  showDocumentProxy: false,
   statusBarVisible: true,
   sectionCorners: "rounded",
   workspaceMargin: "comfortable",
@@ -148,6 +149,17 @@ export function readPersistedWorkspace() {
             )
             .slice(0, 20)
         : [];
+    const vaultDrawerItem: PersistedWorkspace["vaultDrawerItem"] =
+      parsed.vaultDrawerItem === "search" ||
+      parsed.vaultDrawerItem === "starred" ||
+      parsed.vaultDrawerItem === "recent" ||
+      parsed.vaultDrawerItem === "tasks"
+        ? parsed.vaultDrawerItem
+        : "files";
+    const drawerItem: PersistedWorkspace["drawerItem"] =
+      parsed.drawerItem === "toc" || parsed.drawerItem === "calendar"
+        ? parsed.drawerItem
+        : "source";
 
     return {
       vaultRoot: parsed.vaultRoot,
@@ -163,6 +175,11 @@ export function readPersistedWorkspace() {
           : null,
       openFiles: readFiles(parsed.openFiles),
       recentFiles: readFiles(parsed.recentFiles),
+      vaultDrawerOpen: parsed.vaultDrawerOpen !== false,
+      vaultDrawerItem,
+      drawerOpen: parsed.drawerOpen === true,
+      drawerItem,
+      splitOpen: parsed.splitOpen === true,
     };
   } catch {
     return null;
@@ -457,6 +474,8 @@ export function normalizeVaultAppearanceSettings(
   return {
     glassEffect: settings?.glassEffect ?? defaultVaultAppearanceSettings.glassEffect,
     glassOpacity,
+    showDocumentProxy:
+      settings?.showDocumentProxy ?? defaultVaultAppearanceSettings.showDocumentProxy,
     statusBarVisible:
       settings?.statusBarVisible ?? defaultVaultAppearanceSettings.statusBarVisible,
     sectionCorners,

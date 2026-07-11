@@ -285,7 +285,9 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.doesNotMatch(css, /data-window-glass="enabled"] \.document-tabs,\n:root\[data-window-glass="enabled"] \.titlebar/);
   assert.match(css, /data-window-glass="enabled"] \.app-shell:not\(\.platform-macos\) \.titlebar[\s\S]*backdrop-filter: none/);
   assert.match(app, /getCurrentWindow\(\)\.setTheme\(resolvedAppearance\)/);
-  assert.doesNotMatch(app, /mac-window-title/);
+  assert.match(app, /titlebar-document-proxy/);
+  assert.match(app, /showActiveDocumentProxyMenu/);
+  assert.match(app, /active-document-copy-path/);
   assert.doesNotMatch(app, /app-brand/);
   assert.ok(capabilities.permissions.includes("core:window:allow-set-theme"));
   assert.ok(capabilities.permissions.includes("core:window:allow-start-dragging"));
@@ -307,10 +309,13 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.match(app, /onMouseDown=\{startTitlebarDrag\}/);
   assert.match(app, /<header className="titlebar" data-tauri-drag-region onMouseDown=\{startTitlebarDrag\}>/);
   assert.match(app, /titlebar-drawer-toggle/);
+  assert.match(app, /titlebar-document-name/);
   assert.match(app, /titlebar-inspector-toggle/);
   assert.match(app, /onClick=\{\(\) => toggleDrawerItem\(drawerItem\)\}/);
   assert.match(css, /\.titlebar \{[\s\S]*app-region: drag/);
   assert.match(css, /\.titlebar-drawer-toggle svg \{[\s\S]*width: 22px/);
+  assert.match(css, /\.titlebar-document-proxy \{[\s\S]*max-width: min\(34vw, 360px\)/);
+  assert.match(css, /\.titlebar-native-actions,\n\.titlebar-document-proxy,\n\.app-actions \{[\s\S]*app-region: no-drag/);
   assert.match(css, /\.app-actions \{[\s\S]*app-region: no-drag/);
   assert.match(css, /\.platform-macos \.titlebar \{[\s\S]*position: absolute/);
   assert.match(css, /\.platform-macos \.titlebar \{[\s\S]*top: 0/);
@@ -318,6 +323,7 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.match(css, /\.platform-macos \.titlebar \{[\s\S]*background: transparent/);
   assert.match(css, /data-window-glass="enabled"] \.platform-macos \.titlebar \{[\s\S]*background: transparent/);
   assert.match(css, /\.platform-macos \.titlebar[\s\S]*padding: 8px 10px 8px 0/);
+  assert.match(css, /\.platform-macos \.titlebar-document-proxy \{[\s\S]*margin-left: max\(132px, calc\(var\(--vault-width, 320px\) \+ var\(--vault-resizer-width, 10px\) \+ 48px\)\)/);
   assert.doesNotMatch(css, /\.platform-macos::before/);
   assert.match(css, /\.platform-macos \.titlebar-native-actions \{[\s\S]*left: max\(86px, calc\(var\(--vault-width, 320px\) \+ var\(--vault-resizer-width, 10px\) \+ 8px\)\)/);
   assert.doesNotMatch(css, /\.platform-macos \.workspace \{[\s\S]*margin-top: -46px/);
@@ -1928,10 +1934,11 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.equal(config.app.windows[0].hiddenTitle, true);
 });
 
-test("native webview context menu is suppressed so chrome does not show refresh", () => {
+test("native webview context menu is suppressed except for editor text services", () => {
   const app = readFileSync("src/App.tsx", "utf8");
 
   assert.match(app, /const suppressNativeContextMenu = \(event: MouseEvent\) => \{/);
+  assert.match(app, /target\.closest\("\.ProseMirror\[contenteditable='true'\]"\)/);
   assert.match(app, /event\.preventDefault\(\);/);
   assert.match(app, /window\.addEventListener\("contextmenu", suppressNativeContextMenu\)/);
   assert.match(app, /window\.removeEventListener\("contextmenu", suppressNativeContextMenu\)/);
@@ -2121,6 +2128,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(app, /window\.setInterval/);
   assert.match(app, /60_000/);
   assert.match(app, /glassEffect/);
+  assert.match(settings, /showDocumentProxy: false/);
   assert.match(settings, /statusBarVisible: true/);
   assert.match(settings, /sectionCorners: "rounded"/);
   assert.match(settings, /workspaceMargin: "comfortable"/);
@@ -2129,6 +2137,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(settings, /minimumGlassOpacity = 0\.24/);
   assert.match(settings, /maximumGlassOpacity = 0\.9/);
   assert.match(settingsDialog, /Use glass window effect/);
+  assert.match(settingsDialog, /Show document proxy in title bar/);
   assert.match(settingsDialog, /Glass opacity/);
   assert.match(settingsDialog, /type="range"/);
   assert.match(app, /--glyphary-glass-opacity/);
@@ -2142,6 +2151,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(settingsDialog, /<option value="medium">Medium<\/option>/);
   assert.match(settingsDialog, /<option value="bold">Bold<\/option>/);
   assert.match(app, /normalizedVaultAppearanceDraft/);
+  assert.match(app, /normalizedVaultAppearanceDraft\.showDocumentProxy && activeFileBackedName/);
   assert.match(app, /section-corners-\$\{normalizedVaultAppearanceDraft\.sectionCorners\}/);
   assert.match(app, /workspace-margin-\$\{normalizedVaultAppearanceDraft\.workspaceMargin\}/);
   assert.match(app, /ui-weight-\$\{normalizedVaultAppearanceDraft\.uiFontWeight\}/);
@@ -2292,6 +2302,7 @@ test("command save shortcut is wrapped in the webview", () => {
   assert.match(app, /handleGlobalPageSearchShortcut/);
   assert.match(app, /handleGlobalCloseTabShortcut/);
   assert.match(app, /handleGlobalSwitchTabShortcut/);
+  assert.match(app, /handleGlobalDrawerShortcut/);
   assert.match(pageSearch, /function pageSearchMatches/);
   assert.match(pageSearch, /new PluginKey<PageSearchPluginState>\("pageSearch"\)/);
   assert.match(pageSearch, /const PageSearchRenderer = Extension\.create/);
@@ -2320,14 +2331,18 @@ test("command save shortcut is wrapped in the webview", () => {
   assert.match(app, /event\.key\.toLowerCase\(\) !== "p"/);
   assert.match(app, /event\.key\.toLowerCase\(\) !== "f"/);
   assert.match(app, /event\.key\.toLowerCase\(\) !== "w"/);
-  assert.match(app, /event\.key !== "Tab"/);
+  assert.match(app, /const isControlTab = key === "Tab"/);
+  assert.match(app, /const isMacBracketTab =/);
   assert.match(app, /!event\.metaKey && !event\.ctrlKey/);
   assert.match(app, /!event\.metaKey \|\| event\.ctrlKey \|\| event\.altKey \|\| event\.shiftKey/);
-  assert.match(app, /!event\.ctrlKey \|\| event\.metaKey \|\| event\.altKey/);
+  assert.match(app, /!event\.metaKey[\s\S]*!event\.altKey[\s\S]*event\.ctrlKey[\s\S]*event\.shiftKey/);
   assert.match(app, /void saveCurrentFileRef\.current\(\)/);
   assert.match(app, /openPageSearchRef\.current\(\)/);
   assert.match(app, /closeActiveDocumentTabRef\.current\(\)/);
-  assert.match(app, /switchDocumentTabRef\.current\(event\.shiftKey \? -1 : 1\)/);
+  assert.match(app, /const direction = \(event\.shiftKey && key === "Tab"\) \|\| key === "\[" \? -1 : 1/);
+  assert.match(app, /switchDocumentTabRef\.current\(direction\)/);
+  assert.match(app, /toggleVaultDrawerItem\(vaultDrawerItem\)/);
+  assert.match(app, /toggleDrawerItem\(drawerItem\)/);
   assert.match(app, /function switchDocumentTab\(direction: 1 \| -1\)/);
   assert.match(app, /switchToDocumentTab\(group\.tabs\[nextIndex\]\.id, groupId\)/);
   assert.match(app, /setCommandPaletteOpen\(true\)/);
@@ -2341,6 +2356,7 @@ test("command save shortcut is wrapped in the webview", () => {
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalPageSearchShortcut, \{ capture: true \}\)/);
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalCloseTabShortcut, \{ capture: true \}\)/);
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalSwitchTabShortcut, \{ capture: true \}\)/);
+  assert.match(app, /window\.addEventListener\("keydown", handleGlobalDrawerShortcut, \{ capture: true \}\)/);
   assert.match(css, /\.page-search-bar/);
   assert.match(css, /\.editor-surface \.page-search-match/);
   assert.match(css, /\.editor-surface \.page-search-match\.active/);

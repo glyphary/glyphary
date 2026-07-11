@@ -198,7 +198,7 @@ export function createGlypharyEditorOptions({
     editorProps: {
       attributes: {
         "aria-label": "Markdown document editor",
-        spellcheck: "false",
+        spellcheck: "true",
       },
       handleDrop: (_view: unknown, event: DragEvent) => {
         if (!queueImageImport(event.dataTransfer?.files)) {

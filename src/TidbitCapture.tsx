@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { confirm as confirmNativeDialog } from "@tauri-apps/plugin-dialog";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Markdown } from "@tiptap/markdown";
@@ -158,7 +159,7 @@ export default function TidbitCapture() {
     editorProps: {
       attributes: {
         "aria-label": "Tidbit capture editor",
-        spellcheck: "false",
+        spellcheck: "true",
       },
     },
     onUpdate: () => setDirty(true),
@@ -295,8 +296,19 @@ export default function TidbitCapture() {
   }, [context.root]);
 
   async function closeWindow() {
-    if (dirty && !window.confirm("Close this tidbit without saving?")) {
-      return;
+    if (dirty) {
+      const confirmed = isTauri()
+        ? await confirmNativeDialog("Close this tidbit without saving?", {
+            title: "Close Tidbit",
+            kind: "warning",
+            okLabel: "Close",
+            cancelLabel: "Cancel",
+          })
+        : window.confirm("Close this tidbit without saving?");
+
+      if (!confirmed) {
+        return;
+      }
     }
 
     try {

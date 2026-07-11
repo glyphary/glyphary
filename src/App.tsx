@@ -1119,6 +1119,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
   useEffect(() => {
     const suppressNativeContextMenu = (event: MouseEvent) => {
+      const target = event.target;
+
+      if (
+        target instanceof Element &&
+        target.closest(".ProseMirror[contenteditable='true']")
+      ) {
+        return;
+      }
+
       event.preventDefault();
     };
 
@@ -2079,9 +2088,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
   }
 
-  function closeExcalidrawDialog() {
-    if (excalidrawDirty && !window.confirm("Close drawing without saving changes?")) {
-      return;
+  async function closeExcalidrawDialog() {
+    if (excalidrawDirty) {
+      const confirmed = await confirmDestructiveAction(
+        "Close drawing without saving changes?",
+        { okLabel: "Close", title: "Close Drawing" },
+      );
+
+      if (!confirmed) {
+        return;
+      }
     }
 
     excalidrawApiRef.current = null;
@@ -2239,6 +2255,24 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   activeEditorRef.current = editor;
 
   useEffect(() => {
+    if (settingsWindowMode) {
+      return;
+    }
+
+    const title = activeFileBackedName
+      ? `${dirty ? "* " : ""}${activeFileBackedName} - Glyphary`
+      : "Glyphary";
+
+    document.title = title;
+
+    if (isTauri()) {
+      void getCurrentWindow().setTitle(title).catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+    }
+  }, [activeFileBackedName, dirty, settingsWindowMode]);
+
+  useEffect(() => {
     if (!isTauri() || settingsWindowMode) {
       return;
     }
@@ -2251,6 +2285,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         activeFileName: activeFileBackedName || null,
         activeFileStarred,
         markdownEditorActive: activeDocumentIsMarkdown,
+        documentDisplayMode,
+        vaultDrawerOpen,
+        inspectorDrawerOpen: drawerOpen,
+        splitOpen,
         recentFiles: recentFiles.slice(0, 10).map((file) => ({
           name: file.name,
           relativePath: file.relativePath,
@@ -2265,9 +2303,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     activeFileBackedPath,
     activeFileStarred,
     appearance,
+    documentDisplayMode,
+    drawerOpen,
     dirty,
     recentFiles,
     settingsWindowMode,
+    splitOpen,
+    vaultDrawerOpen,
   ]);
 
   function captureCommandPaletteSelection() {
@@ -2474,9 +2516,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         setStatus("Restoring previous vault");
         vaultRootRef.current = workspace.vaultRoot;
         setVaultRoot(workspace.vaultRoot);
-        setVaultDrawerOpen(true);
-        setVaultDrawerItem("files");
-        setDrawerOpen(false);
+        setVaultDrawerOpen(workspace.vaultDrawerOpen);
+        setVaultDrawerItem(workspace.vaultDrawerItem);
+        setDrawerOpen(workspace.drawerOpen);
+        setDrawerItem(workspace.drawerItem);
         recentFilesRef.current = workspace.recentFiles;
         setRecentFiles(workspace.recentFiles);
         await loadVaultSettings(workspace.vaultRoot);
@@ -3266,6 +3309,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       activeFile: next.activeFile === undefined ? activeFile : next.activeFile,
       openFiles: next.openFiles ?? fileBackedTabs(),
       recentFiles: next.recentFiles ?? recentFilesRef.current,
+      vaultDrawerOpen: next.vaultDrawerOpen ?? vaultDrawerOpen,
+      vaultDrawerItem: next.vaultDrawerItem ?? vaultDrawerItem,
+      drawerOpen: next.drawerOpen ?? drawerOpen,
+      drawerItem: next.drawerItem ?? drawerItem,
+      splitOpen: next.splitOpen ?? splitOpen,
     });
   }
 
@@ -3290,6 +3338,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       recentFiles: file ? recordRecentFile(file) : recentFilesRef.current,
     });
   }
+
+  useEffect(() => {
+    persistWorkspace({
+      vaultDrawerOpen,
+      vaultDrawerItem,
+      drawerOpen,
+      drawerItem,
+      splitOpen,
+    });
+  }, [drawerItem, drawerOpen, splitOpen, vaultDrawerItem, vaultDrawerOpen]);
 
   function activeFileHostPath() {
     const vaultRoot = vaultRootRef.current;
@@ -3348,6 +3406,26 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     try {
       await window.navigator.clipboard.writeText(hostPath);
       setStatus("Copied file path");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function copyEntryPathFromContextMenu(entry: VaultEntry) {
+    if (!vaultRoot) {
+      return;
+    }
+
+    setFolderContextMenu(null);
+
+    if (!window.navigator.clipboard?.writeText) {
+      setStatus("Clipboard is unavailable");
+      return;
+    }
+
+    try {
+      await window.navigator.clipboard.writeText(vaultEntryPath(vaultRoot, entry.relativePath));
+      setStatus("Copied path");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -4270,16 +4348,45 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       openConfiguredNewTabRef.current();
     };
     const handleGlobalSwitchTabShortcut = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.key !== "Tab") {
-        return;
-      }
+      const key = event.key;
+      const isControlTab = key === "Tab" && event.ctrlKey && !event.metaKey && !event.altKey;
+      const isMacBracketTab =
+        (key === "[" || key === "]") &&
+        event.metaKey &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.altKey;
 
-      if (!event.ctrlKey || event.metaKey || event.altKey) {
+      if (event.defaultPrevented || (!isControlTab && !isMacBracketTab)) {
         return;
       }
 
       event.preventDefault();
-      switchDocumentTabRef.current(event.shiftKey ? -1 : 1);
+      const direction = (event.shiftKey && key === "Tab") || key === "[" ? -1 : 1;
+
+      switchDocumentTabRef.current(direction);
+    };
+    const handleGlobalDrawerShortcut = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        !event.metaKey ||
+        !event.altKey ||
+        event.ctrlKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      if (event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        toggleVaultDrawerItem(vaultDrawerItem);
+        return;
+      }
+
+      if (event.key.toLowerCase() === "i") {
+        event.preventDefault();
+        toggleDrawerItem(drawerItem);
+      }
     };
 
     window.addEventListener("keydown", handleGlobalSaveShortcut);
@@ -4288,6 +4395,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     window.addEventListener("keydown", handleGlobalNewTabShortcut, { capture: true });
     window.addEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
     window.addEventListener("keydown", handleGlobalSwitchTabShortcut, { capture: true });
+    window.addEventListener("keydown", handleGlobalDrawerShortcut, { capture: true });
 
     return () => {
       window.removeEventListener("keydown", handleGlobalSaveShortcut);
@@ -4296,8 +4404,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       window.removeEventListener("keydown", handleGlobalNewTabShortcut, { capture: true });
       window.removeEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
       window.removeEventListener("keydown", handleGlobalSwitchTabShortcut, { capture: true });
+      window.removeEventListener("keydown", handleGlobalDrawerShortcut, { capture: true });
     };
-  }, []);
+  }, [drawerItem, vaultDrawerItem]);
 
   useEffect(() => {
     const settings = normalizeTidbitSettings(tidbitSettings);
@@ -5128,6 +5237,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           text: "Reveal in Finder",
           action: () => void revealEntryFromContextMenu(entry),
         },
+        {
+          id: "vault-copy-path",
+          text: "Copy Path",
+          action: () => void copyEntryPathFromContextMenu(entry),
+        },
         ...(createOnly
           ? []
           : [
@@ -5167,6 +5281,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         id: "vault-reveal",
         text: "Reveal in Finder",
         action: () => void revealEntryFromContextMenu(entry),
+      },
+      {
+        id: "vault-copy-path",
+        text: "Copy Path",
+        action: () => void copyEntryPathFromContextMenu(entry),
       },
       nativeMenuSeparator,
       {
@@ -7280,6 +7399,46 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       return;
     }
 
+    if (commandId === "view-mode") {
+      setDocumentDisplayMode("view");
+      setStatus("View mode");
+      return;
+    }
+
+    if (commandId === "edit-mode") {
+      setDocumentDisplayMode("edit");
+      setStatus("Edit mode");
+      return;
+    }
+
+    if (commandId === "toggle-vault-drawer") {
+      toggleVaultDrawerItem(vaultDrawerItem);
+      return;
+    }
+
+    if (commandId === "toggle-inspector") {
+      toggleDrawerItem(drawerItem);
+      return;
+    }
+
+    if (commandId === "toggle-split-editor") {
+      toggleSplitEditor();
+      return;
+    }
+
+    if (
+      commandId === "table-align-left" ||
+      commandId === "table-align-center" ||
+      commandId === "table-align-right"
+    ) {
+      const alignment = commandId.replace("table-align-", "") as "left" | "center" | "right";
+
+      if (!alignCurrentTableColumn(editor, alignment)) {
+        setStatus("Place the cursor inside a table column before aligning it");
+      }
+      return;
+    }
+
     const command = activeInsertCommandPaletteCommands
       .concat(formatCommandPaletteCommands)
       .concat(tableCommandPaletteCommands)
@@ -7821,6 +7980,48 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     void getCurrentWindow().startDragging();
   }
 
+  async function showActiveDocumentProxyMenu(event: ReactMouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!activeFileBackedPath) {
+      return;
+    }
+
+    try {
+      const opened = await popupNativeMenu(
+        [
+          {
+            id: "active-document-reveal",
+            text: "Reveal in Finder",
+            action: () => void revealActiveFileInFinder(),
+          },
+          {
+            id: "active-document-open-default-app",
+            text: "Open in Default App",
+            action: () => void openActiveFileInDefaultApp(),
+          },
+          nativeMenuSeparator,
+          {
+            id: "active-document-copy-path",
+            text: "Copy Path",
+            action: () => void copyActiveFilePath(),
+          },
+        ],
+        {
+          x: event.clientX,
+          y: event.clientY,
+        },
+      );
+
+      if (!opened) {
+        setStatus(`Current file: ${activeFileBackedPath}`);
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   const workspaceStyle = {
     "--vault-width": `${vaultDrawerOpen ? vaultDrawerWidth : closedDrawerWidth}px`,
     "--drawer-width": `${drawerOpen ? inspectorDrawerWidth : closedDrawerWidth}px`,
@@ -7995,6 +8196,25 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               </svg>
             </button>
           </div>
+        ) : null}
+        {normalizedVaultAppearanceDraft.showDocumentProxy && activeFileBackedName ? (
+          <button
+            className="titlebar-document-proxy"
+            type="button"
+            aria-label={`Current file: ${activeFileBackedName}`}
+            title={activeFileBackedPath}
+            onClick={showActiveDocumentProxyMenu}
+            onContextMenu={showActiveDocumentProxyMenu}
+          >
+            <svg className="titlebar-document-icon" aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M6 3.5h8l4 4v13H6z" />
+              <path d="M14 3.5v4h4" />
+            </svg>
+            <span className="titlebar-document-name">
+              {dirty ? "* " : ""}
+              {activeFileBackedName}
+            </span>
+          </button>
         ) : null}
         <div className="app-actions">
           {!hideDuplicateDocumentActions ? (
@@ -9522,6 +9742,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           onAction={openFolderActionDialog}
           onReveal={(entry) => void revealEntryFromContextMenu(entry)}
           onOpenExternal={(entry) => void openEntryFromContextMenu(entry)}
+          onCopyPath={(entry) => void copyEntryPathFromContextMenu(entry)}
         />
       ) : null}
       {folderActionDialog ? (
