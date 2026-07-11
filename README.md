@@ -72,7 +72,9 @@ then save back to the original canvas file.
 
 Glyphary can open `.base` files as local database-style views over your vault.
 Definitions query Markdown frontmatter and render matching notes as tables or
-gallery cards, including optional first-image thumbnails.
+gallery cards, including optional first-image thumbnails. Open views can be
+searched by title, sorted by any available property, and trimmed to only the
+properties you want to see.
 
 ## Search And Commands
 

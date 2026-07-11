@@ -2183,6 +2183,139 @@ body.workspace-resizing * {
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 
+.base-controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.base-result-count {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.base-control-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.base-control {
+  position: relative;
+}
+
+.base-control > button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--control-bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.base-control > button:hover,
+.base-control > button.active {
+  color: var(--text);
+  background: var(--hover);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-soft));
+}
+
+.base-control > button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.base-control-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 10px;
+  min-width: 220px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 16px 38px var(--shadow-strong);
+  padding: 10px;
+}
+
+.base-control-menu.compact {
+  min-width: 210px;
+}
+
+.base-control-menu.properties {
+  width: min(280px, 72vw);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.base-control-menu label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.base-control-menu.properties label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.base-control-menu input[type="search"],
+.base-control-menu select {
+  width: 100%;
+  min-height: 32px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--control-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.86rem;
+  padding: 0 9px;
+}
+
+.base-sort-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.base-sort-options button {
+  min-height: 30px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--control-bg);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.base-sort-options button.active {
+  color: var(--text);
+  background: var(--hover);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-soft));
+}
+
 .base-card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
