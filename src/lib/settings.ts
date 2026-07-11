@@ -318,7 +318,7 @@ export function normalizeStarredFiles(files: string[] | undefined | null) {
   return (files ?? [])
     .map((file) => normalizeNewTabFile(file))
     .filter((file) => !file.split(/[\\/]+/).some((part) => part === "." || part === ".."))
-    .filter((file) => /\.(md|markdown)$/i.test(file))
+    .filter((file) => /\.(md|markdown|base|canvas)$/i.test(file))
     .filter((file) => {
       if (seen.has(file)) {
         return false;

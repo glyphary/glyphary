@@ -65,6 +65,9 @@ import {
 import {
   richLinkMarkdown,
 } from "../.test-dist/rich-links.js";
+import {
+  normalizeStarredFiles,
+} from "../.test-dist/settings.js";
 
 test("frontmatter is split out of the editor body and composed back without losing it", () => {
   const source = "---\ntitle: Alpha\ntags: [note]\n---\n# Body\n";
@@ -721,6 +724,8 @@ siteName: Example Site
   assert.match(app, /id: "insert-rich-link"/);
   assert.match(app, /openRichLinkDialog/);
   assert.match(app, /insertRichLinkFromUrl/);
+  assert.match(app, /insertMarkdownAtCursor\(editor, richLinkMarkdown\(metadata\)\)/);
+  assert.doesNotMatch(app, /setEditorBody\(`\$\{markdown\.trimEnd\(\)\}\\n\\n\$\{richLinkMarkdown\(metadata\)\}`/);
   assert.match(app, /richLinkDialogOpen/);
   assert.match(app, /aria-label="Insert rich link"/);
   assert.match(css, /\.rich-link-card/);
@@ -1666,9 +1671,46 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(app, /toggleVaultDrawerItem\("recent"\)/);
   assert.match(app, /toggleVaultDrawerItem\("starred"\)/);
   assert.match(app, /toggleVaultDrawerItem\("tasks"\)/);
-  assert.match(app, /Starred notes/);
-  assert.match(app, /id: activeNoteStarred \? "unstar-note" : "star-note"/);
-  assert.match(commandPalette, /command\.id !== "star-note"/);
+  assert.match(app, /Starred files/);
+  assert.match(app, /const activeFileBackedPath = activeDocumentTab\?\.activeFile\?\.relativePath \?\? ""/);
+  assert.match(app, /id: activeFileStarred \? "unstar-file" : "star-file"/);
+  assert.match(app, /function toggleActiveFileStar/);
+  assert.match(app, /\.\.\.activeFileCommandPaletteCommands/);
+  assert.match(commandPalette, /command\.id !== "star-file"/);
+  assert.match(app, /const \[draggingStarredPath, setDraggingStarredPath\] = useState\(""\)/);
+  assert.match(app, /const draggingStarredPathRef = useRef\(""\)/);
+  assert.match(app, /const suppressStarredClickRef = useRef\(false\)/);
+  assert.match(app, /const \[starredDragOrder, setStarredDragOrder\] = useState<string\[\] \| null>\(null\)/);
+  assert.match(app, /const starredListRef = useRef<HTMLDivElement \| null>\(null\)/);
+  assert.match(app, /const starredDragOrderRef = useRef<string\[\] \| null>\(null\)/);
+  assert.match(app, /const starredPointerIdRef = useRef<number \| null>\(null\)/);
+  assert.match(app, /const \[starredDropIndex, setStarredDropIndex\] = useState<number \| null>\(null\)/);
+  assert.match(app, /function starredDropIndexFromPointer\(container: HTMLElement, pointerY: number\)/);
+  assert.match(app, /querySelectorAll<HTMLElement>\("\[data-starred-path\]"\)/);
+  assert.match(app, /function reorderedStarredFiles\(current: string\[\], draggedPath: string, dropIndex: number\)/);
+  assert.match(app, /function previewStarredFileReorder\(pointerY: number\)/);
+  assert.match(app, /let targetIndex = Math\.max\(0, Math\.min\(dropIndex, current\.length\)\)/);
+  assert.match(app, /next\.splice\(targetIndex, 0, dragged\)/);
+  assert.match(app, /onPointerDown=\{\(event: ReactPointerEvent<HTMLButtonElement>\) => \{/);
+  assert.match(app, /startStarredPointerDrag\(event, file\.relativePath, index\)/);
+  assert.match(app, /onPointerMove=\{updateStarredPointerDrag\}/);
+  assert.match(app, /void finishStarredPointerDrag\(true\)/);
+  assert.match(app, /draggingStarredPathRef\.current = relativePath/);
+  assert.match(app, /starredDragOrderRef\.current = next/);
+  assert.match(app, /suppressStarredClickRef\.current = true/);
+  assert.match(css, /\.starred-entry\.drop-target/);
+  assert.match(css, /\.starred-entry\.drop-target-after/);
+  assert.match(css, /touch-action: none/);
+  assert.deepEqual(
+    normalizeStarredFiles([
+      "Notes/A.md",
+      "Views/Sources.base",
+      "Canvas/Map.canvas",
+      "image.png",
+      "../escape.base",
+    ]),
+    ["Notes/A.md", "Views/Sources.base", "Canvas/Map.canvas"],
+  );
   assert.match(app, /useState<TaskFilter>\("incomplete"\)/);
   assert.match(app, /useState<TaskSort>\("name"\)/);
   assert.match(app, /taskListQuery/);
@@ -2227,6 +2269,7 @@ test("command save shortcut is wrapped in the webview", () => {
   assert.match(app, /handleGlobalCommandPaletteShortcut/);
   assert.match(app, /handleGlobalPageSearchShortcut/);
   assert.match(app, /handleGlobalCloseTabShortcut/);
+  assert.match(app, /handleGlobalSwitchTabShortcut/);
   assert.match(pageSearch, /function pageSearchMatches/);
   assert.match(pageSearch, /new PluginKey<PageSearchPluginState>\("pageSearch"\)/);
   assert.match(pageSearch, /const PageSearchRenderer = Extension\.create/);
@@ -2255,11 +2298,16 @@ test("command save shortcut is wrapped in the webview", () => {
   assert.match(app, /event\.key\.toLowerCase\(\) !== "p"/);
   assert.match(app, /event\.key\.toLowerCase\(\) !== "f"/);
   assert.match(app, /event\.key\.toLowerCase\(\) !== "w"/);
+  assert.match(app, /event\.key !== "Tab"/);
   assert.match(app, /!event\.metaKey && !event\.ctrlKey/);
   assert.match(app, /!event\.metaKey \|\| event\.ctrlKey \|\| event\.altKey \|\| event\.shiftKey/);
+  assert.match(app, /!event\.ctrlKey \|\| event\.metaKey \|\| event\.altKey/);
   assert.match(app, /void saveCurrentFileRef\.current\(\)/);
   assert.match(app, /openPageSearchRef\.current\(\)/);
   assert.match(app, /closeActiveDocumentTabRef\.current\(\)/);
+  assert.match(app, /switchDocumentTabRef\.current\(event\.shiftKey \? -1 : 1\)/);
+  assert.match(app, /function switchDocumentTab\(direction: 1 \| -1\)/);
+  assert.match(app, /switchToDocumentTab\(group\.tabs\[nextIndex\]\.id, groupId\)/);
   assert.match(app, /setCommandPaletteOpen\(true\)/);
   assert.match(editorPane, /className="page-search-bar"/);
   assert.match(editorPane, /aria-label="Find in page"/);
@@ -2270,6 +2318,7 @@ test("command save shortcut is wrapped in the webview", () => {
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalCommandPaletteShortcut\)/);
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalPageSearchShortcut, \{ capture: true \}\)/);
   assert.match(app, /window\.addEventListener\("keydown", handleGlobalCloseTabShortcut, \{ capture: true \}\)/);
+  assert.match(app, /window\.addEventListener\("keydown", handleGlobalSwitchTabShortcut, \{ capture: true \}\)/);
   assert.match(css, /\.page-search-bar/);
   assert.match(css, /\.editor-surface \.page-search-match/);
   assert.match(css, /\.editor-surface \.page-search-match\.active/);

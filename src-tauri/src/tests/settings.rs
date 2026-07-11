@@ -213,6 +213,8 @@ fn writes_vault_settings_file() {
                 "Notes/B.md".into(),
                 "image.png".into(),
                 " Notes/A.markdown ".into(),
+                "Views/Sources.base".into(),
+                "Canvas/Map.canvas".into(),
             ],
             frontmatter_pills: FrontmatterPillSettings {
                 enabled: false,
@@ -258,7 +260,12 @@ fn writes_vault_settings_file() {
     assert_eq!(settings.new_tab_file, "Meta/Home2.md");
     assert_eq!(
         settings.starred_files,
-        vec!["Notes/B.md", "Notes/A.markdown"]
+        vec![
+            "Notes/B.md",
+            "Notes/A.markdown",
+            "Views/Sources.base",
+            "Canvas/Map.canvas"
+        ]
     );
     assert!(!settings.frontmatter_pills.enabled);
     assert_eq!(settings.frontmatter_pills.header_name, "topics");

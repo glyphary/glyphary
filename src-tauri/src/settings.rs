@@ -86,7 +86,12 @@ pub(crate) fn clean_starred_files(files: Vec<String>) -> Result<Vec<String>, Str
         let file = clean_optional_relative(&file)?;
         let lower = file.to_lowercase();
 
-        if file.is_empty() || (!lower.ends_with(".md") && !lower.ends_with(".markdown")) {
+        if file.is_empty()
+            || (!lower.ends_with(".md")
+                && !lower.ends_with(".markdown")
+                && !lower.ends_with(".base")
+                && !lower.ends_with(".canvas"))
+        {
             continue;
         }
 

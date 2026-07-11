@@ -598,6 +598,9 @@ function App() {
   const [taskListQuery, setTaskListQuery] = useState("");
   const [taskSort, setTaskSort] = useState<TaskSort>("name");
   const [recentFiles, setRecentFiles] = useState<ActiveFile[]>([]);
+  const [draggingStarredPath, setDraggingStarredPath] = useState("");
+  const [starredDragOrder, setStarredDragOrder] = useState<string[] | null>(null);
+  const [starredDropIndex, setStarredDropIndex] = useState<number | null>(null);
   const {
     addFileToWikiLinkIndex,
     closeWikiLinkSearch,
@@ -652,6 +655,13 @@ function App() {
     ranges: PageSearchMatch[];
     selection: unknown;
   } | null>(null);
+  const starredListRef = useRef<HTMLDivElement | null>(null);
+  const starredDragOrderRef = useRef<string[] | null>(null);
+  const draggingStarredPathRef = useRef("");
+  const starredPointerIdRef = useRef<number | null>(null);
+  const starredDragStartYRef = useRef(0);
+  const starredDragActiveRef = useRef(false);
+  const suppressStarredClickRef = useRef(false);
   const canvasCommandRequestIdRef = useRef(0);
   // Keyboard navigation moves a virtual selection through scrollable results;
   // this ref lets the selected option be kept visible without stealing focus.
@@ -671,6 +681,7 @@ function App() {
   const openVaultRef = useRef<() => void | Promise<void>>(() => undefined);
   const saveCurrentFileRef = useRef<() => void | Promise<void>>(() => undefined);
   const closeActiveDocumentTabRef = useRef<() => void>(() => undefined);
+  const switchDocumentTabRef = useRef<(direction: 1 | -1) => void>(() => undefined);
   const openTidbitCaptureWindowRef = useRef<() => void | Promise<void>>(() => undefined);
   const openCapturedTidbitRef = useRef<(file: OpenedFile) => void | Promise<void>>(
     () => undefined,
@@ -1656,6 +1667,23 @@ function App() {
     }
   }
 
+  function switchDocumentTab(direction: 1 | -1) {
+    const groupId = activeGroupIdRef.current;
+    const group = editorGroupsRef.current[groupId];
+
+    if (group.tabs.length < 2) {
+      return;
+    }
+
+    const activeIndex = group.tabs.findIndex((tab) => tab.id === group.activeTabId);
+    const nextIndex =
+      activeIndex === -1
+        ? 0
+        : (activeIndex + direction + group.tabs.length) % group.tabs.length;
+
+    switchToDocumentTab(group.tabs[nextIndex].id, groupId);
+  }
+
   function closeDocumentTab(tabId: string, groupId = activeGroupIdRef.current) {
     const tabs = editorGroupsRef.current[groupId].tabs;
     const tab = tabs.find((documentTab) => documentTab.id === tabId);
@@ -1994,20 +2022,18 @@ function App() {
     () => normalizeStarredFiles(vaultSettings.starredFiles),
     [vaultSettings.starredFiles],
   );
+  const visibleStarredFiles = starredDragOrder ?? starredFiles;
   const starredFileEntries = useMemo(
     () =>
-      starredFiles.map((relativePath) => ({
+      visibleStarredFiles.map((relativePath) => ({
         name: relativePath.split("/").at(-1) ?? relativePath,
         relativePath,
       })),
-    [starredFiles],
+    [visibleStarredFiles],
   );
-  const activeMarkdownFilePath =
-    activeDocumentTab?.kind === "markdown"
-      ? activeDocumentTab.activeFile?.relativePath ?? ""
-      : "";
-  const activeNoteStarred = activeMarkdownFilePath
-    ? starredFiles.includes(activeMarkdownFilePath)
+  const activeFileBackedPath = activeDocumentTab?.activeFile?.relativePath ?? "";
+  const activeFileStarred = activeFileBackedPath
+    ? starredFiles.includes(activeFileBackedPath)
     : false;
   activeEditorRef.current = editor;
 
@@ -3064,22 +3090,22 @@ function App() {
     }
   }
 
-  async function toggleActiveNoteStar() {
-    if (!activeMarkdownFilePath) {
-      setStatus("Open a Markdown note before starring it");
+  async function toggleActiveFileStar() {
+    if (!activeFileBackedPath) {
+      setStatus("Open a saved file before starring it");
       return;
     }
 
     const current = normalizeStarredFiles(vaultSettingsRef.current.starredFiles);
-    const next = current.includes(activeMarkdownFilePath)
-      ? current.filter((path) => path !== activeMarkdownFilePath)
-      : [activeMarkdownFilePath, ...current];
+    const next = current.includes(activeFileBackedPath)
+      ? current.filter((path) => path !== activeFileBackedPath)
+      : [activeFileBackedPath, ...current];
 
     if (await persistStarredFiles(next)) {
       setStatus(
-        current.includes(activeMarkdownFilePath)
-          ? `Unstarred ${activeMarkdownFilePath}`
-          : `Starred ${activeMarkdownFilePath}`,
+        current.includes(activeFileBackedPath)
+          ? `Unstarred ${activeFileBackedPath}`
+          : `Starred ${activeFileBackedPath}`,
       );
     }
   }
@@ -3089,6 +3115,123 @@ function App() {
     const next = current.map(mapper).filter((path): path is string => Boolean(path));
 
     await persistStarredFiles(next);
+  }
+
+  function starredDropIndexFromPointer(container: HTMLElement, pointerY: number) {
+    const rows = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-starred-path]"),
+    );
+
+    if (rows.length === 0) {
+      return -1;
+    }
+
+    const targetIndex = rows.findIndex((row) => {
+      const rect = row.getBoundingClientRect();
+
+      return pointerY < rect.top + rect.height / 2;
+    });
+
+    return targetIndex === -1 ? rows.length : targetIndex;
+  }
+
+  function reorderedStarredFiles(current: string[], draggedPath: string, dropIndex: number) {
+    const draggedIndex = current.indexOf(draggedPath);
+    let targetIndex = Math.max(0, Math.min(dropIndex, current.length));
+
+    if (draggedIndex === -1) {
+      return current;
+    }
+
+    const next = [...current];
+    const [dragged] = next.splice(draggedIndex, 1);
+
+    if (draggedIndex < targetIndex) {
+      targetIndex -= 1;
+    }
+
+    next.splice(targetIndex, 0, dragged);
+    return next;
+  }
+
+  function previewStarredFileReorder(pointerY: number) {
+    const container = starredListRef.current;
+    const draggedPath = draggingStarredPathRef.current;
+
+    if (!container || !draggedPath) {
+      return;
+    }
+
+    const dropIndex = starredDropIndexFromPointer(container, pointerY);
+    const current =
+      starredDragOrderRef.current ?? normalizeStarredFiles(vaultSettingsRef.current.starredFiles);
+    const next = reorderedStarredFiles(current, draggedPath, dropIndex);
+
+    starredDragOrderRef.current = next;
+    setStarredDragOrder(next);
+    setStarredDropIndex(dropIndex);
+  }
+
+  function startStarredPointerDrag(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    relativePath: string,
+    index: number,
+  ) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    starredPointerIdRef.current = event.pointerId;
+    starredDragStartYRef.current = event.clientY;
+    starredDragActiveRef.current = false;
+    draggingStarredPathRef.current = relativePath;
+    starredDragOrderRef.current = [...starredFiles];
+    setStarredDropIndex(index);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function updateStarredPointerDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (starredPointerIdRef.current !== event.pointerId || !draggingStarredPathRef.current) {
+      return;
+    }
+
+    if (!starredDragActiveRef.current) {
+      if (Math.abs(event.clientY - starredDragStartYRef.current) < 6) {
+        return;
+      }
+
+      starredDragActiveRef.current = true;
+      suppressStarredClickRef.current = true;
+      setDraggingStarredPath(draggingStarredPathRef.current);
+      setStarredDragOrder(starredDragOrderRef.current);
+    }
+
+    event.preventDefault();
+    previewStarredFileReorder(event.clientY);
+  }
+
+  async function finishStarredPointerDrag(commit: boolean) {
+    const next = starredDragOrderRef.current;
+    const didDrag = starredDragActiveRef.current;
+
+    draggingStarredPathRef.current = "";
+    starredPointerIdRef.current = null;
+    starredDragActiveRef.current = false;
+    setDraggingStarredPath("");
+    setStarredDropIndex(null);
+
+    if (!commit || !didDrag || !next) {
+      starredDragOrderRef.current = null;
+      setStarredDragOrder(null);
+      return;
+    }
+
+    if (await persistStarredFiles(next)) {
+      setStatus("Reordered starred files");
+    }
+
+    starredDragOrderRef.current = null;
+    setStarredDragOrder(null);
   }
 
   async function loadEntries(root: string, relative: string) {
@@ -3682,6 +3825,7 @@ function App() {
   openVaultRef.current = openVault;
   saveCurrentFileRef.current = saveCurrentFile;
   openConfiguredNewTabRef.current = openConfiguredNewTab;
+  switchDocumentTabRef.current = switchDocumentTab;
   closeActiveDocumentTabRef.current = () => {
     const groupId = activeGroupIdRef.current;
     const activeTabId = editorGroupsRef.current[groupId]?.activeTabId;
@@ -3761,12 +3905,25 @@ function App() {
       event.preventDefault();
       openConfiguredNewTabRef.current();
     };
+    const handleGlobalSwitchTabShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== "Tab") {
+        return;
+      }
+
+      if (!event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      event.preventDefault();
+      switchDocumentTabRef.current(event.shiftKey ? -1 : 1);
+    };
 
     window.addEventListener("keydown", handleGlobalSaveShortcut);
     window.addEventListener("keydown", handleGlobalCommandPaletteShortcut);
     window.addEventListener("keydown", handleGlobalPageSearchShortcut, { capture: true });
     window.addEventListener("keydown", handleGlobalNewTabShortcut, { capture: true });
     window.addEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
+    window.addEventListener("keydown", handleGlobalSwitchTabShortcut, { capture: true });
 
     return () => {
       window.removeEventListener("keydown", handleGlobalSaveShortcut);
@@ -3774,6 +3931,7 @@ function App() {
       window.removeEventListener("keydown", handleGlobalPageSearchShortcut, { capture: true });
       window.removeEventListener("keydown", handleGlobalNewTabShortcut, { capture: true });
       window.removeEventListener("keydown", handleGlobalCloseTabShortcut, { capture: true });
+      window.removeEventListener("keydown", handleGlobalSwitchTabShortcut, { capture: true });
     };
   }, []);
 
@@ -5920,7 +6078,7 @@ function App() {
             siteName: "",
           };
 
-      setEditorBody(`${markdown.trimEnd()}\n\n${richLinkMarkdown(metadata)}`, false);
+      insertMarkdownAtCursor(editor, richLinkMarkdown(metadata));
       setRichLinkDialogOpen(false);
       setRichLinkUrlDraft("");
       setStatus(`Inserted rich link ${metadata.title || metadata.url}`);
@@ -6314,6 +6472,18 @@ function App() {
       run: openInsertCommandPalette,
     },
   ];
+  const activeFileCommandPaletteCommands: CommandPaletteCommand[] = activeFileBackedPath
+    ? [
+        {
+          id: activeFileStarred ? "unstar-file" : "star-file",
+          title: activeFileStarred ? "Unstar File" : "Star File",
+          description: activeFileStarred
+            ? "Remove the current file from Starred"
+            : "Add the current file to Starred",
+          run: toggleActiveFileStar,
+        },
+      ]
+    : [];
   const editorCommandPaletteCommands: CommandPaletteCommand[] = [
     // Table editing is contextual enough that the palette keeps it close to
     // the cursor state instead of permanently crowding the formatting toolbar.
@@ -6329,18 +6499,6 @@ function App() {
               setCommandPaletteSelectedIndex(0);
               window.setTimeout(() => commandPaletteInputRef.current?.focus(), 0);
             },
-          },
-        ]
-      : []),
-    ...(activeMarkdownFilePath
-      ? [
-          {
-            id: activeNoteStarred ? "unstar-note" : "star-note",
-            title: activeNoteStarred ? "Unstar Note" : "Star Note",
-            description: activeNoteStarred
-              ? "Remove the current note from Starred"
-              : "Add the current note to Starred",
-            run: toggleActiveNoteStar,
           },
         ]
       : []),
@@ -6380,11 +6538,14 @@ function App() {
     ...pluginCommandPaletteCommands,
   ];
   const commandPaletteCommands = activeDocumentTab
-    ? activeDocumentIsCanvas
-      ? canvasCommandPaletteCommands
-      : activeDocumentIsMarkdown
-        ? editorCommandPaletteCommands
-        : []
+    ? [
+        ...(activeDocumentIsCanvas
+          ? canvasCommandPaletteCommands
+          : activeDocumentIsMarkdown
+            ? editorCommandPaletteCommands
+            : []),
+        ...activeFileCommandPaletteCommands,
+      ]
     : [];
   // All scopes share the same filtering, selection, and rendering pipeline.
   // Adding a new grouped menu should usually mean adding one command list here
@@ -6573,7 +6734,7 @@ function App() {
     }
 
     if (vaultDrawerItem === "starred") {
-      return vaultRoot ? "Starred notes" : "Open a vault";
+      return vaultRoot ? "Starred files" : "Open a vault";
     }
 
     if (vaultDrawerItem === "tasks") {
@@ -7239,8 +7400,8 @@ function App() {
               type="button"
               aria-label={
                 vaultDrawerOpen && vaultDrawerItem === "starred"
-                  ? "Close starred notes drawer"
-                  : "Open starred notes drawer"
+                  ? "Close starred files drawer"
+                  : "Open starred files drawer"
               }
               title={vaultDrawerOpen && vaultDrawerItem === "starred" ? "Close Starred" : "Open Starred"}
               onClick={() => toggleVaultDrawerItem("starred")}
@@ -7387,17 +7548,65 @@ function App() {
                   ) : null}
                 </div>
               ) : vaultDrawerItem === "starred" ? (
-                <div className="vault-list recent-list" role="list" aria-label="Starred notes">
-                  {starredFileEntries.map((file) => (
+                <div
+                  ref={starredListRef}
+                  className="vault-list recent-list"
+                  role="list"
+                  aria-label="Starred files"
+                >
+                  {starredFileEntries.map((file, index) => (
                     <button
+                      data-starred-path={file.relativePath}
                       className={
-                        activeFile?.relativePath === file.relativePath
-                          ? "vault-entry recent-entry active"
-                          : "vault-entry recent-entry"
+                        [
+                          "vault-entry recent-entry starred-entry",
+                          activeFile?.relativePath === file.relativePath ? "active" : "",
+                          draggingStarredPath === file.relativePath ? "dragging" : "",
+                          starredDropIndex === index ? "drop-target" : "",
+                          starredDropIndex === starredFileEntries.length &&
+                          index === starredFileEntries.length - 1
+                            ? "drop-target-after"
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")
                       }
                       key={file.relativePath}
                       type="button"
-                      onClick={() => openFile(file.relativePath)}
+                      onPointerCancel={(event: ReactPointerEvent<HTMLButtonElement>) => {
+                        if (starredPointerIdRef.current !== event.pointerId) {
+                          return;
+                        }
+
+                        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                          event.currentTarget.releasePointerCapture(event.pointerId);
+                        }
+
+                        void finishStarredPointerDrag(false);
+                      }}
+                      onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+                        startStarredPointerDrag(event, file.relativePath, index);
+                      }}
+                      onPointerMove={updateStarredPointerDrag}
+                      onPointerUp={(event: ReactPointerEvent<HTMLButtonElement>) => {
+                        if (starredPointerIdRef.current !== event.pointerId) {
+                          return;
+                        }
+
+                        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                          event.currentTarget.releasePointerCapture(event.pointerId);
+                        }
+
+                        void finishStarredPointerDrag(true);
+                      }}
+                      onClick={() => {
+                        if (suppressStarredClickRef.current) {
+                          suppressStarredClickRef.current = false;
+                          return;
+                        }
+
+                        openFile(file.relativePath);
+                      }}
                     >
                       <VaultFileIcon relativePath={file.relativePath} />
                       <span className="recent-entry-text">
@@ -7407,10 +7616,10 @@ function App() {
                     </button>
                   ))}
                   {vaultRoot && starredFileEntries.length === 0 ? (
-                    <p className="empty-vault">No starred notes yet.</p>
+                    <p className="empty-vault">No starred files yet.</p>
                   ) : null}
                   {!vaultRoot ? (
-                    <p className="empty-vault">Open a vault to star notes.</p>
+                    <p className="empty-vault">Open a vault to star files.</p>
                   ) : null}
                 </div>
               ) : vaultDrawerItem === "tasks" ? (
