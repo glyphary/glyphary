@@ -14,15 +14,12 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
-    fs,
+    env, fs,
     path::{Component, Path, PathBuf},
     sync::Mutex,
     time::Duration,
 };
-use tauri::{
-    menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
-    AppHandle, Emitter, Manager, State,
-};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 // Tauri's command macro emits helper macros beside each command. Keeping
@@ -40,6 +37,8 @@ mod defaults;
 #[macro_use]
 mod calendar;
 mod models;
+#[macro_use]
+mod native_menu;
 mod paths;
 #[macro_use]
 mod plugins;
@@ -66,6 +65,7 @@ use base::*;
 use calendar::*;
 use defaults::*;
 use models::*;
+use native_menu::*;
 use paths::*;
 use plugins::*;
 use rich_links::*;
@@ -77,287 +77,143 @@ use themes::*;
 use vault::*;
 use windowing::*;
 
+#[derive(Default)]
+struct OpenedPaths(Mutex<Vec<String>>);
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenedPathsPayload {
+    paths: Vec<String>,
+}
+
+fn is_glyphary_document_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "md" | "markdown" | "canvas" | "base"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn clean_open_path(path: PathBuf) -> Option<String> {
+    if !is_glyphary_document_path(&path) {
+        return None;
+    }
+
+    let absolute = fs::canonicalize(&path).unwrap_or(path);
+    Some(absolute.to_string_lossy().into_owned())
+}
+
+fn open_path_from_arg(arg: &str, cwd: &str) -> Option<String> {
+    let trimmed = arg.trim();
+
+    if trimmed.is_empty() || trimmed.starts_with('-') {
+        return None;
+    }
+
+    if let Ok(url) = tauri::Url::parse(trimmed) {
+        if url.scheme() != "file" {
+            return None;
+        }
+
+        return url.to_file_path().ok().and_then(clean_open_path);
+    }
+
+    let path = PathBuf::from(trimmed);
+    let path = if path.is_absolute() {
+        path
+    } else {
+        PathBuf::from(cwd).join(path)
+    };
+
+    clean_open_path(path)
+}
+
+fn collect_open_paths(args: impl IntoIterator<Item = String>, cwd: &str) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+
+    args.into_iter()
+        .filter_map(|arg| open_path_from_arg(&arg, cwd))
+        .filter(|path| seen.insert(path.clone()))
+        .collect()
+}
+
+fn opened_paths_from_urls(urls: Vec<tauri::Url>) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+
+    urls.into_iter()
+        .filter_map(|url| url.to_file_path().ok())
+        .filter_map(clean_open_path)
+        .filter(|path| seen.insert(path.clone()))
+        .collect()
+}
+
+fn focus_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn queue_and_emit_open_paths(app: &AppHandle, paths: Vec<String>) {
+    if paths.is_empty() {
+        focus_main_window(app);
+        return;
+    }
+
+    // Open-With and single-instance events can arrive before React has mounted
+    // listeners, so Rust also queues paths for the frontend to drain on startup.
+    if let Ok(mut pending_paths) = app.state::<OpenedPaths>().0.lock() {
+        pending_paths.extend(paths.clone());
+    }
+
+    focus_main_window(app);
+    let _ = app.emit("open-paths-requested", OpenedPathsPayload { paths });
+}
+
+#[tauri::command]
+fn take_opened_paths(app: AppHandle) -> Vec<String> {
+    match app.state::<OpenedPaths>().0.lock() {
+        Ok(mut paths) => std::mem::take(&mut *paths),
+        Err(_) => Vec::new(),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .menu(|app| {
-            let package_info = app.package_info();
-            let config = app.config();
-            // macOS only renders a subset of Tauri's AboutMetadata fields. Keep
-            // the cross-platform fields populated, but put the useful product
-            // description in credits so the native macOS About panel is not bare.
-            let about_metadata = AboutMetadata {
-                name: Some("Glyphary".into()),
-                version: Some(package_info.version.to_string()),
-                short_version: Some(package_info.version.to_string()),
-                copyright: config
-                    .bundle
-                    .copyright
-                    .clone()
-                    .or_else(|| Some("Copyright © 2026 Glyphary contributors".into())),
-                authors: Some(vec!["Glyphary contributors".into()]),
-                comments: Some(
-                    "A local-first Markdown workspace with vaults, tabs, drawers, themes, and Tiptap editing."
-                        .into(),
-                ),
-                website: Some("https://github.com/".into()),
-                website_label: Some("Glyphary Project".into()),
-                credits: Some(
-                    "Glyphary\n\nA local-first Markdown workspace for vaults, rich notes, calendar pages, and themed writing.\n\nBuilt with Tauri, React, Tiptap, ProseMirror, highlight.js, and lowlight."
-                        .into(),
-                ),
-                ..Default::default()
-            };
-            let open_vault = MenuItem::with_id(
-                app,
-                "open_vault",
-                "Open Vault...",
-                true,
-                Some("CmdOrCtrl+O"),
-            )?;
-            let save = MenuItem::with_id(app, "save", "Save", true, Some("CmdOrCtrl+S"))?;
-            let new_document =
-                MenuItem::with_id(app, "new_document", "New", true, Some("CmdOrCtrl+N"))?;
-            let new_tab =
-                MenuItem::with_id(app, "new_tab", "New Tab", true, Some("CmdOrCtrl+T"))?;
-            let settings =
-                MenuItem::with_id(app, "settings", "Settings...", true, Some("CmdOrCtrl+,"))?;
-            let appearance_auto =
-                MenuItem::with_id(app, "appearance_auto", "Style: Auto", true, None::<&str>)?;
-            let appearance_light =
-                MenuItem::with_id(app, "appearance_light", "Style: Light", true, None::<&str>)?;
-            let appearance_dark =
-                MenuItem::with_id(app, "appearance_dark", "Style: Dark", true, None::<&str>)?;
-            let command_palette = MenuItem::with_id(
-                app,
-                "command_palette",
-                "Command Palette...",
-                true,
-                Some("CmdOrCtrl+P"),
-            )?;
-            let find_in_page =
-                MenuItem::with_id(app, "find_in_page", "Find...", true, Some("CmdOrCtrl+F"))?;
-            let paste_plain = MenuItem::with_id(
-                app,
-                "paste_plain",
-                "Paste and Match Style",
-                true,
-                Some("CmdOrCtrl+Shift+V"),
-            )?;
-            let insert_rich_link =
-                MenuItem::with_id(app, "insert_rich_link", "Rich Link", true, None::<&str>)?;
-            let insert_excalidraw =
-                MenuItem::with_id(app, "insert_excalidraw", "Excalidraw Drawing", true, None::<&str>)?;
-            let insert_columns =
-                MenuItem::with_id(app, "insert_columns", "Columns", true, None::<&str>)?;
-            let insert_gallery =
-                MenuItem::with_id(app, "insert_gallery", "Gallery Layout", true, None::<&str>)?;
-            let insert_callout =
-                MenuItem::with_id(app, "insert_callout", "Callout", true, None::<&str>)?;
-            let insert_collapse =
-                MenuItem::with_id(app, "insert_collapse", "Collapse", true, None::<&str>)?;
-            let insert_html_block =
-                MenuItem::with_id(app, "insert_html_block", "HTML Block", true, None::<&str>)?;
-            let insert_mermaid =
-                MenuItem::with_id(app, "insert_mermaid", "Mermaid Diagram", true, None::<&str>)?;
-            let insert_table_of_contents = MenuItem::with_id(
-                app,
-                "insert_table_of_contents",
-                "Table of Contents",
-                true,
-                None::<&str>,
-            )?;
-            let format_strikethrough =
-                MenuItem::with_id(app, "format_strikethrough", "Strikethrough", true, None::<&str>)?;
-            let format_highlight =
-                MenuItem::with_id(app, "format_highlight", "Highlight", true, None::<&str>)?;
-            let format_superscript =
-                MenuItem::with_id(app, "format_superscript", "Superscript", true, None::<&str>)?;
-            let format_subscript =
-                MenuItem::with_id(app, "format_subscript", "Subscript", true, None::<&str>)?;
-            let format_keyboard =
-                MenuItem::with_id(app, "format_keyboard", "Keyboard", true, None::<&str>)?;
-            let star_file =
-                MenuItem::with_id(app, "star_file", "Star or Unstar File", true, None::<&str>)?;
-            let app_menu = Submenu::with_items(
-                app,
-                package_info.name.clone(),
-                true,
-                &[
-                    &PredefinedMenuItem::about(app, None, Some(about_metadata))?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &settings,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::services(app, None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::hide(app, None)?,
-                    &PredefinedMenuItem::hide_others(app, None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::quit(app, None)?,
-                ],
-            )?;
-            let file_menu = Submenu::with_items(
-                app,
-                "File",
-                true,
-                &[
-                    &new_tab,
-                    &new_document,
-                    &open_vault,
-                    &save,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::close_window(app, None)?,
-                ],
-            )?;
-            let edit_menu = Submenu::with_items(
-                app,
-                "Edit",
-                true,
-                &[
-                    &PredefinedMenuItem::undo(app, None)?,
-                    &PredefinedMenuItem::redo(app, None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::cut(app, None)?,
-                    &PredefinedMenuItem::copy(app, None)?,
-                    &PredefinedMenuItem::paste(app, None)?,
-                    &paste_plain,
-                    &PredefinedMenuItem::select_all(app, None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &find_in_page,
-                    &command_palette,
-                ],
-            )?;
-            let insert_menu = Submenu::with_items(
-                app,
-                "Insert",
-                true,
-                &[
-                    &insert_rich_link,
-                    &insert_excalidraw,
-                    &PredefinedMenuItem::separator(app)?,
-                    &insert_columns,
-                    &insert_gallery,
-                    &insert_callout,
-                    &insert_collapse,
-                    &insert_html_block,
-                    &insert_mermaid,
-                    &insert_table_of_contents,
-                ],
-            )?;
-            let format_menu = Submenu::with_items(
-                app,
-                "Format",
-                true,
-                &[
-                    &format_strikethrough,
-                    &format_highlight,
-                    &format_superscript,
-                    &format_subscript,
-                    &format_keyboard,
-                    &PredefinedMenuItem::separator(app)?,
-                    &star_file,
-                ],
-            )?;
-            let view_menu = Submenu::with_items(
-                app,
-                "View",
-                true,
-                &[
-                    &appearance_auto,
-                    &appearance_light,
-                    &appearance_dark,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::fullscreen(app, None)?,
-                ],
-            )?;
-            let window_menu = Submenu::with_items(
-                app,
-                "Window",
-                true,
-                &[
-                    &PredefinedMenuItem::minimize(app, None)?,
-                    &PredefinedMenuItem::maximize(app, None)?,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::close_window(app, None)?,
-                ],
-            )?;
-            let help_menu = Submenu::with_items(
-                app,
-                "Help",
-                true,
-                &[&PredefinedMenuItem::bring_all_to_front(app, None)?],
-            )?;
-
-            Menu::with_items(
-                app,
-                &[
-                    &app_menu,
-                    &file_menu,
-                    &edit_menu,
-                    &insert_menu,
-                    &format_menu,
-                    &view_menu,
-                    &window_menu,
-                    &help_menu,
-                ],
-            )
-        })
+        .manage(OpenedPaths::default())
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            queue_and_emit_open_paths(app, collect_open_paths(args, &cwd));
+        }))
+        .menu(|app| build_native_menu(app, &NativeMenuState::default()))
         .on_menu_event(|app, event| {
-            // Menu items emit into the webview instead of duplicating app
-            // behavior in Rust; React owns document state and dirty tracking.
-            if event.id() == "open_vault" {
-                let _ = app.emit("open-vault-requested", ());
-            } else if event.id() == "save" {
-                let _ = app.emit("save-requested", ());
-            } else if event.id() == "new_document" {
-                let _ = app.emit("new-document-requested", ());
-            } else if event.id() == "new_tab" {
-                let _ = app.emit("new-tab-requested", ());
-            } else if event.id() == "settings" {
-                let _ = app.emit("settings-requested", ());
-            } else if event.id() == "appearance_auto" {
-                let _ = app.emit("appearance-requested", "auto");
-            } else if event.id() == "appearance_light" {
-                let _ = app.emit("appearance-requested", "light");
-            } else if event.id() == "appearance_dark" {
-                let _ = app.emit("appearance-requested", "dark");
-            } else {
-                let command_id = match event.id().as_ref() {
-                    "command_palette" => Some("command-palette"),
-                    "find_in_page" => Some("find-in-page"),
-                    "paste_plain" => Some("paste-plain"),
-                    "insert_rich_link" => Some("insert-rich-link"),
-                    "insert_excalidraw" => Some("insert-excalidraw"),
-                    "insert_columns" => Some("insert-columns"),
-                    "insert_gallery" => Some("gallery-layout"),
-                    "insert_callout" => Some("insert-callout"),
-                    "insert_collapse" => Some("insert-collapse"),
-                    "insert_html_block" => Some("insert-html-block"),
-                    "insert_mermaid" => Some("insert-mermaid-diagram"),
-                    "insert_table_of_contents" => Some("insert-table-of-contents"),
-                    "format_strikethrough" => Some("format-strikethrough"),
-                    "format_highlight" => Some("format-highlight"),
-                    "format_superscript" => Some("format-superscript"),
-                    "format_subscript" => Some("format-subscript"),
-                    "format_keyboard" => Some("format-keyboard"),
-                    "star_file" => Some("toggle-star-file"),
-                    _ => None,
-                };
-
-                if let Some(command_id) = command_id {
-                    let _ = app.emit("native-command-requested", command_id);
-                }
-            }
+            handle_native_menu_event(app, event.id().as_ref());
         })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_macos_permissions::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
             if let Err(err) = apply_macos_titlebar_chrome(app.handle()) {
                 eprintln!("Could not apply macOS titlebar chrome: {err}");
             }
+
+            let cwd = env::current_dir()
+                .ok()
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let startup_paths = collect_open_paths(env::args(), &cwd);
+
+            if let Ok(mut pending_paths) = app.state::<OpenedPaths>().0.lock() {
+                pending_paths.extend(startup_paths);
+            }
+
             Ok(())
         })
         .manage(TidbitShortcutState::default())
@@ -402,10 +258,18 @@ pub fn run() {
             test_ai_connection,
             run_ai_transform,
             read_ai_builder_history,
-            write_ai_builder_history
+            write_ai_builder_history,
+            update_native_menu_state,
+            take_opened_paths
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+            if let tauri::RunEvent::Opened { urls } = event {
+                queue_and_emit_open_paths(app, opened_paths_from_urls(urls));
+            }
+        });
 }
 
 #[cfg(test)]

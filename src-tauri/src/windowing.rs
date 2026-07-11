@@ -83,13 +83,15 @@ pub(crate) fn apply_macos_titlebar_chrome(_app: &tauri::AppHandle) -> Result<(),
 #[cfg(target_os = "macos")]
 pub(crate) fn apply_window_glass_effect(
     app: &tauri::AppHandle,
+    window_label: Option<&str>,
     enabled: bool,
 ) -> Result<bool, String> {
     use tauri::window::{Color, Effect, EffectState, EffectsBuilder};
 
+    let label = window_label.unwrap_or("main");
     let window = app
-        .get_webview_window("main")
-        .ok_or_else(|| "Main window is not available".to_string())?;
+        .get_webview_window(label)
+        .ok_or_else(|| format!("Window {label} is not available"))?;
 
     if enabled {
         // Native material is only visible if both the window and WKWebView
@@ -133,6 +135,7 @@ pub(crate) fn apply_window_glass_effect(
 #[cfg(not(target_os = "macos"))]
 pub(crate) fn apply_window_glass_effect(
     _app: &tauri::AppHandle,
+    _window_label: Option<&str>,
     _enabled: bool,
 ) -> Result<bool, String> {
     Ok(false)
@@ -141,6 +144,7 @@ pub(crate) fn apply_window_glass_effect(
 pub(crate) fn set_window_glass_effect(
     app: tauri::AppHandle,
     enabled: bool,
+    window_label: Option<String>,
 ) -> Result<bool, String> {
-    apply_window_glass_effect(&app, enabled)
+    apply_window_glass_effect(&app, window_label.as_deref(), enabled)
 }

@@ -9,10 +9,16 @@ import type {
 import type { Editor } from "@tiptap/core";
 import { Selection } from "@tiptap/pm/state";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { open } from "@tauri-apps/plugin-dialog";
+import { confirm as confirmNativeDialog, open } from "@tauri-apps/plugin-dialog";
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from "@tauri-apps/plugin-notification";
 import { openPath, openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   checkAccessibilityPermission,
@@ -365,6 +371,26 @@ function normalizedReleaseVersion(value: string) {
   return value.trim().replace(/^v/i, "");
 }
 
+function normalizedHostPath(value: string) {
+  return value.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+function isOpenableGlypharyDocument(value: string) {
+  return /\.(md|markdown|canvas|base)$/i.test(value);
+}
+
+function vaultRelativePathFromHostPath(root: string, path: string) {
+  const cleanRoot = normalizedHostPath(root);
+  const cleanPath = normalizedHostPath(path);
+
+  if (!cleanRoot || !cleanPath.startsWith(`${cleanRoot}/`)) {
+    return null;
+  }
+
+  const relativePath = cleanPath.slice(cleanRoot.length + 1);
+  return isOpenableGlypharyDocument(relativePath) ? relativePath : null;
+}
+
 function remoteSourceUrl(value: string) {
   try {
     const url = new URL(value);
@@ -386,6 +412,10 @@ type ReleaseNotification = {
   publishedAt: string;
   tagName: string;
   url: string;
+};
+
+type OpenPathsPayload = {
+  paths: string[];
 };
 
 type ImagePreviewState = {
@@ -453,7 +483,13 @@ function moveSelectableIndex(currentIndex: number, itemCount: number, delta: -1 
   return (currentIndex + delta + itemCount) % itemCount;
 }
 
-function App() {
+type AppProps = {
+  settingsWindowMode?: boolean;
+};
+
+const settingsRevisionStorageKey = "glyphary.settingsRevision";
+
+function App({ settingsWindowMode = false }: AppProps = {}) {
   // The active editor group is mirrored into these top-level document fields
   // because drawers, toolbar state, save commands, and native menu events all
   // operate on "the current document" regardless of which split pane owns it.
@@ -693,6 +729,10 @@ function App() {
   );
   const resetDocumentRef = useRef<() => void>(() => undefined);
   const openConfiguredNewTabRef = useRef<() => void>(() => undefined);
+  const openFileByRelativePathRef = useRef<(relativePath: string) => void | Promise<void>>(
+    () => undefined,
+  );
+  const clearRecentFilesRef = useRef<() => void>(() => undefined);
   const openPageSearchRef = useRef<() => void>(() => undefined);
   const openExcalidrawDrawingRef = useRef<(target: string) => void>(() => undefined);
   const loadExcalidrawPreviewRef = useRef<(target: string) => Promise<string>>(async () => "");
@@ -728,6 +768,11 @@ function App() {
   // or resetting a theme can remove stale inline CSS variables.
   const appliedThemeTokensRef = useRef<Set<string>>(new Set());
   const windowGlassPreviewAppliedRef = useRef(false);
+  const mainWindowShownRef = useRef(false);
+  const pendingOpenPathsRef = useRef<string[]>([]);
+  const openExternalPathsRef = useRef<(paths: string[]) => Promise<void>>(async () => {
+    return undefined;
+  });
   const restoredWorkspace = useRef(false);
   const nativeCommandRunnerRef = useRef<(commandId: string) => void>(() => undefined);
 
@@ -804,6 +849,48 @@ function App() {
         }`,
       );
       return false;
+    }
+  }
+
+  async function confirmDestructiveAction(
+    message: string,
+    options: { okLabel?: string; title?: string } = {},
+  ) {
+    if (!isTauri()) {
+      return window.confirm(message);
+    }
+
+    try {
+      return await confirmNativeDialog(message, {
+        title: options.title ?? "Glyphary",
+        kind: "warning",
+        okLabel: options.okLabel ?? "Delete",
+        cancelLabel: "Cancel",
+      });
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+      return window.confirm(message);
+    }
+  }
+
+  async function notifyUser(title: string, body: string) {
+    if (!isTauri()) {
+      return;
+    }
+
+    try {
+      let granted = await isPermissionGranted();
+
+      if (!granted) {
+        granted = (await requestPermission()) === "granted";
+      }
+
+      if (granted) {
+        sendNotification({ title, body });
+      }
+    } catch {
+      // Notifications are a native nicety; never interrupt local editing if the
+      // OS denies or cannot deliver them.
     }
   }
 
@@ -1003,6 +1090,7 @@ function App() {
 
     void invoke<boolean>("set_window_glass_effect", {
       enabled: vaultAppearanceDraft.glassEffect,
+      windowLabel: getCurrentWindow().label,
     })
       .then((applied) => {
         if (shouldReportPreview) {
@@ -1290,16 +1378,110 @@ function App() {
     setStatus("Reverted settings preview");
   }
 
-  function openSettings() {
+  async function openSettings() {
+    if (isTauri() && !settingsWindowMode) {
+      try {
+        const existing = await WebviewWindow.getByLabel("settings");
+
+        if (existing) {
+          await existing.show();
+          await existing.setFocus();
+          return;
+        }
+
+        const settingsWindow = new WebviewWindow("settings", {
+          url: "index.html?view=settings",
+          title: "Settings",
+          width: 900,
+          height: 720,
+          minWidth: 760,
+          minHeight: 560,
+          center: true,
+          decorations: true,
+          focus: true,
+          hiddenTitle: true,
+          resizable: true,
+          skipTaskbar: true,
+          titleBarStyle: "overlay",
+          trafficLightPosition: new LogicalPosition(20, 28),
+          acceptFirstMouse: true,
+          transparent: true,
+          visible: false,
+        });
+
+        settingsWindow.once("tauri://error", (event) => {
+          setStatus(`Could not open settings: ${String(event.payload)}`);
+        });
+        return;
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      }
+    }
+
     setSettingsOffset({ x: 0, y: 0 });
     setSettingsDragging(null);
     setSettingsOpen(true);
   }
 
   function closeSettings() {
+    if (settingsWindowMode && isTauri()) {
+      void getCurrentWindow().close();
+      return;
+    }
+
     setSettingsDragging(null);
     setSettingsOpen(false);
   }
+
+  function showMainWindowAfterRestore() {
+    if (!isTauri() || settingsWindowMode || mainWindowShownRef.current) {
+      return;
+    }
+
+    mainWindowShownRef.current = true;
+    requestAnimationFrame(() => {
+      void getCurrentWindow()
+        .show()
+        .then(() => getCurrentWindow().setFocus())
+        .catch((error) => {
+          setStatus(error instanceof Error ? error.message : String(error));
+        });
+    });
+  }
+
+  function notifyVaultSettingsChanged(root: string) {
+    window.localStorage.setItem(
+      settingsRevisionStorageKey,
+      JSON.stringify({ root, updatedAt: Date.now() }),
+    );
+  }
+
+  useEffect(() => {
+    if (!settingsWindowMode || !isTauri()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) {
+          return;
+        }
+
+        void getCurrentWindow()
+          .show()
+          .then(() => getCurrentWindow().setFocus())
+          .catch((error) => {
+            setStatus(error instanceof Error ? error.message : String(error));
+          });
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsWindowMode]);
 
   function clampSettingsOffset(x: number, y: number) {
     const margin = 28;
@@ -1317,7 +1499,11 @@ function App() {
   }
 
   function startSettingsDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.button !== 0 || settingsDragStartedOnControl(event.target)) {
+    if (
+      settingsWindowMode ||
+      event.button !== 0 ||
+      settingsDragStartedOnControl(event.target)
+    ) {
       return;
     }
 
@@ -1332,7 +1518,7 @@ function App() {
   }
 
   function moveSettingsDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!settingsDragging || settingsDragging.pointerId !== event.pointerId) {
+    if (settingsWindowMode || !settingsDragging || settingsDragging.pointerId !== event.pointerId) {
       return;
     }
 
@@ -1345,6 +1531,10 @@ function App() {
   }
 
   function stopSettingsDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (settingsWindowMode) {
+      return;
+    }
+
     if (settingsDragging?.pointerId === event.pointerId) {
       setSettingsDragging(null);
     }
@@ -1966,6 +2156,10 @@ function App() {
       setStatus(
         `Added ${imported} image${imported === 1 ? "" : "s"} to ${defaultVaultImageDirectory}`,
       );
+      void notifyUser(
+        "Glyphary import complete",
+        `Added ${imported} image${imported === 1 ? "" : "s"} to ${defaultVaultImageDirectory}`,
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -2038,10 +2232,43 @@ function App() {
     [visibleStarredFiles],
   );
   const activeFileBackedPath = activeDocumentTab?.activeFile?.relativePath ?? "";
+  const activeFileBackedName = activeDocumentTab?.activeFile?.name ?? "";
   const activeFileStarred = activeFileBackedPath
     ? starredFiles.includes(activeFileBackedPath)
     : false;
   activeEditorRef.current = editor;
+
+  useEffect(() => {
+    if (!isTauri() || settingsWindowMode) {
+      return;
+    }
+
+    void invoke("update_native_menu_state", {
+      state: {
+        appearance,
+        canSave: Boolean(activeFileBackedPath && dirty),
+        hasActiveFile: Boolean(activeFileBackedPath),
+        activeFileName: activeFileBackedName || null,
+        activeFileStarred,
+        markdownEditorActive: activeDocumentIsMarkdown,
+        recentFiles: recentFiles.slice(0, 10).map((file) => ({
+          name: file.name,
+          relativePath: file.relativePath,
+        })),
+      },
+    }).catch((error) => {
+      setStatus(error instanceof Error ? error.message : String(error));
+    });
+  }, [
+    activeDocumentIsMarkdown,
+    activeFileBackedName,
+    activeFileBackedPath,
+    activeFileStarred,
+    appearance,
+    dirty,
+    recentFiles,
+    settingsWindowMode,
+  ]);
 
   function captureCommandPaletteSelection() {
     const targetEditor = activeEditorRef.current;
@@ -2236,6 +2463,7 @@ function App() {
     const persisted = readPersistedWorkspace();
 
     if (!persisted) {
+      showMainWindowAfterRestore();
       return;
     }
 
@@ -2317,6 +2545,8 @@ function App() {
         setStatus(`Restored vault ${workspace.vaultRoot}`);
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        showMainWindowAfterRestore();
       }
     }
 
@@ -3047,11 +3277,80 @@ function App() {
     return nextRecentFiles;
   }
 
+  function clearRecentFiles() {
+    recentFilesRef.current = [];
+    setRecentFiles([]);
+    persistWorkspace({ recentFiles: [] });
+    setStatus("Cleared recent files");
+  }
+
   function persistActiveFile(file: ActiveFile | null) {
     persistWorkspace({
       activeFile: file,
       recentFiles: file ? recordRecentFile(file) : recentFilesRef.current,
     });
+  }
+
+  function activeFileHostPath() {
+    const vaultRoot = vaultRootRef.current;
+    const activeFile = activeFileRef.current;
+
+    if (!vaultRoot || !activeFile) {
+      return null;
+    }
+
+    return vaultEntryPath(vaultRoot, activeFile.relativePath);
+  }
+
+  async function revealActiveFileInFinder() {
+    const hostPath = activeFileHostPath();
+
+    if (!hostPath) {
+      setStatus("Open a file before revealing it in Finder");
+      return;
+    }
+
+    try {
+      await revealItemInDir(hostPath);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function openActiveFileInDefaultApp() {
+    const hostPath = activeFileHostPath();
+
+    if (!hostPath) {
+      setStatus("Open a file before opening it in the default app");
+      return;
+    }
+
+    try {
+      await openPath(hostPath);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function copyActiveFilePath() {
+    const hostPath = activeFileHostPath();
+
+    if (!hostPath) {
+      setStatus("Open a file before copying its path");
+      return;
+    }
+
+    if (!window.navigator.clipboard?.writeText) {
+      setStatus("Clipboard is unavailable");
+      return;
+    }
+
+    try {
+      await window.navigator.clipboard.writeText(hostPath);
+      setStatus("Copied file path");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
   }
 
   function samePathList(left: string[], right: string[]) {
@@ -3648,11 +3947,40 @@ function App() {
       await refreshCssSnippets(vaultRoot, cssSnippets);
       await refreshPlugins(vaultRoot, plugins);
       await loadEntries(vaultRoot, currentDir);
+      notifyVaultSettingsChanged(vaultRoot);
       setStatus("Saved vault settings");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
   }
+
+  useEffect(() => {
+    const reloadSettingsFromPeerWindow = (event: StorageEvent) => {
+      if (event.key !== settingsRevisionStorageKey || !event.newValue) {
+        return;
+      }
+
+      try {
+        const revision = JSON.parse(event.newValue) as { root?: unknown };
+        const root = typeof revision.root === "string" ? revision.root : "";
+
+        if (!root || root !== vaultRootRef.current) {
+          return;
+        }
+
+        void loadVaultSettings(root).then(() => {
+          setStatus("Reloaded vault settings");
+        });
+      } catch {
+        // Ignore malformed cross-window notifications; the settings file is
+        // still authoritative the next time the vault is loaded.
+      }
+    };
+
+    window.addEventListener("storage", reloadSettingsFromPeerWindow);
+
+    return () => window.removeEventListener("storage", reloadSettingsFromPeerWindow);
+  }, []);
 
   async function saveCurrentFile() {
     if (!vaultRoot || !activeFileRef.current || !dirty) {
@@ -3831,6 +4159,7 @@ function App() {
   openVaultRef.current = openVault;
   saveCurrentFileRef.current = saveCurrentFile;
   openConfiguredNewTabRef.current = openConfiguredNewTab;
+  clearRecentFilesRef.current = clearRecentFiles;
   switchDocumentTabRef.current = switchDocumentTab;
   closeActiveDocumentTabRef.current = () => {
     const groupId = activeGroupIdRef.current;
@@ -4127,6 +4456,10 @@ function App() {
             normalizedReleaseVersion(currentAppVersion)
         ) {
           setReleaseNotification(latestRelease);
+          void notifyUser(
+            "Glyphary update available",
+            `${latestRelease.tagName} is ready to download.`,
+          );
         }
       } catch {
         // Update checks should never interrupt local-first editing.
@@ -4235,82 +4568,114 @@ function App() {
     }
 
     const unlisteners: Array<() => void> = [];
+    const registerNativeEvent = <TPayload,>(
+      eventName: string,
+      handler: Parameters<typeof listen<TPayload>>[1],
+    ) => {
+      listen<TPayload>(eventName, handler)
+        .then((nextUnlisten) => {
+          unlisteners.push(nextUnlisten);
+        })
+        .catch((error) => {
+          setStatus(error instanceof Error ? error.message : String(error));
+        });
+    };
 
     // Native macOS menus live in Rust, but all document state lives here. The
     // bridge is event-based so menu commands and in-window buttons share the
-    // same save/open/new code paths.
-    listen("open-vault-requested", () => {
+    // same save/open/new code paths. Handlers use refs because these listeners
+    // are registered once and would otherwise capture stale React state.
+    registerNativeEvent("open-vault-requested", () => {
       void openVaultRef.current();
-    })
-      .then((nextUnlisten) => {
-        unlisteners.push(nextUnlisten);
-      })
-      .catch((error) => {
-        setStatus(error instanceof Error ? error.message : String(error));
-      });
+    });
 
-    listen("save-requested", () => {
+    registerNativeEvent("save-requested", () => {
       void saveCurrentFileRef.current();
-    })
-      .then((nextUnlisten) => {
-        unlisteners.push(nextUnlisten);
-      })
-      .catch((error) => {
-        setStatus(error instanceof Error ? error.message : String(error));
-      });
+    });
 
-    listen("new-document-requested", () => {
+    registerNativeEvent("new-document-requested", () => {
       resetDocumentRef.current();
-    })
-      .then((nextUnlisten) => {
-        unlisteners.push(nextUnlisten);
-      })
-      .catch((error) => {
-        setStatus(error instanceof Error ? error.message : String(error));
-      });
+    });
 
-    listen("new-tab-requested", () => {
+    registerNativeEvent("new-tab-requested", () => {
       openConfiguredNewTabRef.current();
-    })
-      .then((nextUnlisten) => {
-        unlisteners.push(nextUnlisten);
-      })
-      .catch((error) => {
-        setStatus(error instanceof Error ? error.message : String(error));
-      });
+    });
 
-    listen<AppearanceMode>("appearance-requested", (event) => {
+    registerNativeEvent<AppearanceMode>("appearance-requested", (event) => {
       if (event.payload === "auto" || event.payload === "light" || event.payload === "dark") {
         setAppearance(event.payload);
       }
-    })
-      .then((nextUnlisten) => {
-        unlisteners.push(nextUnlisten);
-      })
-      .catch((error) => {
-        setStatus(error instanceof Error ? error.message : String(error));
-      });
+    });
 
-    listen("settings-requested", openSettings)
-      .then((nextUnlisten) => {
-        unlisteners.push(nextUnlisten);
-      })
-      .catch((error) => {
-        setStatus(error instanceof Error ? error.message : String(error));
-      });
+    registerNativeEvent("settings-requested", openSettings);
 
-    listen<string>("native-command-requested", (event) => {
+    registerNativeEvent<number>("open-recent-file-requested", (event) => {
+      const file = recentFilesRef.current[event.payload];
+
+      if (!file) {
+        setStatus("Recent file is no longer available");
+        return;
+      }
+
+      void openFileByRelativePathRef.current(file.relativePath);
+    });
+
+    registerNativeEvent("clear-recent-files-requested", () => {
+      clearRecentFilesRef.current();
+    });
+
+    registerNativeEvent("active-file-reveal-requested", () => {
+      void revealActiveFileInFinder();
+    });
+
+    registerNativeEvent("active-file-open-default-requested", () => {
+      void openActiveFileInDefaultApp();
+    });
+
+    registerNativeEvent("active-file-copy-path-requested", () => {
+      void copyActiveFilePath();
+    });
+
+    registerNativeEvent("close-active-tab-requested", () => {
+      closeActiveDocumentTabRef.current();
+    });
+
+    registerNativeEvent<number>("switch-document-tab-requested", (event) => {
+      switchDocumentTabRef.current(event.payload === -1 ? -1 : 1);
+    });
+
+    registerNativeEvent<string>("native-command-requested", (event) => {
       nativeCommandRunnerRef.current(event.payload);
-    })
-      .then((nextUnlisten) => {
-        unlisteners.push(nextUnlisten);
+    });
+
+    registerNativeEvent<OpenPathsPayload>("open-paths-requested", (event) => {
+      void openExternalPathsRef.current(event.payload.paths);
+    });
+
+    return () => {
+      unlisteners.forEach((unlisten) => unlisten());
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void invoke<string[]>("take_opened_paths")
+      .then((paths) => {
+        if (!cancelled) {
+          void openExternalPathsRef.current(paths);
+        }
       })
       .catch((error) => {
         setStatus(error instanceof Error ? error.message : String(error));
       });
 
     return () => {
-      unlisteners.forEach((unlisten) => unlisten());
+      cancelled = true;
     };
   }, []);
 
@@ -4354,6 +4719,55 @@ function App() {
       setStatus(error instanceof Error ? error.message : String(error));
     }
   }
+
+  openFileByRelativePathRef.current = openFile;
+
+  async function openExternalPaths(paths: string[]) {
+    const uniquePaths = Array.from(
+      new Set(paths.map(normalizedHostPath).filter(isOpenableGlypharyDocument)),
+    );
+
+    if (uniquePaths.length === 0) {
+      return;
+    }
+
+    if (!vaultRootRef.current) {
+      pendingOpenPathsRef.current = Array.from(
+        new Set([...pendingOpenPathsRef.current, ...uniquePaths]),
+      );
+      setStatus("Open a vault before opening files from Finder");
+      return;
+    }
+
+    const relativePaths = uniquePaths
+      .map((path) => vaultRelativePathFromHostPath(vaultRootRef.current, path))
+      .filter((path): path is string => Boolean(path));
+
+    if (relativePaths.length === 0) {
+      setStatus("Open With received files outside the current vault");
+      return;
+    }
+
+    for (const relativePath of relativePaths) {
+      await openFile(relativePath, { revealInVaultDrawer: true });
+    }
+
+    if (relativePaths.length !== uniquePaths.length) {
+      setStatus("Opened vault files and ignored files outside the current vault");
+    }
+  }
+
+  openExternalPathsRef.current = openExternalPaths;
+
+  useEffect(() => {
+    if (!vaultRoot || pendingOpenPathsRef.current.length === 0) {
+      return;
+    }
+
+    const paths = pendingOpenPathsRef.current;
+    pendingOpenPathsRef.current = [];
+    void openExternalPathsRef.current(paths);
+  }, [vaultRoot]);
 
   function openConfiguredNewTab() {
     if (!vaultRootRef.current) {
@@ -4758,7 +5172,7 @@ function App() {
       {
         id: "vault-delete-file",
         text: "Delete",
-        action: () => openFolderActionDialog("delete-file", entry),
+        action: () => void confirmAndDeleteFileFromContextMenu(entry),
       },
     ];
   }
@@ -4812,11 +5226,30 @@ function App() {
 
   function openFolderActionDialog(action: FolderActionKind, entry: VaultEntry) {
     setFolderContextMenu(null);
+    if (action === "delete-file") {
+      void confirmAndDeleteFileFromContextMenu(entry);
+      return;
+    }
+
     setFolderActionDialog({
       action,
       entry,
       value: folderActionInitialValue(action, entry),
     });
+  }
+
+  async function confirmAndDeleteFileFromContextMenu(entry: VaultEntry) {
+    setFolderContextMenu(null);
+    setFolderActionDialog(null);
+
+    const confirmed = await confirmDestructiveAction(
+      `Delete ${entry.relativePath} from the vault? This cannot be undone.`,
+      { okLabel: "Delete", title: "Delete File" },
+    );
+
+    if (confirmed) {
+      await deleteFileFromContextMenu(entry);
+    }
   }
 
   async function createNoteFromFolderMenu(entry: VaultEntry, noteName: string) {
@@ -5950,6 +6383,12 @@ function App() {
           replacements.size === 1 ? "" : "s"
         }`,
       );
+      void notifyUser(
+        "Glyphary import complete",
+        `Imported ${replacements.size} AI Page Builder asset${
+          replacements.size === 1 ? "" : "s"
+        }.`,
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -6247,16 +6686,20 @@ function App() {
         minWidth: 460,
         minHeight: 320,
         center: true,
+        decorations: true,
         focus: true,
+        hiddenTitle: true,
         resizable: true,
         skipTaskbar: true,
-        transparent: false,
+        titleBarStyle: "overlay",
+        trafficLightPosition: new LogicalPosition(20, 28),
+        acceptFirstMouse: true,
+        transparent: true,
+        visible: false,
       });
 
       captureWindow.once("tauri://created", () => {
         void captureWindow.emit("tidbit-capture-context", context);
-        void captureWindow.show();
-        void captureWindow.setFocus();
         setStatus("Opened tidbit capture");
       });
       captureWindow.once("tauri://error", (event) => {
@@ -7415,10 +7858,100 @@ function App() {
   const settingsCardStyle = {
     transform: `translate(${settingsOffset.x}px, ${settingsOffset.y}px)`,
   } as CSSProperties;
+  const settingsDialog = (
+    <SettingsDialog
+      activeFile={activeFile}
+      aiDraft={aiDraft}
+      aiModelOptions={aiModelOptions}
+      aiModelsLoading={aiModelsLoading}
+      aiTestStatus={aiTestStatus}
+      aiTesting={aiTesting}
+      applyThemePreset={applyThemePreset}
+      autosaveDraft={autosaveDraft}
+      chooseNewTabFile={chooseNewTabFile}
+      closeSettings={closeSettings}
+      cssSnippetDraft={cssSnippetDraft}
+      cssSnippetFiles={cssSnippetFiles}
+      debugDraft={debugDraft}
+      editorBehaviorDraft={editorBehaviorDraft}
+      fileDisplayDraft={fileDisplayDraft}
+      frontmatterPillDraft={frontmatterPillDraft}
+      moveSettingsDrag={moveSettingsDrag}
+      newTabFileDraft={newTabFileDraft}
+      normalizedCanvasDraft={normalizedCanvasDraft}
+      normalizedVaultAppearanceDraft={normalizedVaultAppearanceDraft}
+      pluginCatalog={pluginCatalog}
+      pluginDraft={pluginDraft}
+      refreshAiModels={refreshAiModels}
+      refreshCssSnippets={refreshCssSnippets}
+      refreshPlugins={refreshPlugins}
+      requestTidbitShortcutAccessibilityPermission={requestTidbitShortcutAccessibilityPermission}
+      resetThemeDraft={resetThemeDraft}
+      revertSettingsDraft={revertSettingsDraft}
+      saveVaultSettings={saveVaultSettings}
+      selectedThemePresetIdDraft={selectedThemePresetIdDraft}
+      setAutosaveDraft={setAutosaveDraft}
+      setCanvasDraft={setCanvasDraft}
+      setCssSnippetDraft={setCssSnippetDraft}
+      setDebugDraft={setDebugDraft}
+      setEditorBehaviorDraft={setEditorBehaviorDraft}
+      setFileDisplayDraft={setFileDisplayDraft}
+      setFrontmatterPillDraft={setFrontmatterPillDraft}
+      setNewTabFileDraft={setNewTabFileDraft}
+      setPluginDraft={setPluginDraft}
+      setSettingsDraft={setSettingsDraft}
+      setSettingsTab={setSettingsTab}
+      setStatus={setStatus}
+      setThemeCalloutDraft={setThemeCalloutDraft}
+      setThemeOptionsDraft={setThemeOptionsDraft}
+      setTidbitDraft={setTidbitDraft}
+      setVaultAppearanceDraft={setVaultAppearanceDraft}
+      settingsCardStyle={settingsWindowMode ? {} : settingsCardStyle}
+      settingsDraft={settingsDraft}
+      settingsDragging={settingsDragging}
+      settingsHaveChanges={settingsHaveChanges}
+      settingsOpen={settingsWindowMode || settingsOpen}
+      settingsWindowSurface={settingsWindowMode}
+      settingsTab={settingsTab}
+      shortcutFromKeyboardEvent={shortcutFromKeyboardEvent}
+      startSettingsDrag={startSettingsDrag}
+      stopSettingsDrag={stopSettingsDrag}
+      testAiConnection={testAiConnection}
+      themeCalloutDraft={themeCalloutDraft}
+      themeDraft={themeDraft}
+      themeOptionsDraft={themeOptionsDraft}
+      tidbitDraft={tidbitDraft}
+      updateAiDraft={updateAiDraft}
+      updateThemeDraftToken={updateThemeDraftToken}
+      vaultRoot={vaultRoot}
+    />
+  );
   const aiBuilderHistoryTurns = activeAiBuilderHistoryTurns();
   const tableContextEditor = tableContextMenu
     ? editorForGroup(tableContextMenu.groupId)
     : null;
+
+  if (settingsWindowMode) {
+    return (
+      <main className={`${appShellClassName} settings-window-app`} style={appShellStyle}>
+        {cssSnippetContents.map((snippet) => (
+          <style data-glyphary-css-snippet={snippet.name} key={snippet.name}>
+            {snippet.content}
+          </style>
+        ))}
+        {pluginStyles.map((style) => (
+          <style
+            data-glyphary-plugin={style.pluginId}
+            data-glyphary-plugin-style={style.name}
+            key={`${style.pluginId}:${style.name}`}
+          >
+            {style.content}
+          </style>
+        ))}
+        {settingsDialog}
+      </main>
+    );
+  }
 
   return (
     <main className={appShellClassName} style={appShellStyle}>
@@ -8398,71 +8931,7 @@ function App() {
           <CanvasMarkdownPreview markdown={calendarDayPreview.markdown} />
         </aside>
       ) : null}
-      <SettingsDialog
-        activeFile={activeFile}
-        aiDraft={aiDraft}
-        aiModelOptions={aiModelOptions}
-        aiModelsLoading={aiModelsLoading}
-        aiTestStatus={aiTestStatus}
-        aiTesting={aiTesting}
-        applyThemePreset={applyThemePreset}
-        autosaveDraft={autosaveDraft}
-        chooseNewTabFile={chooseNewTabFile}
-        closeSettings={closeSettings}
-        cssSnippetDraft={cssSnippetDraft}
-        cssSnippetFiles={cssSnippetFiles}
-        debugDraft={debugDraft}
-        editorBehaviorDraft={editorBehaviorDraft}
-        fileDisplayDraft={fileDisplayDraft}
-        frontmatterPillDraft={frontmatterPillDraft}
-        moveSettingsDrag={moveSettingsDrag}
-        newTabFileDraft={newTabFileDraft}
-        normalizedCanvasDraft={normalizedCanvasDraft}
-        normalizedVaultAppearanceDraft={normalizedVaultAppearanceDraft}
-        pluginCatalog={pluginCatalog}
-        pluginDraft={pluginDraft}
-        refreshAiModels={refreshAiModels}
-        refreshCssSnippets={refreshCssSnippets}
-        refreshPlugins={refreshPlugins}
-        requestTidbitShortcutAccessibilityPermission={requestTidbitShortcutAccessibilityPermission}
-        resetThemeDraft={resetThemeDraft}
-        revertSettingsDraft={revertSettingsDraft}
-        saveVaultSettings={saveVaultSettings}
-        selectedThemePresetIdDraft={selectedThemePresetIdDraft}
-        setAutosaveDraft={setAutosaveDraft}
-        setCanvasDraft={setCanvasDraft}
-        setCssSnippetDraft={setCssSnippetDraft}
-        setDebugDraft={setDebugDraft}
-        setEditorBehaviorDraft={setEditorBehaviorDraft}
-        setFileDisplayDraft={setFileDisplayDraft}
-        setFrontmatterPillDraft={setFrontmatterPillDraft}
-        setNewTabFileDraft={setNewTabFileDraft}
-        setPluginDraft={setPluginDraft}
-        setSettingsDraft={setSettingsDraft}
-        setSettingsTab={setSettingsTab}
-        setStatus={setStatus}
-        setThemeCalloutDraft={setThemeCalloutDraft}
-        setThemeOptionsDraft={setThemeOptionsDraft}
-        setTidbitDraft={setTidbitDraft}
-        setVaultAppearanceDraft={setVaultAppearanceDraft}
-        settingsCardStyle={settingsCardStyle}
-        settingsDraft={settingsDraft}
-        settingsDragging={settingsDragging}
-        settingsHaveChanges={settingsHaveChanges}
-        settingsOpen={settingsOpen}
-        settingsTab={settingsTab}
-        shortcutFromKeyboardEvent={shortcutFromKeyboardEvent}
-        startSettingsDrag={startSettingsDrag}
-        stopSettingsDrag={stopSettingsDrag}
-        testAiConnection={testAiConnection}
-        themeCalloutDraft={themeCalloutDraft}
-        themeDraft={themeDraft}
-        themeOptionsDraft={themeOptionsDraft}
-        tidbitDraft={tidbitDraft}
-        updateAiDraft={updateAiDraft}
-        updateThemeDraftToken={updateThemeDraftToken}
-        vaultRoot={vaultRoot}
-      />
+      {settingsDialog}
       <ExcalidrawDialog
         dialog={excalidrawDialog}
         onApi={(api) => {

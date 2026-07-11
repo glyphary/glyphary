@@ -1537,7 +1537,11 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
   assert.match(app, /WebviewWindow\.getByLabel\("tidbit-capture"\)/);
   assert.match(app, /url: `index\.html\?\$\{params\.toString\(\)\}`/);
   assert.match(app, /view: "tidbit-capture"/);
-  assert.match(app, /transparent: false/);
+  assert.match(app, /hiddenTitle: true/);
+  assert.match(app, /titleBarStyle: "overlay"/);
+  assert.match(app, /trafficLightPosition: new LogicalPosition\(20, 28\)/);
+  assert.match(app, /transparent: true/);
+  assert.match(app, /visible: false/);
   assert.match(app, /tidbit-capture-created/);
   assert.match(settingsDialog, /Enable global tidbit capture shortcut/);
   assert.match(settingsDialog, /Global tidbit shortcut/);
@@ -1587,9 +1591,17 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
   const registrationStart = app.indexOf("async function registerTidbitShortcut()");
   const registrationEnd = app.indexOf("void registerTidbitShortcut().catch", registrationStart);
   const registrationEffect = app.slice(registrationStart, registrationEnd);
+  const tidbitGlassStart = css.indexOf(':root[data-window-glass="enabled"] .tidbit-capture');
+  const tidbitGlassEnd = css.indexOf(".editor-surface h1", tidbitGlassStart);
+  const tidbitGlassCss = css.slice(tidbitGlassStart, tidbitGlassEnd);
+  const tidbitGlassRootRule =
+    css.match(/:root\[data-window-glass="enabled"\] \.tidbit-capture \{[^}]*\}/)?.[0] ?? "";
 
   assert.ok(registrationStart > -1);
   assert.ok(registrationEnd > registrationStart);
+  assert.ok(tidbitGlassStart > -1);
+  assert.ok(tidbitGlassEnd > tidbitGlassStart);
+  assert.ok(tidbitGlassRootRule);
   assert.doesNotMatch(registrationEffect, /requestTidbitShortcutAccessibilityPermission/);
   assert.doesNotMatch(registrationEffect, /checkAccessibilityPermission/);
   assert.match(css, /\.shortcut-capture-control/);
@@ -1603,6 +1615,8 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
   assert.match(capture, /function applyCaptureGlassSettings/);
   assert.match(capture, /dataset\.windowGlass = appearance\.glassEffect \? "enabled" : "disabled"/);
   assert.match(capture, /--glyphary-glass-opacity/);
+  assert.match(capture, /set_window_glass_effect/);
+  assert.match(capture, /windowLabel: getCurrentWindow\(\)\.label/);
   assert.match(capture, /function tidbitDirectory/);
   assert.match(capture, /function tidbitDisplayName/);
   assert.match(capture, /function normalizeTidbitNameDraft/);
@@ -1614,6 +1628,8 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
   assert.match(capture, /const tokens = normalizeThemeTokens\(settings\.theme\?\.tokens\)/);
   assert.match(capture, /document\.documentElement\.style\.setProperty\(token, value\)/);
   assert.match(capture, /getCurrentWindow\(\)\.setTheme\(resolvedAppearance\)/);
+  assert.match(capture, /requestAnimationFrame/);
+  assert.match(capture, /getCurrentWindow\(\)[\s\S]*\.show\(\)/);
   assert.match(capture, /useEditor\(\{/);
   assert.match(capture, /Markdown\.configure/);
   assert.match(capture, /create_vault_markdown_file/);
@@ -1624,6 +1640,7 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
   assert.match(capture, /event\.key === "Escape"/);
   assert.match(capture, /getCurrentWindow\(\)\.close\(\)/);
   assert.match(capture, /onKeyDownCapture=\{handleKeyDown\}/);
+  assert.match(capture, /platform-macos/);
   assert.match(capture, /aria-label="Tidbit name"/);
   assert.match(capture, /onDoubleClick=\{\(\) => setNameEditing\(true\)\}/);
   assert.match(capture, /Double-click to rename before saving/);
@@ -1642,6 +1659,8 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
   assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-actions button/);
   assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-actions button\.primary \{[\s\S]*background: var\(--accent\)/);
   assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-actions button\.primary \{[\s\S]*color: var\(--accent-text\)/);
+  assert.match(css, /\.tidbit-capture\.platform-macos \.tidbit-capture-header/);
+  assert.doesNotMatch(tidbitGlassRootRule, /backdrop-filter: none/);
   assert.match(css, /\.tidbit-capture-editor \.tiptap/);
   assert.match(css, /\.tidbit-capture-editor \.tiptap \{[\s\S]*max-width: var\(--glyphary-editor-max-width\)/);
 });
@@ -1934,6 +1953,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   const backend = readFileSync("src-tauri/src/lib.rs", "utf8");
   const defaultsBackend = readFileSync("src-tauri/src/defaults.rs", "utf8");
   const modelsBackend = readFileSync("src-tauri/src/models.rs", "utf8");
+  const nativeMenuBackend = readFileSync("src-tauri/src/native_menu.rs", "utf8");
   const snippetsBackend = readFileSync("src-tauri/src/snippets.rs", "utf8");
   const settingsTestsBackend = readFileSync("src-tauri/src/tests/settings.rs", "utf8");
   const themesBackend = readFileSync("src-tauri/src/themes.rs", "utf8");
@@ -2202,9 +2222,9 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(config.bundle.copyright, /Glyphary contributors/);
   assert.match(cargo, /macos-private-api/);
   assert.match(cargo, /objc2-app-kit = \{ version = "0\.3\.2", default-features = false, features = \["NSButton", "NSControl", "NSView", "NSWindow"\] \}/);
-  assert.match(backend, /name: Some\("Glyphary"\.into\(\)\)/);
-  assert.match(backend, /A local-first Markdown workspace/);
-  assert.match(backend, /Built with Tauri, React, Tiptap/);
+  assert.match(nativeMenuBackend, /name: Some\("Glyphary"\.into\(\)\)/);
+  assert.match(nativeMenuBackend, /A local-first Markdown workspace/);
+  assert.match(nativeMenuBackend, /Built with Tauri, React, Tiptap/);
   assert.match(modelsBackend, /pub\(crate\) struct AppearanceSettings/);
   assert.match(modelsBackend, /glass_effect/);
   assert.match(modelsBackend, /glass_opacity/);

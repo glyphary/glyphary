@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type { BaseQueryResult, BaseRow, BaseViewResult } from "../lib/app-types";
 import { vaultImagePathCandidates } from "../app-state/documents";
 import { isUrlLike } from "../lib/paths";
+import {
+  nativeMenuSeparator,
+  popupNativeMenu,
+  type NativeMenuEntry,
+} from "../native/native-menus";
 import { queryBase } from "../vault/persistence";
 import {
   baseAvailableFields,
@@ -250,6 +256,70 @@ function BaseControls({
     onOpenControlChange(openControl === control ? null : control);
   }
 
+  async function openSortMenu(event: ReactMouseEvent<HTMLButtonElement>) {
+    const menuItems: NativeMenuEntry[] = [
+      ...fieldOptions.map((field) => ({
+        kind: "check" as const,
+        id: `base-sort-field-${field}`,
+        text: baseFieldLabel(field),
+        checked: sortField === field,
+        action: () => onSortFieldChange(field),
+      })),
+      nativeMenuSeparator,
+      {
+        kind: "check" as const,
+        id: "base-sort-asc",
+        text: "Ascending",
+        checked: sortDirection === "asc",
+        action: () => onSortDirectionChange("asc"),
+      },
+      {
+        kind: "check" as const,
+        id: "base-sort-desc",
+        text: "Descending",
+        checked: sortDirection === "desc",
+        action: () => onSortDirectionChange("desc"),
+      },
+    ];
+    const opened = await popupNativeMenu(menuItems, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+
+    if (opened) {
+      onOpenControlChange(null);
+      return;
+    }
+
+    toggleControl("sort");
+  }
+
+  async function openFieldsMenu(event: ReactMouseEvent<HTMLButtonElement>) {
+    const menuItems: NativeMenuEntry[] = fieldOptions.map((field) => {
+      const checked = selectedFields.includes(field);
+
+      return {
+        kind: "check" as const,
+        id: `base-field-${field}`,
+        text: baseFieldLabel(field),
+        checked,
+        enabled: !checked || selectedFields.length > 1,
+        action: () => toggleField(field),
+      };
+    });
+    const opened = await popupNativeMenu(menuItems, {
+      x: event.clientX,
+      y: event.clientY,
+    });
+
+    if (opened) {
+      onOpenControlChange(null);
+      return;
+    }
+
+    toggleControl("fields");
+  }
+
   return (
     <div className="base-controls" aria-label="Base view controls">
       <span className="base-result-count">
@@ -295,7 +365,7 @@ function BaseControls({
             }
             title="Sort"
             type="button"
-            onClick={() => toggleControl("sort")}
+            onClick={(event) => void openSortMenu(event)}
           >
             {baseControlIcon("sort")}
           </button>
@@ -340,7 +410,7 @@ function BaseControls({
             className={openControl === "fields" ? "active" : ""}
             title="Displayed properties"
             type="button"
-            onClick={() => toggleControl("fields")}
+            onClick={(event) => void openFieldsMenu(event)}
           >
             {baseControlIcon("fields")}
           </button>

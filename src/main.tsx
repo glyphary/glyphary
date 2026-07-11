@@ -38,9 +38,12 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
   }
 }
 
+const query = new URLSearchParams(window.location.search);
 const rootView =
-  new URLSearchParams(window.location.search).get("view") === "tidbit-capture" ? (
+  query.get("view") === "tidbit-capture" ? (
     <TidbitCapture />
+  ) : query.get("view") === "settings" ? (
+    <App settingsWindowMode />
   ) : (
     <App />
   );

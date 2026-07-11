@@ -105,6 +105,7 @@ type SettingsDialogProps = {
   settingsDragging: SettingsDragState | null;
   settingsHaveChanges: () => boolean;
   settingsOpen: boolean;
+  settingsWindowSurface?: boolean;
   settingsTab: SettingsTab;
   shortcutFromKeyboardEvent: (event: KeyboardEvent<HTMLInputElement>) => string;
   startSettingsDrag: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -172,6 +173,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     settingsDragging,
     settingsHaveChanges,
     settingsOpen,
+    settingsWindowSurface = false,
     settingsTab,
     shortcutFromKeyboardEvent,
     startSettingsDrag,
@@ -190,86 +192,121 @@ export function SettingsDialog(props: SettingsDialogProps) {
     return null;
   }
 
+  const settingsTabTitle: Record<SettingsTab, string> = {
+    main: "General",
+    appearance: "Appearance",
+    canvas: "Canvas",
+    plugins: "Plugins",
+    ai: "AI",
+    debug: "Debug",
+  };
+  const settingsTabs = (
+    <div className="settings-tabs" role="tablist" aria-label="Settings groups">
+      <button
+        className={settingsTab === "main" ? "active" : ""}
+        type="button"
+        role="tab"
+        aria-selected={settingsTab === "main"}
+        onClick={() => setSettingsTab("main")}
+      >
+        General
+      </button>
+      <button
+        className={settingsTab === "appearance" ? "active" : ""}
+        type="button"
+        role="tab"
+        aria-selected={settingsTab === "appearance"}
+        onClick={() => setSettingsTab("appearance")}
+      >
+        Appearance
+      </button>
+      <button
+        className={settingsTab === "canvas" ? "active" : ""}
+        type="button"
+        role="tab"
+        aria-selected={settingsTab === "canvas"}
+        onClick={() => setSettingsTab("canvas")}
+      >
+        Canvas
+      </button>
+      <button
+        className={settingsTab === "plugins" ? "active" : ""}
+        type="button"
+        role="tab"
+        aria-selected={settingsTab === "plugins"}
+        onClick={() => setSettingsTab("plugins")}
+      >
+        Plugins
+      </button>
+      <button
+        className={settingsTab === "ai" ? "active" : ""}
+        type="button"
+        role="tab"
+        aria-selected={settingsTab === "ai"}
+        onClick={() => setSettingsTab("ai")}
+      >
+        AI
+      </button>
+      <button
+        className={settingsTab === "debug" ? "active" : ""}
+        type="button"
+        role="tab"
+        aria-selected={settingsTab === "debug"}
+        onClick={() => setSettingsTab("debug")}
+      >
+        Debug
+      </button>
+    </div>
+  );
+
   return (
-      <div className="settings-screen" role="dialog" aria-modal="true" aria-label="Settings">
-        <div className="settings-card" style={settingsCardStyle}>
+    <div
+      className={settingsWindowSurface ? "settings-screen settings-window-screen" : "settings-screen"}
+      role="dialog"
+      aria-modal={!settingsWindowSurface}
+      aria-label="Settings"
+    >
+      <div className="settings-card" style={settingsCardStyle}>
           <div
-            className={settingsDragging ? "settings-header dragging" : "settings-header"}
+            className={
+              !settingsWindowSurface && settingsDragging
+                ? "settings-header dragging"
+                : "settings-header"
+            }
+            data-tauri-drag-region={settingsWindowSurface ? true : undefined}
             onPointerCancel={stopSettingsDrag}
             onPointerDown={startSettingsDrag}
             onPointerMove={moveSettingsDrag}
             onPointerUp={stopSettingsDrag}
           >
-            <div>
-              <h2>Settings</h2>
-              <span>{vaultRoot ? "Current vault" : "No vault open"}</span>
-            </div>
-            <button
-              className="inline-action"
-              type="button"
-              aria-label="Close settings"
-              onClick={closeSettings}
-            >
-              Close
-            </button>
+            {settingsWindowSurface ? (
+              settingsTabs
+            ) : (
+              <>
+                <div>
+                  <h2>Settings</h2>
+                  <span>{vaultRoot ? "Current vault" : "No vault open"}</span>
+                </div>
+                <button
+                  className="inline-action"
+                  type="button"
+                  aria-label="Close settings"
+                  onClick={closeSettings}
+                >
+                  Close
+                </button>
+              </>
+            )}
           </div>
           <div className="settings-panel">
-            <div className="settings-tabs" role="tablist" aria-label="Settings groups">
-              <button
-                className={settingsTab === "main" ? "active" : ""}
-                type="button"
-                role="tab"
-                aria-selected={settingsTab === "main"}
-                onClick={() => setSettingsTab("main")}
-              >
-                Main
-              </button>
-              <button
-                className={settingsTab === "appearance" ? "active" : ""}
-                type="button"
-                role="tab"
-                aria-selected={settingsTab === "appearance"}
-                onClick={() => setSettingsTab("appearance")}
-              >
-                Appearance
-              </button>
-              <button
-                className={settingsTab === "canvas" ? "active" : ""}
-                type="button"
-                role="tab"
-                aria-selected={settingsTab === "canvas"}
-                onClick={() => setSettingsTab("canvas")}
-              >
-                Canvas
-              </button>
-              <button
-                className={settingsTab === "plugins" ? "active" : ""}
-                type="button"
-                role="tab"
-                aria-selected={settingsTab === "plugins"}
-                onClick={() => setSettingsTab("plugins")}
-              >
-                Plugins
-              </button>
-              <button
-                className={settingsTab === "ai" ? "active" : ""}
-                type="button"
-                role="tab"
-                aria-selected={settingsTab === "ai"}
-                onClick={() => setSettingsTab("ai")}
-              >
-                AI
-              </button>
-              <button
-                className={settingsTab === "debug" ? "active" : ""}
-                type="button"
-                role="tab"
-                aria-selected={settingsTab === "debug"}
-                onClick={() => setSettingsTab("debug")}
-              >
-                Debug
-              </button>
-            </div>
+            {settingsWindowSurface ? (
+              <div className="settings-content-title" data-tauri-drag-region>
+                <h2>{settingsTabTitle[settingsTab]}</h2>
+                <span>{vaultRoot ? "Current vault" : "No vault open"}</span>
+              </div>
+            ) : (
+              settingsTabs
+            )}
             {settingsTab === "main" ? (
               <div className="settings-tab-panel" role="tabpanel" aria-label="Main settings">
                 <section className="settings-section" aria-label="Vault settings">

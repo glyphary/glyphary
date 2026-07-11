@@ -443,6 +443,12 @@ body {
   background: var(--glass-muted-overlay);
 }
 
+:root[data-window-glass="enabled"] .tidbit-capture-actions button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
 button {
   font: inherit;
 }
@@ -3074,6 +3080,10 @@ body.workspace-resizing * {
   border-bottom: 1px solid var(--border-soft);
 }
 
+.tidbit-capture.platform-macos .tidbit-capture-header {
+  padding: 44px 16px 12px 88px;
+}
+
 .tidbit-capture-header h1 {
   margin: 0;
   color: var(--heading);
@@ -3196,26 +3206,6 @@ body.workspace-resizing * {
 .tidbit-capture-actions button:disabled {
   cursor: default;
   opacity: 0.55;
-}
-
-:root[data-window-glass="enabled"] .tidbit-capture {
-  background: var(--app-bg);
-  backdrop-filter: none;
-}
-
-:root[data-window-glass="enabled"] .tidbit-capture-header,
-:root[data-window-glass="enabled"] .tidbit-capture-footer {
-  background: var(--surface-muted);
-}
-
-:root[data-window-glass="enabled"] .tidbit-capture-editor {
-  background: var(--surface);
-}
-
-:root[data-window-glass="enabled"] .tidbit-capture-actions button.primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-text);
 }
 
 .editor-surface h1 {
@@ -4751,11 +4741,15 @@ body.workspace-resizing * {
 
 .settings-tab-panel {
   display: grid;
+  align-content: start;
+  align-items: start;
   gap: 14px;
 }
 
 .settings-section {
   display: grid;
+  align-content: start;
+  align-items: start;
   gap: 10px;
 }
 
@@ -4786,7 +4780,7 @@ body.workspace-resizing * {
   width: fit-content;
   max-width: 100%;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -4795,6 +4789,7 @@ body.workspace-resizing * {
   height: 16px;
   min-width: 16px;
   accent-color: var(--accent);
+  margin-top: 1px;
 }
 
 .settings-panel .settings-check-control span {
@@ -6179,6 +6174,158 @@ body.workspace-resizing * {
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 700;
+}
+
+.settings-window-app {
+  min-height: 100vh;
+  background: var(--app-bg);
+}
+
+.settings-window-screen {
+  position: static;
+  inset: auto;
+  min-height: 100vh;
+  place-items: stretch;
+  padding: 0;
+  animation: none;
+}
+
+.settings-window-screen .settings-card {
+  display: grid;
+  grid-template-columns: 204px minmax(0, 1fr);
+  width: 100%;
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  background: var(--app-bg);
+  box-shadow: none;
+  animation: none;
+}
+
+.settings-window-screen .settings-header {
+  grid-column: 1;
+  grid-row: 1;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0;
+  border-right: 1px solid color-mix(in srgb, var(--border-soft) 72%, transparent);
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--surface-muted) 62%, transparent);
+  cursor: default;
+  padding: 58px 8px 12px;
+  touch-action: auto;
+}
+
+.settings-window-screen .settings-panel {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1;
+  grid-template-rows: 56px minmax(0, 1fr) auto;
+  max-height: none;
+  min-height: 0;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.settings-window-screen .settings-tabs {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.settings-window-screen .settings-tabs button {
+  display: flex;
+  width: 100%;
+  height: 28px;
+  align-items: center;
+  justify-content: flex-start;
+  border-radius: 6px;
+  color: var(--heading);
+  font-size: 0.84rem;
+  font-weight: 700;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.settings-window-screen .settings-tabs button:hover {
+  background: color-mix(in srgb, var(--hover) 78%, transparent);
+}
+
+.settings-window-screen .settings-tabs button.active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.settings-content-title {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-soft) 58%, transparent);
+  padding: 0 24px 0 22px;
+}
+
+.settings-content-title h2 {
+  margin: 0;
+  color: var(--heading);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.settings-content-title span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-window-screen .settings-tab-panel {
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 22px 16px;
+}
+
+.settings-window-screen .settings-section {
+  border: 1px solid color-mix(in srgb, var(--border-soft) 78%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  padding: 14px;
+}
+
+.settings-window-screen .settings-actions {
+  border-top: 1px solid color-mix(in srgb, var(--border-soft) 58%, transparent);
+  background: color-mix(in srgb, var(--surface-muted) 54%, transparent);
+  padding: 12px 22px;
+}
+
+:root[data-window-glass="enabled"] .settings-window-app {
+  background: var(--glass-app-overlay);
+  backdrop-filter: blur(34px) saturate(1.26);
+}
+
+:root[data-window-glass="enabled"] .settings-window-screen .settings-card {
+  background: transparent;
+}
+
+:root[data-window-glass="enabled"] .settings-window-screen .settings-header {
+  background: var(--glass-muted-overlay);
+}
+
+:root[data-window-glass="enabled"] .settings-window-screen .settings-section {
+  background: var(--glass-surface-overlay);
+}
+
+:root[data-window-glass="enabled"] .settings-window-screen .settings-actions {
+  background: var(--glass-muted-overlay);
 }
 
 .markdown-import,

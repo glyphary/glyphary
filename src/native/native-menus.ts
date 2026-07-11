@@ -1,6 +1,12 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
+import {
+  CheckMenuItem,
+  Menu,
+  MenuItem,
+  PredefinedMenuItem,
+  Submenu,
+} from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 // Responsibilities:
@@ -20,6 +26,15 @@ type NativeMenuCommand = {
   action: () => void | Promise<void>;
 };
 
+type NativeMenuCheckCommand = {
+  kind: "check";
+  id: string;
+  text: string;
+  checked: boolean;
+  enabled?: boolean;
+  action: () => void | Promise<void>;
+};
+
 type NativeMenuSeparator = {
   kind: "separator";
 };
@@ -34,6 +49,7 @@ type NativeMenuSubmenu = {
 
 export type NativeMenuEntry =
   | NativeMenuCommand
+  | NativeMenuCheckCommand
   | NativeMenuSeparator
   | NativeMenuSubmenu;
 
@@ -54,6 +70,18 @@ async function createNativeMenuItems(
           text: entry.text,
           enabled: entry.enabled ?? entry.items.length > 0,
           items: await createNativeMenuItems(entry.items),
+        });
+      }
+
+      if (entry.kind === "check") {
+        return CheckMenuItem.new({
+          id: entry.id,
+          text: entry.text,
+          checked: entry.checked,
+          enabled: entry.enabled ?? true,
+          action: () => {
+            void entry.action();
+          },
         });
       }
 

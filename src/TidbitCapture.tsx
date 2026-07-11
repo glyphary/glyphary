@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { EditorContent, useEditor } from "@tiptap/react";
@@ -10,6 +10,7 @@ import { TaskItem } from "@tiptap/extension-task-item";
 import { TaskList } from "@tiptap/extension-task-list";
 import { defaultTidbitPathPattern } from "./lib/defaults";
 import { expandDateTemplate } from "./lib/dates";
+import { isMacOsPlatform } from "./lib/platform";
 import { normalizeVaultAppearanceSettings } from "./lib/settings";
 import { normalizeThemeTokens } from "./settings/theme-options";
 import type { VaultAppearanceSettings } from "./lib/app-types";
@@ -92,6 +93,8 @@ function applyCaptureGlassSettings(settings: VaultSettings["appearance"] | undef
     "--glyphary-glass-opacity",
     String(appearance.glassOpacity),
   );
+
+  return appearance;
 }
 
 function tidbitDirectory(relativePath: string) {
@@ -138,6 +141,7 @@ export default function TidbitCapture() {
   );
   const [nameDraft, setNameDraft] = useState(() => tidbitDisplayName(relativePath));
   const saveRelativePath = tidbitRelativePathFromName(relativePath, nameDraft);
+  const isMacOs = isMacOsPlatform(window.navigator.platform, window.navigator.userAgent);
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -189,6 +193,33 @@ export default function TidbitCapture() {
   }, [editor]);
 
   useEffect(() => {
+    if (!isTauri()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) {
+          return;
+        }
+
+        void getCurrentWindow()
+          .show()
+          .then(() => getCurrentWindow().setFocus())
+          .catch((error) => {
+            setStatus(error instanceof Error ? error.message : String(error));
+          });
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     setNameDraft(tidbitDisplayName(relativePath));
     setNameEditing(false);
   }, [relativePath]);
@@ -230,7 +261,16 @@ export default function TidbitCapture() {
           return;
         }
 
-        applyCaptureGlassSettings(settings.appearance);
+        const appearance = applyCaptureGlassSettings(settings.appearance);
+
+        if (isTauri()) {
+          void invoke<boolean>("set_window_glass_effect", {
+            enabled: appearance.glassEffect,
+            windowLabel: getCurrentWindow().label,
+          }).catch((error) => {
+            setStatus(error instanceof Error ? error.message : String(error));
+          });
+        }
 
         for (const [token, value] of Object.entries(tokens)) {
           document.documentElement.style.setProperty(token, value);
@@ -324,7 +364,10 @@ export default function TidbitCapture() {
   }
 
   return (
-    <main className="tidbit-capture" onKeyDownCapture={handleKeyDown}>
+    <main
+      className={`tidbit-capture${isMacOs ? " platform-macos" : ""}`}
+      onKeyDownCapture={handleKeyDown}
+    >
       <header className="tidbit-capture-header">
         <div>
           <h1>New Tidbit</h1>
