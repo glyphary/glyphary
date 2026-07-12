@@ -45,6 +45,7 @@ import {
 } from "./markdown-extensions";
 import { createExcalidrawEmbedExtension } from "../excalidraw/editor";
 import { createVaultImageExtension } from "./vault-images";
+import { createGlypharyMarked } from "../lib/markdown-table";
 
 // Responsibilities:
 // - Build the Tiptap option object used by both editor groups.
@@ -190,6 +191,7 @@ export function createGlypharyEditorOptions({
         },
       }),
       Markdown.configure({
+        marked: createGlypharyMarked(),
         markedOptions: { gfm: true },
       }),
     ],

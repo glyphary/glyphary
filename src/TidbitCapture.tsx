@@ -15,6 +15,7 @@ import { isMacOsPlatform } from "./lib/platform";
 import { normalizeVaultAppearanceSettings } from "./lib/settings";
 import { normalizeThemeTokens } from "./settings/theme-options";
 import type { VaultAppearanceSettings } from "./lib/app-types";
+import { createGlypharyMarked } from "./lib/markdown-table";
 
 type AppearanceMode = "auto" | "light" | "dark";
 
@@ -151,6 +152,7 @@ export default function TidbitCapture() {
         nested: true,
       }),
       Markdown.configure({
+        marked: createGlypharyMarked(),
         markedOptions: { gfm: true },
       }),
     ],

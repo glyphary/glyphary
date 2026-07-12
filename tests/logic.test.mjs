@@ -55,6 +55,10 @@ import {
   splitMetaHeader,
 } from "../.test-dist/markdown.js";
 import {
+  createGlypharyMarked,
+  splitGfmTableRow,
+} from "../.test-dist/markdown-table.js";
+import {
   excalidrawFileNameForTitle,
   fileNameForDroppedImage,
   isSupportedImageFile,
@@ -469,6 +473,23 @@ test("toc fenced code blocks have an inline renderer while staying markdown code
 test("table insertion seed keeps markdown table support available", () => {
   assert.match(emptyTableMarkdown, /^\| Column 1 \| Column 2 \| Column 3 \|/);
   assert.match(emptyTableMarkdown, /\| --- \| --- \| --- \|/);
+});
+
+test("table parsing keeps wikilink alias pipes inside the cell", () => {
+  const row = "| 1 | [[00 Start Here/01 Quick Start|Quick Start]] | ![[image.png|300]] |";
+  const source = "| Step | Page | Image |\n| --- | --- | --- |\n" + row + "\n\nAfter";
+  const parser = createGlypharyMarked();
+  const table = new parser.Lexer().lex(source)[0];
+
+  assert.deepEqual(splitGfmTableRow(row), [
+    "1",
+    "[[00 Start Here/01 Quick Start|Quick Start]]",
+    "![[image.png|300]]",
+  ]);
+  assert.equal(table.type, "table");
+  assert.equal(table.rows[0][1].text, "[[00 Start Here/01 Quick Start|Quick Start]]");
+  assert.equal(table.rows[0][2].text, "![[image.png|300]]");
+  assert.equal(table.raw.endsWith("After"), false);
 });
 
 test("block-widget boundaries expose an editable insertion point", () => {
@@ -1376,6 +1397,7 @@ test("wikilinks use the vault filename index for navigation and insertion", () =
   const app = readFileSync("src/App.tsx", "utf8");
   const wikilinks = readFileSync("src/editor/wikilinks.ts", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
+  const tidbitCapture = readFileSync("src/TidbitCapture.tsx", "utf8");
   const wikiLinkState = readFileSync("src/app-state/wikilinks.ts", "utf8");
   const vaultPersistence = readFileSync("src/vault/persistence.ts", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
@@ -1393,6 +1415,8 @@ test("wikilinks use the vault filename index for navigation and insertion", () =
   assert.match(appTypes, /export type VaultIndexedFile/);
   assert.match(appTypes, /export type WikiLinkPickerState/);
   assert.match(editorOptions, /createWikiLinkExtension/);
+  assert.match(editorOptions, /marked: createGlypharyMarked\(\)/);
+  assert.match(tidbitCapture, /marked: createGlypharyMarked\(\)/);
   assert.match(wikilinks, /Responsibilities:/);
   assert.match(wikilinks, /Contracts:/);
   assert.match(wikilinks, /wikiLinkTokenPattern/);
