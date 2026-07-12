@@ -2047,45 +2047,62 @@ body.workspace-resizing * {
 
 .metadata-toggle {
   position: relative;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: var(--surface);
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
   cursor: pointer;
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    transform 160ms ease;
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .metadata-toggle:hover {
-  border-color: var(--focus);
-  transform: translateY(-1px);
+  background: var(--hover);
 }
 
 .metadata-toggle::before {
   position: absolute;
-  top: 7px;
-  left: 8px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid var(--muted-strong);
-  border-bottom: 2px solid var(--muted-strong);
-  transform: rotate(-45deg);
-  transition: transform 160ms ease;
+  top: 5px;
+  left: 6px;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--muted-strong);
+  transform-origin: 3px 4px;
+  transition: transform 120ms ease;
   content: "";
 }
 
 .metadata-toggle.open::before {
-  top: 6px;
-  transform: rotate(45deg);
+  transform: rotate(90deg);
 }
 
 .metadata-control {
-  display: flex;
+  display: grid;
   min-width: 0;
-  flex-direction: column;
+  gap: 6px;
+}
+
+.frontmatter-rows {
+  display: grid;
+  min-width: 0;
+}
+
+.frontmatter-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(110px, 0.34fr) minmax(160px, 1fr) 28px;
+  align-items: start;
+  gap: 8px;
+  padding: 5px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border-soft) 58%, transparent);
+}
+
+.frontmatter-row:last-child {
+  border-bottom: 1px solid color-mix(in srgb, var(--border-soft) 58%, transparent);
 }
 
 .frontmatter-header span {
@@ -2138,6 +2155,119 @@ body.workspace-resizing * {
   resize: vertical;
   padding: 8px 10px;
   line-height: 1.45;
+}
+
+.frontmatter-value-list {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 3px 0;
+}
+
+.frontmatter-value-pill {
+  display: inline-flex;
+  max-width: 100%;
+  height: 27px;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--heading);
+}
+
+.metadata-shell .frontmatter-value-pill input {
+  width: auto;
+  max-width: min(28ch, 240px);
+  height: 25px;
+  border: 0;
+  background: transparent;
+  padding: 0 2px 0 8px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.frontmatter-value-pill button {
+  width: 23px;
+  height: 23px;
+  flex: 0 0 23px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.frontmatter-value-pill button:hover {
+  background: color-mix(in srgb, var(--danger, #c94848) 12%, transparent);
+  color: var(--danger, #c94848);
+}
+
+.metadata-shell .frontmatter-value-add {
+  width: 86px;
+  height: 27px;
+  border-style: dashed;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0 9px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.frontmatter-remove,
+.frontmatter-add {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.frontmatter-remove {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.frontmatter-remove:hover {
+  background: color-mix(in srgb, var(--danger, #c94848) 12%, transparent);
+  color: var(--danger, #c94848);
+}
+
+.frontmatter-add {
+  justify-self: start;
+  padding: 4px 2px;
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.frontmatter-add span {
+  display: inline-block;
+  width: 16px;
+  margin-right: 3px;
+  font-size: 1rem;
+  line-height: 0;
+}
+
+.frontmatter-add:hover {
+  color: var(--accent);
+}
+
+.frontmatter-remove:disabled,
+.frontmatter-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .metadata-shell input:focus,
@@ -6812,6 +6942,20 @@ body.workspace-resizing * {
 }
 
 @media (max-width: 560px) {
+  .frontmatter-row {
+    grid-template-columns: minmax(0, 1fr) 28px;
+  }
+
+  .frontmatter-row > :nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .frontmatter-remove {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
   .titlebar {
     flex-direction: column;
   }

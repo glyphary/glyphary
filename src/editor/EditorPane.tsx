@@ -1,5 +1,4 @@
 import type {
-  ChangeEvent,
   Dispatch,
   MouseEvent as ReactMouseEvent,
   SetStateAction,
@@ -11,8 +10,14 @@ import { BaseView } from "../base/BaseView";
 import { CanvasView, type CanvasCommandRequest } from "../CanvasView";
 import { renderToolbarIcon, type ToolbarIconName } from "../toolbar-icons";
 import {
+  appendFrontmatterEntry,
+  frontmatterEntries,
+  frontmatterEntryListValues,
   frontmatterListValues,
   frontmatterScalarValue,
+  replaceFrontmatterEntry,
+  serializeFrontmatterListValues,
+  type MarkdownParts,
 } from "../lib/markdown";
 import { fileNameWithoutMarkdownExtension } from "../lib/paths";
 import { normalizeFrontmatterPillSettings } from "../lib/settings";
@@ -57,6 +62,7 @@ export function EditorPane({
   groupEditor,
   groupId,
   markdown,
+  metaDelimiter,
   metaHeader,
   metadataOpen,
   onActivateGroup,
@@ -92,6 +98,7 @@ export function EditorPane({
   groupEditor: Editor | null;
   groupId: EditorGroupId;
   markdown: string;
+  metaDelimiter: MarkdownParts["metaDelimiter"];
   metaHeader: string;
   metadataOpen: boolean;
   onActivateGroup: (groupId: EditorGroupId) => void;
@@ -126,6 +133,9 @@ export function EditorPane({
     group.tabs.find((tab) => tab.id === group.activeTabId) ?? group.tabs[0] ?? null;
   const isActiveGroup = groupId === activeGroupId;
   const panePageName = isActiveGroup ? pageName : groupActiveTab?.pageName ?? "Untitled note";
+  const paneMetaDelimiter = isActiveGroup
+    ? metaDelimiter
+    : groupActiveTab?.metaDelimiter ?? "---";
   const paneMetaHeader = isActiveGroup ? metaHeader : groupActiveTab?.metaHeader ?? "";
   const paneMarkdown = isActiveGroup ? markdown : groupActiveTab?.markdown ?? "";
   const paneActiveFile = isActiveGroup ? activeFile : groupActiveTab?.activeFile ?? null;
@@ -139,13 +149,14 @@ export function EditorPane({
   const frontmatterPills = frontmatterPillSettings.enabled
     ? frontmatterListValues(paneMetaHeader, frontmatterPillSettings.headerName)
     : [];
+  const metadataEntries = frontmatterEntries(paneMetaHeader, paneMetaDelimiter);
   const bannerSrc = isMarkdownTab
     ? joinVaultRelativeImagePath(vaultRoot, frontmatterScalarValue(paneMetaHeader, "banner"))
     : "";
 
-  function handleMetaHeaderChange(event: ChangeEvent<HTMLTextAreaElement>) {
+  function handleMetaHeaderChange(nextMetaHeader: string) {
     onActivateGroup(groupId);
-    onMetaHeaderChange(event.currentTarget.value);
+    onMetaHeaderChange(nextMetaHeader);
 
     if (paneActiveFile) {
       onSetActiveDocumentDirty(true);
@@ -281,15 +292,194 @@ export function EditorPane({
                 ) : null}
               </div>
               {metadataOpen ? (
-                <label className="metadata-control" id={`${groupId}-frontmatter-editor`}>
-                  <textarea
+                <div className="metadata-control" id={`${groupId}-frontmatter-editor`}>
+                  <div className="frontmatter-rows">
+                    {metadataEntries.map((entry, index) => {
+                      const inputKey = `${paneActiveFile?.relativePath ?? "untitled"}:${entry.startLine}:${entry.key}`;
+                      const keyPattern = paneMetaDelimiter === "+++"
+                        ? /^[A-Za-z0-9_.-]+$/
+                        : /^[A-Za-z0-9_-]+$/;
+                      const updateEntry = (key: string, value: string) =>
+                        handleMetaHeaderChange(
+                          replaceFrontmatterEntry(paneMetaHeader, paneMetaDelimiter, index, {
+                            key,
+                            value,
+                          }),
+                        );
+                      const listValues = frontmatterEntryListValues(
+                        entry.value,
+                        entry.key.toLowerCase() === "tags",
+                      );
+                      const updateListValues = (values: string[]) =>
+                        updateEntry(entry.key, serializeFrontmatterListValues(values));
+
+                      return (
+                        <div className="frontmatter-row" key={inputKey}>
+                          <input
+                            aria-label={`Property ${entry.key} name`}
+                            defaultValue={entry.key}
+                            disabled={!paneActiveFile}
+                            spellCheck="false"
+                            onBlur={(event) => {
+                              const nextKey = event.currentTarget.value.trim();
+
+                              if (!keyPattern.test(nextKey)) {
+                                event.currentTarget.value = entry.key;
+                                return;
+                              }
+
+                              if (nextKey !== entry.key) {
+                                updateEntry(nextKey, entry.value);
+                              }
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.currentTarget.blur();
+                              } else if (event.key === "Escape") {
+                                event.currentTarget.value = entry.key;
+                                event.currentTarget.blur();
+                              }
+                            }}
+                          />
+                          {listValues ? (
+                            <div
+                              className="frontmatter-value-list"
+                              aria-label={`${entry.key} values`}
+                            >
+                              {listValues.map((value, valueIndex) => (
+                                <span className="frontmatter-value-pill" key={valueIndex}>
+                                  <input
+                                    aria-label={`${entry.key} value ${valueIndex + 1}`}
+                                    disabled={!paneActiveFile}
+                                    spellCheck="false"
+                                    style={{
+                                      width: `${Math.max(4, Math.min(28, value.length + 1))}ch`,
+                                    }}
+                                    value={value}
+                                    onBlur={(event) => {
+                                      const nextValue = event.currentTarget.value.trim();
+
+                                      if (!nextValue) {
+                                        updateListValues(
+                                          listValues.filter((_, index) => index !== valueIndex),
+                                        );
+                                      } else if (nextValue !== value) {
+                                        updateListValues(
+                                          listValues.map((item, index) =>
+                                            index === valueIndex ? nextValue : item,
+                                          ),
+                                        );
+                                      }
+                                    }}
+                                    onChange={(event) =>
+                                      updateListValues(
+                                        listValues.map((item, index) =>
+                                          index === valueIndex ? event.currentTarget.value : item,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                  <button
+                                    disabled={!paneActiveFile}
+                                    type="button"
+                                    aria-label={`Remove ${value || "empty value"}`}
+                                    title={`Remove ${value || "empty value"}`}
+                                    onClick={() =>
+                                      updateListValues(
+                                        listValues.filter((_, index) => index !== valueIndex),
+                                      )
+                                    }
+                                  >
+                                    <span aria-hidden="true">&times;</span>
+                                  </button>
+                                </span>
+                              ))}
+                              <input
+                                className="frontmatter-value-add"
+                                aria-label={`Add ${entry.key} value`}
+                                disabled={!paneActiveFile}
+                                placeholder="Add value"
+                                spellCheck="false"
+                                onBlur={(event) => {
+                                  const value = event.currentTarget.value.trim();
+
+                                  if (
+                                    value &&
+                                    !listValues.some(
+                                      (item) => item.toLowerCase() === value.toLowerCase(),
+                                    )
+                                  ) {
+                                    updateListValues([...listValues, value]);
+                                    event.currentTarget.value = "";
+                                  }
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    const value = event.currentTarget.value.trim();
+
+                                    if (
+                                      value &&
+                                      !listValues.some(
+                                        (item) => item.toLowerCase() === value.toLowerCase(),
+                                      )
+                                    ) {
+                                      updateListValues([...listValues, value]);
+                                      event.currentTarget.value = "";
+                                    }
+                                  } else if (event.key === "Escape") {
+                                    event.currentTarget.value = "";
+                                    event.currentTarget.blur();
+                                  }
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <input
+                              aria-label={`${entry.key} value`}
+                              disabled={!paneActiveFile}
+                              spellCheck="false"
+                              value={entry.value.replace(/\s*\n\s*/g, " ")}
+                              onChange={(event) => updateEntry(entry.key, event.currentTarget.value)}
+                            />
+                          )}
+                          <button
+                            className="frontmatter-remove"
+                            disabled={!paneActiveFile}
+                            type="button"
+                            aria-label={`Remove ${entry.key}`}
+                            title={`Remove ${entry.key}`}
+                            onClick={() =>
+                              handleMetaHeaderChange(
+                                replaceFrontmatterEntry(
+                                  paneMetaHeader,
+                                  paneMetaDelimiter,
+                                  index,
+                                  null,
+                                ),
+                              )
+                            }
+                          >
+                            <span aria-hidden="true">&minus;</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    className="frontmatter-add"
                     disabled={!paneActiveFile}
-                    spellCheck="false"
-                    value={paneMetaHeader}
-                    onChange={handleMetaHeaderChange}
-                    placeholder="title: Example&#10;tags: [note]"
-                  />
-                </label>
+                    type="button"
+                    onClick={() =>
+                      handleMetaHeaderChange(
+                        appendFrontmatterEntry(paneMetaHeader, paneMetaDelimiter),
+                      )
+                    }
+                  >
+                    <span aria-hidden="true">+</span>
+                    Add property
+                  </button>
+                </div>
               ) : null}
             </div>
           ) : null}

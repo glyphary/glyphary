@@ -8195,6 +8195,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         groupEditor={groupEditor}
         groupId={groupId}
         markdown={markdown}
+        metaDelimiter={metaDelimiter}
         metaHeader={metaHeader}
         metadataOpen={metadataOpen}
         onActivateGroup={activateEditorGroup}

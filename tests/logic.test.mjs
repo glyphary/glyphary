@@ -48,10 +48,15 @@ import {
   maxRecentFiles,
 } from "../.test-dist/defaults.js";
 import {
+  appendFrontmatterEntry,
   composeMarkdown,
+  frontmatterEntries,
+  frontmatterEntryListValues,
   frontmatterListValues,
   frontmatterScalarValue,
   markdownHeadings,
+  replaceFrontmatterEntry,
+  serializeFrontmatterListValues,
   splitMetaHeader,
 } from "../.test-dist/markdown.js";
 import {
@@ -226,6 +231,39 @@ test("frontmatter banner values can be extracted for page chrome", () => {
     "![[Attachments/Pasted image 20230521183520.png]]",
   );
   assert.equal(frontmatterScalarValue("title: Alpha", "banner"), "");
+});
+
+test("frontmatter entries edit as rows without discarding surrounding source", () => {
+  const source = "title: Alpha\ntags:\n  - note\n  - project\n# keep this comment\nstatus: active";
+  const entries = frontmatterEntries(source, "---");
+
+  assert.deepEqual(entries.map(({ key, value }) => ({ key, value })), [
+    { key: "title", value: "Alpha" },
+    { key: "tags", value: "\n  - note\n  - project" },
+    { key: "status", value: "active" },
+  ]);
+  assert.equal(
+    replaceFrontmatterEntry(source, "---", 1, { key: "topics", value: "[notes, projects]" }),
+    "title: Alpha\ntopics: [notes, projects]\n# keep this comment\nstatus: active",
+  );
+  assert.equal(
+    replaceFrontmatterEntry(source, "---", 0, null),
+    "tags:\n  - note\n  - project\n# keep this comment\nstatus: active",
+  );
+  assert.equal(appendFrontmatterEntry('title = "Alpha"', "+++"), 'title = "Alpha"\nproperty =');
+});
+
+test("frontmatter list values use pills for arrays, block lists, and tags", () => {
+  assert.deepEqual(frontmatterEntryListValues('[draft, "project x"]'), ["draft", "project x"]);
+  assert.deepEqual(frontmatterEntryListValues('["quoted \\"value\\""]'), ['quoted "value"']);
+  assert.deepEqual(frontmatterEntryListValues("\n  - Chris\n  - Sam"), ["Chris", "Sam"]);
+  assert.equal(frontmatterEntryListValues("active"), null);
+  assert.deepEqual(frontmatterEntryListValues("inbox", true), ["inbox"]);
+  assert.deepEqual(frontmatterEntryListValues("", true), []);
+  assert.equal(
+    serializeFrontmatterListValues(["draft", "project x", "value, with comma"]),
+    '["draft", "project x", "value, with comma"]',
+  );
 });
 
 test("local vault image references are accepted while URLs and path escapes are rejected", () => {
@@ -1974,6 +2012,14 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(app, /async function openEntryFromContextMenu/);
   assert.match(app, /displayVaultRelativePath\(activeFile\?\.relativePath \?\? currentDir, vaultRoot\)/);
   assert.match(editorPane, /frontmatterScalarValue\(paneMetaHeader, "banner"\)/);
+  assert.match(editorPane, /frontmatterEntries\(paneMetaHeader, paneMetaDelimiter\)/);
+  assert.match(editorPane, /frontmatterEntryListValues\(/);
+  assert.match(editorPane, /className="frontmatter-row"/);
+  assert.match(editorPane, /className="frontmatter-value-list"/);
+  assert.match(editorPane, /className="frontmatter-remove"/);
+  assert.match(editorPane, /className="frontmatter-add"/);
+  assert.doesNotMatch(editorPane, /<textarea/);
+  assert.match(css, /\.metadata-toggle::before[\s\S]*border-left: 6px solid/);
   assert.match(app, /useState<"edit" \| "view">\("edit"\)/);
   assert.match(app, /className="view-mode-control"/);
   assert.match(app, /aria-label="Document display mode"/);

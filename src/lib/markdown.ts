@@ -27,6 +27,13 @@ export type TocEntry = {
   occurrence: number;
 };
 
+export type FrontmatterEntry = {
+  key: string;
+  value: string;
+  startLine: number;
+  endLine: number;
+};
+
 export const defaultMetaDelimiter: MarkdownParts["metaDelimiter"] = "---";
 
 export function markdownHeadings(markdown: string): TocEntry[] {
@@ -176,15 +183,184 @@ function looksLikeFrontmatter(metaHeader: string, delimiter: MarkdownParts["meta
   return validYaml && sawKey;
 }
 
+function frontmatterEntryPattern(delimiter: MarkdownParts["metaDelimiter"]) {
+  return delimiter === "+++"
+    ? /^([A-Za-z0-9_.-]+)\s*=\s*(.*)$/
+    : /^([A-Za-z0-9_-]+):\s*(.*)$/;
+}
+
+export function frontmatterEntries(
+  metaHeader: string,
+  delimiter: MarkdownParts["metaDelimiter"],
+): FrontmatterEntry[] {
+  const lines = metaHeader.replace(/\r\n/g, "\n").split("\n");
+  const pattern = frontmatterEntryPattern(delimiter);
+  const entries: FrontmatterEntry[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(pattern);
+
+    if (!match) {
+      continue;
+    }
+
+    let endLine = index;
+    let value = match[2] ?? "";
+
+    while (endLine + 1 < lines.length) {
+      const continuation = lines[endLine + 1];
+
+      if (!/^\s+\S/.test(continuation) && !/^\s*-\s+/.test(continuation)) {
+        break;
+      }
+
+      value += `\n${continuation}`;
+      endLine += 1;
+    }
+
+    entries.push({ key: match[1], value, startLine: index, endLine });
+    index = endLine;
+  }
+
+  return entries;
+}
+
+function serializeFrontmatterEntry(
+  delimiter: MarkdownParts["metaDelimiter"],
+  entry: Pick<FrontmatterEntry, "key" | "value">,
+) {
+  const prefix = delimiter === "+++" ? `${entry.key} =` : `${entry.key}:`;
+
+  if (!entry.value) {
+    return prefix;
+  }
+
+  return entry.value.startsWith("\n") ? `${prefix}${entry.value}` : `${prefix} ${entry.value}`;
+}
+
+export function replaceFrontmatterEntry(
+  metaHeader: string,
+  delimiter: MarkdownParts["metaDelimiter"],
+  entryIndex: number,
+  nextEntry: Pick<FrontmatterEntry, "key" | "value"> | null,
+) {
+  const lines = metaHeader.replace(/\r\n/g, "\n").split("\n");
+  const entry = frontmatterEntries(metaHeader, delimiter)[entryIndex];
+
+  if (!entry) {
+    return metaHeader;
+  }
+
+  lines.splice(
+    entry.startLine,
+    entry.endLine - entry.startLine + 1,
+    ...(nextEntry ? serializeFrontmatterEntry(delimiter, nextEntry).split("\n") : []),
+  );
+  return lines.join("\n");
+}
+
+export function appendFrontmatterEntry(
+  metaHeader: string,
+  delimiter: MarkdownParts["metaDelimiter"],
+) {
+  const keys = new Set(frontmatterEntries(metaHeader, delimiter).map((entry) => entry.key));
+  let key = "property";
+  let suffix = 2;
+
+  while (keys.has(key)) {
+    key = `property${suffix}`;
+    suffix += 1;
+  }
+
+  const entry = serializeFrontmatterEntry(delimiter, { key, value: "" });
+  const cleanHeader = metaHeader.replace(/\n+$/, "");
+
+  return cleanHeader ? `${cleanHeader}\n${entry}` : entry;
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function cleanFrontmatterListItem(value: string) {
-  return value
-    .trim()
-    .replace(/^['"]|['"]$/g, "")
-    .trim();
+  const trimmed = value.trim();
+
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      // Fall through to the permissive YAML-style cleanup.
+    }
+  }
+
+  return trimmed.replace(/^['"]|['"]$/g, "").trim();
+}
+
+function splitFrontmatterInlineList(value: string) {
+  const values: string[] = [];
+  let current = "";
+  let quote = "";
+  let escaped = false;
+
+  for (const character of value) {
+    if (escaped) {
+      current += character;
+      escaped = false;
+      continue;
+    }
+
+    if (character === "\\" && quote) {
+      current += character;
+      escaped = true;
+      continue;
+    }
+
+    if ((character === '"' || character === "'") && (!quote || quote === character)) {
+      quote = quote ? "" : character;
+      current += character;
+      continue;
+    }
+
+    if (character === "," && !quote) {
+      values.push(cleanFrontmatterListItem(current));
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  if (current.trim() || value.includes(",")) {
+    values.push(cleanFrontmatterListItem(current));
+  }
+
+  return values;
+}
+
+export function frontmatterEntryListValues(value: string, forceList = false) {
+  const trimmed = value.trim();
+  const inlineMatch = trimmed.match(/^\[([\s\S]*)\]$/);
+
+  if (inlineMatch) {
+    return inlineMatch[1].trim() ? splitFrontmatterInlineList(inlineMatch[1]) : [];
+  }
+
+  const blockLines = value.split("\n").filter((line) => line.trim());
+  const blockItems = blockLines.map((line) => line.match(/^\s*-\s+(.+?)\s*$/));
+
+  if (blockItems.length > 0 && blockItems.every(Boolean)) {
+    return blockItems.map((match) => cleanFrontmatterListItem(match?.[1] ?? ""));
+  }
+
+  if (!forceList) {
+    return null;
+  }
+
+  return trimmed ? [cleanFrontmatterListItem(trimmed)] : [];
+}
+
+export function serializeFrontmatterListValues(values: string[]) {
+  return `[${values.map((value) => JSON.stringify(value)).join(", ")}]`;
 }
 
 export function frontmatterListValues(
