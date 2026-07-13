@@ -3,11 +3,13 @@
  *
  * Responsibilities:
  * - Split and compose hidden frontmatter around the WYSIWYG editor body.
+ * - Edit recognized frontmatter entries without rewriting unrelated source lines.
  * - Extract document headings for table-of-contents UI.
  * - Extract simple frontmatter list values for tag pills.
  *
  * Contracts:
  * - Frontmatter handling must round-trip complete YAML/TOML fences without editing the body.
+ * - Row editing recognizes top-level scalar/list entries; it is not a general YAML/TOML parser.
  * - Heading extraction must ignore fenced code blocks.
  * - Frontmatter list parsing is intentionally a small display heuristic, not a full YAML parser.
  */

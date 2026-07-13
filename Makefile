@@ -1,6 +1,7 @@
 APP_NAME := Glyphary
+APP_VERSION := $(shell node -p "require('./package.json').version")
 APP_BUNDLE := src-tauri/target/universal-apple-darwin/release/bundle/macos/$(APP_NAME).app
-DMG := src-tauri/target/universal-apple-darwin/release/bundle/dmg/$(APP_NAME)_1.0.0-beta.4_universal.dmg
+DMG := src-tauri/target/universal-apple-darwin/release/bundle/dmg/$(APP_NAME)_$(APP_VERSION)_universal.dmg
 SIGNING_IDENTITY := $(shell security find-identity -p codesigning -v | grep 'Developer ID Application' | head -n1 | awk -F'"' '{print $$2}')
 TAURI_SIGNING_CONFIG := {"bundle":{"macOS":{"signingIdentity":"$(SIGNING_IDENTITY)"}}}
 

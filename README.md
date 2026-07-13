@@ -19,17 +19,24 @@ blocks are edited visually instead of through raw syntax.
   <img src="https://glyphary.github.io/assets/screenshots/main-workspace.png" alt="Glyphary workspace with an open vault" />
 </p>
 
+## Get Started
+
+A good first vault is the [Glyphary demonstration vault](https://github.com/glyphary/demo).
+Download or clone it, then choose **File -> Open Vault...** in Glyphary and select
+the demo folder. This lets you explore Glyphary before opening your own notes.
+
 ## Highlights
 
 - **Visual extended Markdown editing**: edit rich Markdown structures directly, including tables with right-click row, column, and alignment actions; Mermaid diagrams; columns; callouts; rich card links; galleries; code blocks; task lists; and collapsible sections.
-- **Obsidian compatibility where it matters**: open local vaults, resolve wikilinks and aliases, preserve frontmatter, render banner images, support compatible daily notes, load approved CSS snippets, and fully open/edit Obsidian `.canvas` files.
+- **Obsidian compatibility where it matters**: open local vaults, resolve wikilinks and aliases, edit frontmatter as structured properties, render banner images, support compatible daily notes, load approved CSS snippets, and fully open/edit Obsidian `.canvas` files.
+- **Vault library and favorites**: switch between remembered vaults with independent workspaces and optional covers, star any note, canvas, or Base, and drag starred files into your preferred order.
 - **Fast local search**: built-in vault search is extremely fast and does not require an external `rg` install.
 - **Command palette**: use quick commands for inserts, table actions, rich links, Excalidraw drawings, tidbits, canvas actions, and more.
 - **Canvas support**: create, open, rename, edit, move, color, connect, and save Obsidian-compatible canvas nodes and edges.
 - **Base views**: open `.base` files to browse vault notes through table or gallery views backed by local frontmatter.
-- **Native file actions**: right-click files and folders to create, rename, move, delete, or reveal the item in Finder.
+- **Native desktop workflows**: use macOS menus and context menus, a separate Settings window, Finder/Open With integration, and file actions for opening, revealing, copying paths, creating, renaming, moving, or deleting.
 - **Native Excalidraw integration**: create drawings from Glyphary and store them as vault files.
-- **Daily notes and tidbits**: open calendar notes, create quick notes, and capture tidbits from anywhere when the app is running.
+- **Daily notes and tidbits**: preview calendar notes on hover, open or create daily pages, create quick notes, and capture tidbits from anywhere when the app is running.
 - **AI assistance**: connect an OpenAI-compatible backend for writing help, summaries, outlines, title generation, and page building.
 - **Optional Vim mode**: use a practical Normal/Insert mode editing layer for keyboard-driven note work.
 - **Focused reading and editing**: switch between View and Edit chrome, close every tab when you want a blank workspace, and configure `Cmd+T` to reopen a chosen vault note.
@@ -41,6 +48,9 @@ blocks are edited visually instead of through raw syntax.
 Glyphary keeps Markdown readable on disk while making the editing experience feel
 like a native rich editor. This is especially useful for structures that are
 awkward to maintain by hand, such as tables, columns, and callout-heavy notes.
+Frontmatter uses the same direct approach: every property has a single-line row,
+properties can be added, renamed, or removed, and tags or other multi-value
+properties are edited as individual pills.
 
 <p align="center">
   <img src="https://glyphary.github.io/assets/screenshots/columns.png" alt="Glyphary editing Markdown columns visually" />
@@ -57,6 +67,18 @@ awkward to maintain by hand, such as tables, columns, and callout-heavy notes.
 <p align="center">
   <img src="https://glyphary.github.io/assets/screenshots/rich-links.png" alt="Glyphary rich card links" />
 </p>
+
+## Vaults And Navigation
+
+The vault switcher remembers every folder you open and restores each vault's
+own tabs, recent files, active page, drawers, and split layout. Vaults can have
+custom cover images, and forgetting one removes it from the switcher without
+touching its files.
+
+The left drawer includes Files, Search, Recent, Starred, and Tasks. File rows
+can show text and first-image previews, starred files can be reordered by
+dragging, and rename or move operations keep open tabs, wikilinks, recent files,
+and stars pointed at the new path.
 
 ## Canvas
 
@@ -85,6 +107,10 @@ canvas commands.
 
 Content search groups matches by file, shows the match count for each result,
 and sorts the list from the most recently modified page down to older notes.
+
+On macOS, the native menu bar exposes File, Edit, Insert, Format, View, and
+Window commands with current enabled and checked states. Native context menus
+cover vault entries, tables, Base controls, and vault-library actions.
 
 File and folder context menus include `Reveal in Finder`, so you can jump from a
 vault entry to the native file manager without leaving the workspace.
@@ -120,7 +146,9 @@ through follow-up prompts.
 ## Appearance
 
 Glyphary supports light, dark, and auto modes, theme templates, approved CSS
-snippets, a theme builder, and basic Obsidian-style theme compatibility.
+snippets, a theme builder, basic Obsidian-style theme compatibility, optional
+native glass, and a title-bar document proxy with Reveal, Open in Default App,
+and Copy Path actions.
 
 ## Learn More
 

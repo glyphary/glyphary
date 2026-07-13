@@ -312,6 +312,20 @@ export function EditorPane({
                       );
                       const updateListValues = (values: string[]) =>
                         updateEntry(entry.key, serializeFrontmatterListValues(values));
+                      const addListValue = (rawValue: string) => {
+                        const value = rawValue.trim();
+
+                        if (
+                          !listValues ||
+                          !value ||
+                          listValues.some((item) => item.toLowerCase() === value.toLowerCase())
+                        ) {
+                          return false;
+                        }
+
+                        updateListValues([...listValues, value]);
+                        return true;
+                      };
 
                       return (
                         <div className="frontmatter-row" key={inputKey}>
@@ -401,30 +415,14 @@ export function EditorPane({
                                 placeholder="Add value"
                                 spellCheck="false"
                                 onBlur={(event) => {
-                                  const value = event.currentTarget.value.trim();
-
-                                  if (
-                                    value &&
-                                    !listValues.some(
-                                      (item) => item.toLowerCase() === value.toLowerCase(),
-                                    )
-                                  ) {
-                                    updateListValues([...listValues, value]);
+                                  if (addListValue(event.currentTarget.value)) {
                                     event.currentTarget.value = "";
                                   }
                                 }}
                                 onKeyDown={(event) => {
                                   if (event.key === "Enter") {
                                     event.preventDefault();
-                                    const value = event.currentTarget.value.trim();
-
-                                    if (
-                                      value &&
-                                      !listValues.some(
-                                        (item) => item.toLowerCase() === value.toLowerCase(),
-                                      )
-                                    ) {
-                                      updateListValues([...listValues, value]);
+                                    if (addListValue(event.currentTarget.value)) {
                                       event.currentTarget.value = "";
                                     }
                                   } else if (event.key === "Escape") {
