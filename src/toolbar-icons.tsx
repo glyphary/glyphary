@@ -21,6 +21,8 @@ export type ToolbarIconName =
   | "table"
   | "columns"
   | "callout"
+  | "file-plus"
+  | "folder-plus"
   | "refresh"
   | "task-open"
   | "task-done";
@@ -116,6 +118,24 @@ export function renderToolbarIcon(icon: ToolbarIconName) {
           <path d="M11 9h5.2" />
           <path d="M11 12.4h4" />
           <path d="m8.2 18.5 2.2 2" />
+        </svg>
+      );
+    case "file-plus":
+      return (
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M13 5H7.5A2.5 2.5 0 0 0 5 7.5v9A2.5 2.5 0 0 0 7.5 19h9a2.5 2.5 0 0 0 2.5-2.5V11" />
+          <path d="m10.5 14.8.5-2.6 5.9-5.9a1.55 1.55 0 0 1 2.2 2.2l-5.9 5.9z" />
+          <path d="m16 7.2 2 2" />
+        </svg>
+      );
+    case "folder-plus":
+      return (
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M3.5 8.5V7.3c0-1 .8-1.8 1.8-1.8h4.2l2 2h7.2c1 0 1.8.8 1.8 1.8v3.2" />
+          <path d="M3.5 8.5v8.2c0 1 .8 1.8 1.8 1.8h8.2" />
+          <circle cx="17.5" cy="16.5" r="3.5" />
+          <path d="M17.5 14.7v3.6" />
+          <path d="M15.7 16.5h3.6" />
         </svg>
       );
     case "refresh":

@@ -24,6 +24,8 @@ blocks are edited visually instead of through raw syntax.
 A good first vault is the [Glyphary demonstration vault](https://github.com/glyphary/demo).
 Download or clone it, then choose **File -> Open Vault...** in Glyphary and select
 the demo folder. This lets you explore Glyphary before opening your own notes.
+Until a vault is open, Glyphary keeps the window focused on that single task and
+hides document-specific controls.
 
 ## Highlights
 
@@ -78,7 +80,11 @@ touching its files.
 The left drawer includes Files, Search, Recent, Starred, and Tasks. File rows
 can show text and first-image previews, starred files can be reordered by
 dragging, and rename or move operations keep open tabs, wikilinks, recent files,
-and stars pointed at the new path.
+and stars pointed at the new path. Documents open with one click by default; a
+per-vault setting can require double-clicking instead. When the Files drawer is
+active, the titlebar provides Back, New Note, and New Folder actions. Either
+creation button can be hidden under the grouped Interface settings without
+removing its context-menu command.
 
 ## Canvas
 
@@ -103,7 +109,7 @@ properties you want to see.
 Search, recent files, tasks, and quick commands are built into the workspace so
 large vaults stay navigable. The command palette adapts to the current context:
 Markdown notes get editing commands, tables get table commands, and canvases get
-canvas commands.
+canvas commands. Open it with `Cmd+P` or the command button beside Save.
 
 Content search groups matches by file, shows the match count for each result,
 and sorts the list from the most recently modified page down to older notes.

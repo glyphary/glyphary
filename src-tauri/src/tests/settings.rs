@@ -65,12 +65,8 @@ fn hides_dotfiles_unless_vault_settings_enable_them() {
         root.to_string_lossy().into_owned(),
         VaultSettings {
             files: FileDisplaySettings {
-                show_files_in_folder_tree: false,
-                show_folder_tree_background: false,
-                show_file_previews_in_folder_tree: true,
-                show_images_in_file_previews: true,
-                base_card_image_layout: "top".into(),
                 show_dotfiles: true,
+                ..FileDisplaySettings::default()
             },
             ..VaultSettings::default()
         },
@@ -105,6 +101,9 @@ fn reads_default_vault_settings_when_missing() {
     );
     assert!(!settings.files.show_dotfiles);
     assert!(!settings.files.show_files_in_folder_tree);
+    assert!(!settings.files.open_documents_on_double_click);
+    assert!(settings.files.show_new_note_button);
+    assert!(settings.files.show_new_folder_button);
     assert!(settings.files.show_file_previews_in_folder_tree);
     assert_eq!(
         settings.files.base_card_image_layout,
@@ -168,7 +167,10 @@ fn reads_older_file_display_settings() {
 
     assert!(settings.files.show_dotfiles);
     assert!(!settings.files.show_files_in_folder_tree);
+    assert!(!settings.files.open_documents_on_double_click);
     assert!(settings.files.show_file_previews_in_folder_tree);
+    assert!(settings.files.show_new_note_button);
+    assert!(settings.files.show_new_folder_button);
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }
@@ -222,11 +224,13 @@ fn writes_vault_settings_file() {
             },
             files: FileDisplaySettings {
                 show_files_in_folder_tree: true,
-                show_folder_tree_background: false,
+                open_documents_on_double_click: true,
+                show_new_note_button: false,
+                show_new_folder_button: false,
                 show_file_previews_in_folder_tree: false,
-                show_images_in_file_previews: true,
                 base_card_image_layout: "top".into(),
                 show_dotfiles: true,
+                ..FileDisplaySettings::default()
             },
             autosave: AutosaveSettings { enabled: false },
             tidbits: TidbitSettings {
@@ -271,6 +275,9 @@ fn writes_vault_settings_file() {
     assert_eq!(settings.frontmatter_pills.header_name, "topics");
     assert!(settings.files.show_dotfiles);
     assert!(settings.files.show_files_in_folder_tree);
+    assert!(settings.files.open_documents_on_double_click);
+    assert!(!settings.files.show_new_note_button);
+    assert!(!settings.files.show_new_folder_button);
     assert!(!settings.files.show_file_previews_in_folder_tree);
     assert!(!settings.autosave.enabled);
     assert_eq!(

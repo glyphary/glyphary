@@ -16,7 +16,6 @@ Open a vault from the File menu to browse and edit Markdown files.
 
 - Single-click a directory to browse into it.
 - Double-click a directory to open its shadow note.
-- Double-click a file to open it in the editor.
 `;
 
 export const emptyTableMarkdown = `| Column 1 | Column 2 | Column 3 |

@@ -69,6 +69,9 @@ export const defaultEditorBehaviorSettings: EditorBehaviorSettings = {
 
 export const defaultFileDisplaySettings: FileDisplaySettings = {
   showFilesInFolderTree: false,
+  openDocumentsOnDoubleClick: false,
+  showNewNoteButton: true,
+  showNewFolderButton: true,
   showFolderTreeBackground: false,
   showFilePreviewsInFolderTree: true,
   showImagesInFilePreviews: true,
@@ -446,6 +449,13 @@ export function normalizeFileDisplaySettings(
   return {
     showFilesInFolderTree:
       settings?.showFilesInFolderTree ?? defaultFileDisplaySettings.showFilesInFolderTree,
+    openDocumentsOnDoubleClick:
+      settings?.openDocumentsOnDoubleClick ??
+      defaultFileDisplaySettings.openDocumentsOnDoubleClick,
+    showNewNoteButton:
+      settings?.showNewNoteButton ?? defaultFileDisplaySettings.showNewNoteButton,
+    showNewFolderButton:
+      settings?.showNewFolderButton ?? defaultFileDisplaySettings.showNewFolderButton,
     showFolderTreeBackground:
       settings?.showFolderTreeBackground ??
       defaultFileDisplaySettings.showFolderTreeBackground,
@@ -464,6 +474,18 @@ export function sameFileDisplaySettings(
   right: FileDisplaySettings | undefined | null,
 ) {
   return sameNormalizedSettings(normalizeFileDisplaySettings, left, right);
+}
+
+export function shouldOpenDocumentOnClick(
+  openDocumentsOnDoubleClick: boolean,
+  clickCount: number,
+) {
+  // Keyboard activation has no click count and must remain available in either pointer mode.
+  if (clickCount === 0) {
+    return true;
+  }
+
+  return clickCount === (openDocumentsOnDoubleClick ? 2 : 1);
 }
 
 export function normalizeAutosaveSettings(settings: AutosaveSettings | undefined | null) {

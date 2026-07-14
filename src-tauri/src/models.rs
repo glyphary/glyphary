@@ -87,19 +87,17 @@ pub(crate) struct EditorSettings {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+// Older vault files omit newer fields, so the product defaults also define their migration.
+#[serde(default, rename_all = "camelCase")]
 pub(crate) struct FileDisplaySettings {
-    #[serde(default)]
     pub(crate) show_files_in_folder_tree: bool,
-    #[serde(default)]
+    pub(crate) open_documents_on_double_click: bool,
+    pub(crate) show_new_note_button: bool,
+    pub(crate) show_new_folder_button: bool,
     pub(crate) show_folder_tree_background: bool,
-    #[serde(default = "crate::defaults::default_true")]
     pub(crate) show_file_previews_in_folder_tree: bool,
-    #[serde(default = "crate::defaults::default_true")]
     pub(crate) show_images_in_file_previews: bool,
-    #[serde(default = "crate::defaults::default_base_card_image_layout")]
     pub(crate) base_card_image_layout: String,
-    #[serde(default)]
     pub(crate) show_dotfiles: bool,
 }
 
@@ -109,7 +107,7 @@ pub(crate) struct AutosaveSettings {
     pub(crate) enabled: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DebugSettings {
     pub(crate) enabled: bool,

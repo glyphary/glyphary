@@ -7,6 +7,7 @@ import {
 } from "../lib/folder-tree";
 import { splitMetaHeader } from "../lib/markdown";
 import { cleanVaultAssetReference, displayPath } from "../lib/paths";
+import { shouldOpenDocumentOnClick } from "../lib/settings";
 import type { VaultEntry, VaultFolderTreeNodeState } from "../lib/app-types";
 import { listVaultDir, readVaultFile } from "./persistence";
 import { FolderIcon, VaultFileIcon } from "./VaultIcons";
@@ -26,6 +27,7 @@ type VaultFolderTreeProps = {
   showFilePreviews?: boolean;
   showPreviewImages?: boolean;
   showFiles?: boolean;
+  openDocumentsOnDoubleClick?: boolean;
   movingEntry?: VaultEntry | null;
   onEntryContextMenu?: (entry: VaultEntry, event: ReactMouseEvent<HTMLButtonElement>) => void;
   onFileOpen?: (relativePath: string) => void;
@@ -53,6 +55,7 @@ export function VaultFolderTree({
   showFilePreviews = true,
   showPreviewImages = true,
   showFiles = false,
+  openDocumentsOnDoubleClick = false,
   movingEntry = null,
   onEntryContextMenu,
   onFileOpen,
@@ -160,7 +163,11 @@ export function VaultFolderTree({
             className={isSelected ? "folder-tree-file active" : "folder-tree-file"}
             type="button"
             onContextMenu={(event) => onEntryContextMenu?.(entry, event)}
-            onDoubleClick={() => onFileOpen?.(entry.relativePath)}
+            onClick={(event) => {
+              if (shouldOpenDocumentOnClick(openDocumentsOnDoubleClick, event.detail)) {
+                onFileOpen?.(entry.relativePath);
+              }
+            }}
           >
             <VaultFileIcon relativePath={entry.relativePath} />
             <span>

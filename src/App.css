@@ -523,6 +523,7 @@ button {
 }
 
 .titlebar-native-actions,
+.titlebar-vault-actions,
 .titlebar-document-proxy,
 .app-actions {
   position: relative;
@@ -541,6 +542,10 @@ button {
 
 .titlebar-native-actions {
   gap: 8px;
+}
+
+.titlebar-vault-actions {
+  gap: 4px;
 }
 
 .titlebar-document-proxy {
@@ -619,6 +624,13 @@ button {
   position: absolute;
   top: 8px;
   left: max(86px, calc(var(--vault-width, 320px) + var(--vault-resizer-width, 10px) + 8px));
+}
+
+/* The titlebar spans the window, so these controls must track the resizable vault edge. */
+.platform-macos .titlebar-vault-actions {
+  position: absolute;
+  top: 8px;
+  right: calc(100% - var(--vault-width, 320px) + 8px);
 }
 
 .platform-macos .app-actions {
@@ -830,22 +842,30 @@ h2 {
   font-weight: 850;
 }
 
-.icon-action {
+.icon-action,
+.quiet-icon-action {
   display: inline-grid;
   place-items: center;
+  padding: 0;
+}
+
+.icon-action {
   width: 38px;
   min-width: 38px;
   height: 38px;
-  padding: 0;
+}
+
+.icon-action svg,
+.quiet-icon-action svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .icon-action svg {
   width: 18px;
   height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
   stroke-width: 1.9;
 }
 
@@ -1150,6 +1170,51 @@ body.workspace-resizing * {
   display: flex;
   flex-shrink: 0;
   gap: 6px;
+}
+
+.vault-header > div:first-child {
+  min-width: 0;
+}
+
+.quiet-icon-action {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-strong);
+  cursor: pointer;
+  transition:
+    background var(--motion-duration-fast) var(--motion-ease),
+    color var(--motion-duration-fast) var(--motion-ease);
+}
+
+.quiet-icon-action svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 1.65;
+}
+
+.quiet-icon-action:hover,
+.quiet-icon-action:focus-visible {
+  background: var(--hover);
+  color: var(--heading);
+}
+
+.quiet-icon-action:active {
+  background: var(--selection);
+}
+
+.quiet-icon-action:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.titlebar-command-palette {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
 }
 
 .vault-header h2 {

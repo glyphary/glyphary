@@ -120,6 +120,90 @@ type SettingsDialogProps = {
   vaultRoot: string;
 };
 
+type SettingsCheckboxProps = {
+  checked: boolean;
+  className?: string;
+  disabled?: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+};
+
+function SettingsCheckbox({
+  checked,
+  className = "settings-check-control",
+  disabled = false,
+  label,
+  onChange,
+}: SettingsCheckboxProps) {
+  return (
+    <label className={className}>
+      <input
+        checked={checked}
+        disabled={disabled}
+        type="checkbox"
+        onChange={(event) => onChange(event.currentTarget.checked)}
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+type InterfaceSettingsSectionProps = {
+  disabled: boolean;
+  fileDisplaySettings: FileDisplaySettings;
+  onFileDisplayChange: (patch: Partial<FileDisplaySettings>) => void;
+  onVaultAppearanceChange: (patch: Partial<VaultAppearanceSettings>) => void;
+  vaultAppearanceSettings: VaultAppearanceSettings;
+};
+
+function InterfaceSettingsSection({
+  disabled,
+  fileDisplaySettings,
+  onFileDisplayChange,
+  onVaultAppearanceChange,
+  vaultAppearanceSettings,
+}: InterfaceSettingsSectionProps) {
+  return (
+    <section className="settings-section" aria-label="Interface settings">
+      <div className="settings-section-header">
+        <div>
+          <h3>Interface</h3>
+        </div>
+      </div>
+      <SettingsCheckbox
+        checked={fileDisplaySettings.showNewNoteButton}
+        disabled={disabled}
+        label="Show new note button"
+        onChange={(checked) => onFileDisplayChange({ showNewNoteButton: checked })}
+      />
+      <SettingsCheckbox
+        checked={fileDisplaySettings.showNewFolderButton}
+        disabled={disabled}
+        label="Show new folder button"
+        onChange={(checked) => onFileDisplayChange({ showNewFolderButton: checked })}
+      />
+      <SettingsCheckbox
+        checked={vaultAppearanceSettings.showDocumentProxy}
+        disabled={disabled}
+        label="Show document proxy in title bar"
+        onChange={(checked) => onVaultAppearanceChange({ showDocumentProxy: checked })}
+      />
+      <SettingsCheckbox
+        checked={vaultAppearanceSettings.statusBarVisible}
+        disabled={disabled}
+        label="Show status bar"
+        onChange={(checked) => onVaultAppearanceChange({ statusBarVisible: checked })}
+      />
+      <SettingsCheckbox
+        checked={fileDisplaySettings.openDocumentsOnDoubleClick}
+        disabled={disabled}
+        label="Open documents with a double click"
+        onChange={(checked) => onFileDisplayChange({ openDocumentsOnDoubleClick: checked })}
+      />
+    </section>
+  );
+}
+
 export function SettingsDialog(props: SettingsDialogProps) {
   const {
     activeFile,
@@ -190,6 +274,18 @@ export function SettingsDialog(props: SettingsDialogProps) {
 
   if (!settingsOpen) {
     return null;
+  }
+
+  function updateFileDisplayDraft(patch: Partial<FileDisplaySettings>) {
+    setFileDisplayDraft((settings) => ({ ...settings, ...patch }));
+  }
+
+  function updateVaultAppearanceDraft(patch: Partial<VaultAppearanceSettings>) {
+    // Normalize first so changing one field also migrates older partial settings.
+    setVaultAppearanceDraft((settings) => ({
+      ...normalizeVaultAppearanceSettings(settings),
+      ...patch,
+    }));
   }
 
   const settingsTabTitle: Record<SettingsTab, string> = {
@@ -353,86 +449,46 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     </div>
                     <small>Cmd+T opens this vault file in the active pane.</small>
                   </label>
-                  <label className="settings-check-control">
-                    <input
-                      checked={fileDisplayDraft.showDotfiles}
-                      disabled={!vaultRoot}
-                      type="checkbox"
-                      onChange={(event) => {
-                        const checked = event.currentTarget.checked;
-
-                        setFileDisplayDraft((settings) => ({
-                          ...settings,
-                          showDotfiles: checked,
-                        }));
-                      }}
-                    />
-                    <span>Show dotfiles and dot folders</span>
-                  </label>
-                  <label className="settings-check-control">
-                    <input
-                      checked={fileDisplayDraft.showFilesInFolderTree}
-                      disabled={!vaultRoot}
-                      type="checkbox"
-                      onChange={(event) => {
-                        const checked = event.currentTarget.checked;
-
-                        setFileDisplayDraft((settings) => ({
-                          ...settings,
-                          showFilesInFolderTree: checked,
-                        }));
-                      }}
-                    />
-                    <span>Show files in folder trees</span>
-                  </label>
-                  <label className="settings-check-control settings-sub-check-control">
-                    <input
-                      checked={fileDisplayDraft.showFolderTreeBackground}
-                      disabled={!vaultRoot || !fileDisplayDraft.showFilesInFolderTree}
-                      type="checkbox"
-                      onChange={(event) => {
-                        const checked = event.currentTarget.checked;
-
-                        setFileDisplayDraft((settings) => ({
-                          ...settings,
-                          showFolderTreeBackground: checked,
-                        }));
-                      }}
-                    />
-                    <span>Show folder tree background</span>
-                  </label>
-                  <label className="settings-check-control">
-                    <input
-                      checked={fileDisplayDraft.showFilePreviewsInFolderTree}
-                      disabled={!vaultRoot}
-                      type="checkbox"
-                      onChange={(event) => {
-                        const checked = event.currentTarget.checked;
-
-                        setFileDisplayDraft((settings) => ({
-                          ...settings,
-                          showFilePreviewsInFolderTree: checked,
-                        }));
-                      }}
-                    />
-                    <span>Show file previews</span>
-                  </label>
-                  <label className="settings-check-control settings-sub-check-control">
-                    <input
-                      checked={fileDisplayDraft.showImagesInFilePreviews}
-                      disabled={!vaultRoot || !fileDisplayDraft.showFilePreviewsInFolderTree}
-                      type="checkbox"
-                      onChange={(event) => {
-                        const checked = event.currentTarget.checked;
-
-                        setFileDisplayDraft((settings) => ({
-                          ...settings,
-                          showImagesInFilePreviews: checked,
-                        }));
-                      }}
-                    />
-                    <span>Show images in file previews</span>
-                  </label>
+                  <SettingsCheckbox
+                    checked={fileDisplayDraft.showDotfiles}
+                    disabled={!vaultRoot}
+                    label="Show dotfiles and dot folders"
+                    onChange={(checked) => updateFileDisplayDraft({ showDotfiles: checked })}
+                  />
+                  <SettingsCheckbox
+                    checked={fileDisplayDraft.showFilesInFolderTree}
+                    disabled={!vaultRoot}
+                    label="Show files in folder trees"
+                    onChange={(checked) =>
+                      updateFileDisplayDraft({ showFilesInFolderTree: checked })
+                    }
+                  />
+                  <SettingsCheckbox
+                    checked={fileDisplayDraft.showFolderTreeBackground}
+                    className="settings-check-control settings-sub-check-control"
+                    disabled={!vaultRoot || !fileDisplayDraft.showFilesInFolderTree}
+                    label="Show folder tree background"
+                    onChange={(checked) =>
+                      updateFileDisplayDraft({ showFolderTreeBackground: checked })
+                    }
+                  />
+                  <SettingsCheckbox
+                    checked={fileDisplayDraft.showFilePreviewsInFolderTree}
+                    disabled={!vaultRoot}
+                    label="Show file previews"
+                    onChange={(checked) =>
+                      updateFileDisplayDraft({ showFilePreviewsInFolderTree: checked })
+                    }
+                  />
+                  <SettingsCheckbox
+                    checked={fileDisplayDraft.showImagesInFilePreviews}
+                    className="settings-check-control settings-sub-check-control"
+                    disabled={!vaultRoot || !fileDisplayDraft.showFilePreviewsInFolderTree}
+                    label="Show images in file previews"
+                    onChange={(checked) =>
+                      updateFileDisplayDraft({ showImagesInFilePreviews: checked })
+                    }
+                  />
                   <label>
                     <span>Base card image layout</span>
                     <select
@@ -532,6 +588,13 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     </small>
                   </label>
                 </section>
+                <InterfaceSettingsSection
+                  disabled={!vaultRoot}
+                  fileDisplaySettings={fileDisplayDraft}
+                  vaultAppearanceSettings={normalizedVaultAppearanceDraft}
+                  onFileDisplayChange={updateFileDisplayDraft}
+                  onVaultAppearanceChange={updateVaultAppearanceDraft}
+                />
                 <section className="settings-section" aria-label="Metadata settings">
                   <div className="settings-section-header">
                     <div>
@@ -1067,21 +1130,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     />
                     <span>Use glass window effect</span>
                   </label>
-                  <label className="settings-check-control">
-                    <input
-                      checked={normalizedVaultAppearanceDraft.showDocumentProxy}
-                      disabled={!vaultRoot}
-                      type="checkbox"
-                      onChange={(event) => {
-                        const showDocumentProxy = event.currentTarget.checked;
-                        setVaultAppearanceDraft((settings) => ({
-                          ...normalizeVaultAppearanceSettings(settings),
-                          showDocumentProxy,
-                        }));
-                      }}
-                    />
-                    <span>Show document proxy in title bar</span>
-                  </label>
                   <label className="settings-range-control">
                     <span>
                       Glass opacity
@@ -1118,21 +1166,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
                       <p>Control chrome density and the spacing around the workspace.</p>
                     </div>
                   </div>
-                  <label className="settings-check-control">
-                    <input
-                      checked={normalizedVaultAppearanceDraft.statusBarVisible}
-                      disabled={!vaultRoot}
-                      type="checkbox"
-                      onChange={(event) => {
-                        const statusBarVisible = event.currentTarget.checked;
-                        setVaultAppearanceDraft((settings) => ({
-                          ...normalizeVaultAppearanceSettings(settings),
-                          statusBarVisible,
-                        }));
-                      }}
-                    />
-                    <span>Show status bar</span>
-                  </label>
                   <label className="settings-check-control">
                     <input
                       checked={normalizedVaultAppearanceDraft.sectionCorners === "rounded"}

@@ -197,6 +197,9 @@ export type EditorBehaviorSettings = {
 
 export type FileDisplaySettings = {
   showFilesInFolderTree: boolean;
+  openDocumentsOnDoubleClick: boolean;
+  showNewNoteButton: boolean;
+  showNewFolderButton: boolean;
   showFolderTreeBackground: boolean;
   showFilePreviewsInFolderTree: boolean;
   showImagesInFilePreviews: boolean;

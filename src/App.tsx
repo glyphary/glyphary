@@ -155,6 +155,7 @@ import {
   samePluginSettings,
   sameTidbitSettings,
   sameVaultAppearanceSettings,
+  shouldOpenDocumentOnClick,
   shortcutFromKeyboardEvent,
   updatePersistedVaultLibraryEntry,
   upsertPersistedVaultLibrary,
@@ -235,6 +236,7 @@ import {
 import { VaultContextMenu } from "./vault/VaultContextMenu";
 import { TreeFilePreview, VaultFolderTree } from "./vault/VaultFolderTree";
 import { FolderIcon, VaultFileIcon } from "./vault/VaultIcons";
+import { VaultTitlebarActions } from "./vault/VaultTitlebarActions";
 import {
   allowVaultAssets,
   createCanvasInDirectory,
@@ -1246,9 +1248,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     return normalizeEditorBehaviorSettings(vaultSettings.editor);
   }
 
-  function savedFileDisplaySettings() {
-    return normalizeFileDisplaySettings(vaultSettings.files);
-  }
+  const savedFileDisplaySettings = normalizeFileDisplaySettings(vaultSettings.files);
 
   function savedAutosaveSettings() {
     return normalizeAutosaveSettings(vaultSettings.autosave);
@@ -1338,7 +1338,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       !sameNewTabFile(newTabFileDraft, savedNewTabFile()) ||
       !sameFrontmatterPillSettings(frontmatterPillDraft, savedFrontmatterPillSettings()) ||
       !sameEditorBehaviorSettings(editorBehaviorDraft, savedEditorBehaviorSettings()) ||
-      !sameFileDisplaySettings(fileDisplayDraft, savedFileDisplaySettings()) ||
+      !sameFileDisplaySettings(fileDisplayDraft, savedFileDisplaySettings) ||
       !sameAutosaveSettings(autosaveDraft, savedAutosaveSettings()) ||
       !sameTidbitSettings(tidbitDraft, savedTidbitSettings()) ||
       !sameVaultAppearanceSettings(vaultAppearanceDraft, savedVaultAppearanceSettings()) ||
@@ -1372,7 +1372,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setNewTabFileDraft(savedNewTabFile());
     setFrontmatterPillDraft(savedFrontmatterPillSettings());
     setEditorBehaviorDraft(savedEditorBehaviorSettings());
-    setFileDisplayDraft(savedFileDisplaySettings());
+    setFileDisplayDraft(savedFileDisplaySettings);
     setAutosaveDraft(savedAutosaveSettings());
     setTidbitDraft(savedTidbitSettings());
     setVaultAppearanceDraft(savedVaultAppearanceSettings());
@@ -5913,6 +5913,20 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     openDirectoryShadow(entry.relativePath);
   }
 
+  function handleDocumentClick(
+    event: ReactMouseEvent<HTMLButtonElement>,
+    openDocument: () => void,
+  ) {
+    if (
+      shouldOpenDocumentOnClick(
+        savedFileDisplaySettings.openDocumentsOnDoubleClick,
+        event.detail,
+      )
+    ) {
+      openDocument();
+    }
+  }
+
   function tableNativeContextMenu(targetEditor: Editor): NativeMenuEntry[] {
     return [
       {
@@ -8440,6 +8454,20 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       </datalist>
       <header className="titlebar" data-tauri-drag-region onMouseDown={startTitlebarDrag}>
         <div className="titlebar-drag-region" data-tauri-drag-region />
+        {vaultRoot ? (
+          <>
+        {vaultDrawerOpen && vaultDrawerItem === "files" ? (
+          <VaultTitlebarActions
+            canGoBack={Boolean(currentDir)}
+            showCreateFolder={savedFileDisplaySettings.showNewFolderButton}
+            showCreateNote={savedFileDisplaySettings.showNewNoteButton}
+            onBack={goBack}
+            onCreateFolder={() =>
+              openFolderActionDialog("create-folder", currentDirectoryEntry())
+            }
+            onCreateNote={() => openFolderActionDialog("create-note", currentDirectoryEntry())}
+          />
+        ) : null}
         {isMacOs ? (
           <div className="titlebar-native-actions">
             <button
@@ -8509,6 +8537,18 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               <path d="M5 4.5h11.2L19 7.3v12.2H5z" />
               <path d="M8 4.5v5h7v-5" />
               <path d="M8 19.5v-6h8v6" />
+            </svg>
+          </button>
+          <button
+            className="quiet-icon-action titlebar-command-palette"
+            disabled={!activeDocumentTab}
+            type="button"
+            aria-label="Open command palette"
+            title="Command Palette"
+            onClick={openCommandPaletteRoot}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M18 9a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12" />
             </svg>
           </button>
           <button
@@ -8630,6 +8670,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
             </button>
           ) : null}
         </div>
+          </>
+        ) : null}
       </header>
 
       {vaultRoot ? (
@@ -8764,16 +8806,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                       Add
                     </button>
                   ) : null}
-                  {vaultDrawerItem === "files" ? (
-                    <button
-                      className="inline-action"
-                      disabled={!vaultRoot || !currentDir}
-                      type="button"
-                      onClick={goBack}
-                    >
-                      Back
-                    </button>
-                  ) : null}
                 </div>
               </div>
               {vaultDrawerItem === "vaults" ? (
@@ -8845,16 +8877,19 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                     role="list"
                     onContextMenu={handleVaultListContextMenu}
                   >
-                    {vaultRoot && savedFileDisplaySettings().showFilesInFolderTree ? (
+                    {vaultRoot && savedFileDisplaySettings.showFilesInFolderTree ? (
                       <VaultFolderTree
                         activeFilePath={activeFile?.relativePath}
                         hideHeader
                         root={vaultRoot}
                         selectedPath={currentDir}
-                        unframed={!savedFileDisplaySettings().showFolderTreeBackground}
-                        showFilePreviews={savedFileDisplaySettings().showFilePreviewsInFolderTree}
-                        showPreviewImages={savedFileDisplaySettings().showImagesInFilePreviews}
+                        unframed={!savedFileDisplaySettings.showFolderTreeBackground}
+                        showFilePreviews={savedFileDisplaySettings.showFilePreviewsInFolderTree}
+                        showPreviewImages={savedFileDisplaySettings.showImagesInFilePreviews}
                         showFiles
+                        openDocumentsOnDoubleClick={
+                          savedFileDisplaySettings.openDocumentsOnDoubleClick
+                        }
                         onEntryContextMenu={handleFolderContextMenu}
                         onFileOpen={(relativePath) => openFile(relativePath)}
                         onSelect={(relativePath) => enterDirectory(relativePath)}
@@ -8873,13 +8908,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                           onClick={(event) => {
                             if (entry.isDir) {
                               handleDirectoryClick(entry, event);
+                            } else {
+                              handleDocumentClick(event, () => openFile(entry.relativePath));
                             }
                           }}
                           onDoubleClick={() => {
                             if (entry.isDir) {
                               handleDirectoryDoubleClick(entry);
-                            } else {
-                              openFile(entry.relativePath);
                             }
                           }}
                           onContextMenu={(event) => handleFolderContextMenu(entry, event)}
@@ -8888,18 +8923,18 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                           {entry.isDir ? <FolderIcon /> : <VaultFileIcon relativePath={entry.relativePath} />}
                           <span className="vault-entry-text">
                             <strong>{entry.name}</strong>
-                            {!entry.isDir && savedFileDisplaySettings().showFilePreviewsInFolderTree ? (
+                            {!entry.isDir && savedFileDisplaySettings.showFilePreviewsInFolderTree ? (
                               <TreeFilePreview
                                 root={vaultRoot}
                                 relativePath={entry.relativePath}
-                                showImage={savedFileDisplaySettings().showImagesInFilePreviews}
+                                showImage={savedFileDisplaySettings.showImagesInFilePreviews}
                               />
                             ) : null}
                           </span>
                         </button>
                       ))
                     )}
-                    {vaultRoot && !savedFileDisplaySettings().showFilesInFolderTree && entries.length === 0 ? (
+                    {vaultRoot && !savedFileDisplaySettings.showFilesInFolderTree && entries.length === 0 ? (
                       <p className="empty-vault">This directory is empty.</p>
                     ) : null}
                   </div>
@@ -8915,7 +8950,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                       }
                       key={file.relativePath}
                       type="button"
-                      onClick={() => openFile(file.relativePath)}
+                      onClick={(event) =>
+                        handleDocumentClick(event, () => openFile(file.relativePath))
+                      }
                     >
                       <VaultFileIcon relativePath={file.relativePath} />
                       <span className="recent-entry-text">
@@ -8983,13 +9020,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
                         void finishStarredPointerDrag(true);
                       }}
-                      onClick={() => {
+                      onClick={(event) => {
                         if (suppressStarredClickRef.current) {
                           suppressStarredClickRef.current = false;
                           return;
                         }
 
-                        openFile(file.relativePath);
+                        handleDocumentClick(event, () => openFile(file.relativePath));
                       }}
                     >
                       <VaultFileIcon relativePath={file.relativePath} />
@@ -9075,7 +9112,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                           <button
                             key={`${result.relativePath}-${result.lineNumber ?? "task"}-${index}`}
                             type="button"
-                            onClick={() => openSearchResult(result)}
+                            onClick={(event) =>
+                              handleDocumentClick(event, () => openSearchResult(result))
+                            }
                           >
                             <span
                               className={
@@ -9156,7 +9195,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                         <button
                           key={`${result.relativePath}-${result.lineNumber ?? "name"}-${index}`}
                           type="button"
-                          onClick={() => openSearchResult(result)}
+                          onClick={(event) =>
+                            handleDocumentClick(event, () => openSearchResult(result))
+                          }
                         >
                           <strong>{result.relativePath}</strong>
                           <span>
@@ -10217,9 +10258,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                 key={`${folderActionDialog.action}:${folderActionDialog.entry.relativePath}`}
                 root={vaultRoot}
                 selectedPath={folderActionDialog.value}
-                showFilePreviews={savedFileDisplaySettings().showFilePreviewsInFolderTree}
-                showPreviewImages={savedFileDisplaySettings().showImagesInFilePreviews}
-                showFiles={savedFileDisplaySettings().showFilesInFolderTree}
+                showFilePreviews={savedFileDisplaySettings.showFilePreviewsInFolderTree}
+                showPreviewImages={savedFileDisplaySettings.showImagesInFilePreviews}
+                showFiles={savedFileDisplaySettings.showFilesInFolderTree}
                 movingEntry={
                   folderActionDialog.action === "move-folder" ? folderActionDialog.entry : null
                 }
@@ -10284,7 +10325,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           </form>
         </div>
       ) : null}
-      {normalizedVaultAppearanceDraft.statusBarVisible ? (
+      {vaultRoot && normalizedVaultAppearanceDraft.statusBarVisible ? (
         <footer className="statusbar" key={status}>
           {status}
         </footer>

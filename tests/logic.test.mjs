@@ -80,6 +80,8 @@ import {
   richLinkMarkdown,
 } from "../.test-dist/rich-links.js";
 import {
+  defaultFileDisplaySettings,
+  normalizeFileDisplaySettings,
   normalizeStarredFiles,
   readPersistedVaultLibrary,
   readPersistedWorkspace,
@@ -91,6 +93,7 @@ import {
   workspaceSessionsStorageKey,
   workspaceStorageKey,
   writePersistedWorkspace,
+  shouldOpenDocumentOnClick,
 } from "../.test-dist/settings.js";
 
 test("frontmatter is split out of the editor body and composed back without losing it", () => {
@@ -136,6 +139,81 @@ test("date templates expand centrally for tidbit paths", () => {
     "__transit__/Objects/tidbit-2026-06-15-09-04-07.md",
   );
   assert.equal(defaultTidbitGlobalShortcut, "CommandOrControl+Shift+Space");
+});
+
+test("vault documents open with one click by default and can require double-clicking", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const folderTree = readFileSync("src/vault/VaultFolderTree.tsx", "utf8");
+  const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
+
+  assert.equal(defaultFileDisplaySettings.openDocumentsOnDoubleClick, false);
+  assert.equal(normalizeFileDisplaySettings(null).openDocumentsOnDoubleClick, false);
+  assert.equal(
+    normalizeFileDisplaySettings({
+      ...defaultFileDisplaySettings,
+      openDocumentsOnDoubleClick: true,
+    }).openDocumentsOnDoubleClick,
+    true,
+  );
+  assert.equal(shouldOpenDocumentOnClick(false, 0), true);
+  assert.equal(shouldOpenDocumentOnClick(false, 1), true);
+  assert.equal(shouldOpenDocumentOnClick(false, 2), false);
+  assert.equal(shouldOpenDocumentOnClick(true, 0), true);
+  assert.equal(shouldOpenDocumentOnClick(true, 1), false);
+  assert.equal(shouldOpenDocumentOnClick(true, 2), true);
+  assert.match(
+    app,
+    /shouldOpenDocumentOnClick\(\s*savedFileDisplaySettings\.openDocumentsOnDoubleClick,\s*event\.detail/,
+  );
+  assert.match(folderTree, /shouldOpenDocumentOnClick\(openDocumentsOnDoubleClick, event\.detail\)/);
+  assert.match(settingsDialog, /Open documents with a double click/);
+});
+
+test("interface settings group optional Files header actions", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
+  const toolbarIcons = readFileSync("src/toolbar-icons.tsx", "utf8");
+  const vaultTitlebarActions = readFileSync("src/vault/VaultTitlebarActions.tsx", "utf8");
+
+  assert.equal(defaultFileDisplaySettings.showNewNoteButton, true);
+  assert.equal(defaultFileDisplaySettings.showNewFolderButton, true);
+  assert.equal(normalizeFileDisplaySettings(null).showNewNoteButton, true);
+  assert.equal(normalizeFileDisplaySettings(null).showNewFolderButton, true);
+  assert.equal(
+    normalizeFileDisplaySettings({
+      ...defaultFileDisplaySettings,
+      showNewNoteButton: false,
+      showNewFolderButton: false,
+    }).showNewNoteButton,
+    false,
+  );
+  assert.match(app, /savedFileDisplaySettings\.showNewNoteButton/);
+  assert.match(app, /savedFileDisplaySettings\.showNewFolderButton/);
+  assert.match(app, /openFolderActionDialog\("create-note", currentDirectoryEntry\(\)\)/);
+  assert.match(app, /openFolderActionDialog\("create-folder", currentDirectoryEntry\(\)\)/);
+  assert.match(app, /<VaultTitlebarActions/);
+  assert.match(vaultTitlebarActions, /className="titlebar-vault-actions"/);
+  assert.match(vaultTitlebarActions, /aria-label="Back"/);
+  assert.match(settingsDialog, /aria-label="Interface settings"/);
+  assert.match(settingsDialog, /Show new note button/);
+  assert.match(settingsDialog, /Show new folder button/);
+  assert.match(settingsDialog, /Show document proxy in title bar/);
+  assert.match(settingsDialog, /Show status bar/);
+  assert.match(toolbarIcons, /"file-plus"/);
+  assert.match(toolbarIcons, /"folder-plus"/);
+});
+
+test("vault onboarding hides document and drawer chrome", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const titlebar = app.slice(
+    app.indexOf('<header className="titlebar"'),
+    app.indexOf("</header>", app.indexOf('<header className="titlebar"')),
+  );
+
+  assert.match(titlebar, /\{vaultRoot \? \(\s*<>/);
+  assert.match(titlebar, /className="app-actions"/);
+  assert.match(app, /<section className="vault-onboarding" aria-label="Open a vault">/);
+  assert.match(app, /vaultRoot && normalizedVaultAppearanceDraft\.statusBarVisible \? \(/);
 });
 
 test("AI Builder extracts focused vault search terms from reference prompts", () => {
@@ -385,7 +463,7 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.match(css, /\.titlebar \{[\s\S]*app-region: drag/);
   assert.match(css, /\.titlebar-drawer-toggle svg \{[\s\S]*width: 22px/);
   assert.match(css, /\.titlebar-document-proxy \{[\s\S]*max-width: min\(34vw, 360px\)/);
-  assert.match(css, /\.titlebar-native-actions,\n\.titlebar-document-proxy,\n\.app-actions \{[\s\S]*app-region: no-drag/);
+  assert.match(css, /\.titlebar-native-actions,\n\.titlebar-vault-actions,\n\.titlebar-document-proxy,\n\.app-actions \{[\s\S]*app-region: no-drag/);
   assert.match(css, /\.app-actions \{[\s\S]*app-region: no-drag/);
   assert.match(css, /\.platform-macos \.titlebar \{[\s\S]*position: absolute/);
   assert.match(css, /\.platform-macos \.titlebar \{[\s\S]*top: 0/);
@@ -2138,21 +2216,22 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(fileActions, /Rename Canvas/);
   assert.match(fileActions, /Delete File/);
   assert.match(app, /<VaultFolderTree/);
-  assert.match(app, /showFiles=\{savedFileDisplaySettings\(\)\.showFilesInFolderTree\}/);
-  assert.match(app, /unframed=\{!savedFileDisplaySettings\(\)\.showFolderTreeBackground\}/);
-  assert.match(app, /savedFileDisplaySettings\(\)\.showFilesInFolderTree \? \(/);
+  assert.match(app, /showFiles=\{savedFileDisplaySettings\.showFilesInFolderTree\}/);
+  assert.match(app, /unframed=\{!savedFileDisplaySettings\.showFolderTreeBackground\}/);
+  assert.match(app, /savedFileDisplaySettings\.showFilesInFolderTree \? \(/);
   assert.match(app, /activeFilePath=\{activeFile\?\.relativePath\}/);
   assert.match(app, /hideHeader/);
   assert.match(app, /onEntryContextMenu=\{handleFolderContextMenu\}/);
   assert.match(app, /onFileOpen=\{\(relativePath\) => openFile\(relativePath\)\}/);
-  assert.match(app, /showFilePreviews=\{savedFileDisplaySettings\(\)\.showFilePreviewsInFolderTree\}/);
-  assert.match(app, /showPreviewImages=\{savedFileDisplaySettings\(\)\.showImagesInFilePreviews\}/);
+  assert.match(app, /showFilePreviews=\{savedFileDisplaySettings\.showFilePreviewsInFolderTree\}/);
+  assert.match(app, /showPreviewImages=\{savedFileDisplaySettings\.showImagesInFilePreviews\}/);
   assert.match(app, /import \{ TreeFilePreview, VaultFolderTree \}/);
   assert.match(app, /<span className="vault-entry-text">/);
-  assert.match(app, /showImage=\{savedFileDisplaySettings\(\)\.showImagesInFilePreviews\}/);
+  assert.match(app, /showImage=\{savedFileDisplaySettings\.showImagesInFilePreviews\}/);
   assert.match(vaultTree, /<FolderIcon \/>/);
   assert.match(vaultTree, /onEntryContextMenu\?\.\(entry, event\)/);
-  assert.match(vaultTree, /onDoubleClick=\{\(\) => onFileOpen\?\.\(entry\.relativePath\)\}/);
+  assert.match(vaultTree, /shouldOpenDocumentOnClick\(openDocumentsOnDoubleClick, event\.detail\)/);
+  assert.doesNotMatch(vaultTree, /onDoubleClick/);
   assert.match(vaultTree, /hideHeader \? null/);
   assert.match(vaultTree, /relativePath \? \(/);
   assert.match(vaultTree, /<span className="folder-tree-expander-placeholder" \/>/);
@@ -2358,7 +2437,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(settingsDialog, /baseCardImageLayout,/);
   assert.match(settingsDialog, /settings-check-control settings-sub-check-control/);
   assert.match(settingsDialog, /disabled=\{!vaultRoot \|\| !fileDisplayDraft\.showFilePreviewsInFolderTree\}/);
-  assert.match(settingsDialog, /const checked = event\.currentTarget\.checked/);
+  assert.match(settingsDialog, /onChange=\{\(event\) => onChange\(event\.currentTarget\.checked\)\}/);
   assert.match(settingsDialog, /showFilesInFolderTree: checked/);
   assert.match(settingsDialog, /showFolderTreeBackground: checked/);
   assert.match(settingsDialog, /showFilePreviewsInFolderTree: checked/);
@@ -2590,6 +2669,9 @@ test("command save shortcut is wrapped in the webview", () => {
   assert.match(app, /function switchDocumentTab\(direction: 1 \| -1\)/);
   assert.match(app, /switchToDocumentTab\(group\.tabs\[nextIndex\]\.id, groupId\)/);
   assert.match(app, /setCommandPaletteOpen\(true\)/);
+  assert.match(app, /aria-label="Open command palette"/);
+  assert.match(app, /onClick=\{openCommandPaletteRoot\}/);
+  assert.match(app, /className="quiet-icon-action titlebar-command-palette"/);
   assert.match(editorPane, /className="page-search-bar"/);
   assert.match(editorPane, /aria-label="Find in page"/);
   assert.match(editorPane, /aria-label="Previous match"/);

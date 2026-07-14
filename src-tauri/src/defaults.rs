@@ -142,10 +142,6 @@ pub(crate) fn default_tidbit_global_shortcut() -> String {
     "CommandOrControl+Shift+Space".into()
 }
 
-pub(crate) fn default_base_card_image_layout() -> String {
-    DEFAULT_BASE_CARD_IMAGE_LAYOUT.into()
-}
-
 pub(crate) fn default_ai_base_url() -> String {
     DEFAULT_AI_BASE_URL.into()
 }
@@ -164,10 +160,6 @@ pub(crate) fn default_glass_opacity() -> f64 {
 
 pub(crate) fn default_calendar_preview_delay_ms() -> u32 {
     DEFAULT_CALENDAR_PREVIEW_DELAY_MS
-}
-
-pub(crate) fn default_true() -> bool {
-    true
 }
 
 pub(crate) fn default_status_bar_visible() -> bool {
@@ -250,6 +242,9 @@ impl Default for FileDisplaySettings {
     fn default() -> Self {
         Self {
             show_files_in_folder_tree: false,
+            open_documents_on_double_click: false,
+            show_new_note_button: true,
+            show_new_folder_button: true,
             show_folder_tree_background: false,
             show_file_previews_in_folder_tree: true,
             show_images_in_file_previews: true,
@@ -262,12 +257,6 @@ impl Default for FileDisplaySettings {
 impl Default for AutosaveSettings {
     fn default() -> Self {
         Self { enabled: true }
-    }
-}
-
-impl Default for DebugSettings {
-    fn default() -> Self {
-        Self { enabled: false }
     }
 }
 

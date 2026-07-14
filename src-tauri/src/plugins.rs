@@ -337,7 +337,7 @@ pub(crate) fn list_vault_plugins(root: String) -> Result<PluginCatalog, String> 
         }
     }
 
-    plugins.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    plugins.sort_by_key(|plugin| plugin.name.to_lowercase());
     errors.sort();
 
     Ok(PluginCatalog { plugins, errors })

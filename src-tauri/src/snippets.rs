@@ -106,7 +106,7 @@ pub(crate) fn list_css_snippets(
         });
     }
 
-    snippets.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    snippets.sort_by_key(|snippet| snippet.name.to_lowercase());
 
     Ok(snippets)
 }

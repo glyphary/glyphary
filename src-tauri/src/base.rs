@@ -271,7 +271,7 @@ pub(crate) fn query_base(root: String, relative: String) -> Result<BaseQueryResu
         });
     }
 
-    candidates.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    candidates.sort_by_key(|candidate| candidate.name.to_lowercase());
 
     let views = definition
         .views
