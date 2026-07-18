@@ -126,6 +126,7 @@ pub(crate) struct TidbitSettings {
 
 #[derive(Default)]
 pub(crate) struct TidbitShortcutState {
+    #[cfg(desktop)]
     pub(crate) registered_shortcut: Mutex<Option<String>>,
 }
 

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   BaseQueryResult,
+  GithubVaultResult,
   OpenedFile,
   RenamedDirectory,
   SearchResult,
@@ -137,4 +138,34 @@ export function searchVaultFiles(
 
 export function queryBase(root: string, relative: string) {
   return invoke<BaseQueryResult>("query_base", { root, relative });
+}
+
+export function cloneGithubVault(repoUrl: string, branch: string, token: string) {
+  return invoke<GithubVaultResult>("github_clone_vault", {
+    request: { repoUrl, branch, token },
+  });
+}
+
+export function pullGithubVault(root: string, token: string) {
+  return invoke<GithubVaultResult>("github_pull_vault", { root, token });
+}
+
+export function pushGithubVault(root: string, token: string, message: string) {
+  return invoke<GithubVaultResult>("github_push_vault", { root, token, message });
+}
+
+export function getGithubToken(repoUrl: string) {
+  return invoke<string>("github_get_token", { repoUrl });
+}
+
+export function getGithubVaultToken(root: string) {
+  return invoke<string>("github_get_vault_token", { root });
+}
+
+export function saveGithubToken(repoUrl: string, token: string) {
+  return invoke<void>("github_save_token", { repoUrl, token });
+}
+
+export function saveGithubVaultToken(root: string, token: string) {
+  return invoke<void>("github_save_vault_token", { root, token });
 }

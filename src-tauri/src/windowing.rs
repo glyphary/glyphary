@@ -75,11 +75,6 @@ fn move_traffic_lights(ns_window: &objc2_app_kit::NSWindow, x: f64, y: f64) -> R
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn apply_macos_titlebar_chrome(_app: &tauri::AppHandle) -> Result<(), String> {
-    Ok(())
-}
-
 #[cfg(target_os = "macos")]
 pub(crate) fn apply_window_glass_effect(
     app: &tauri::AppHandle,

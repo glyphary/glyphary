@@ -106,7 +106,7 @@ import {
   isSupportedImageFile,
 } from "./lib/assets";
 import { expandDateTemplate } from "./lib/dates";
-import { isMacOsPlatform, isWindowsPlatform } from "./lib/platform";
+import { isIPadPlatform, isMacOsPlatform, isWindowsPlatform } from "./lib/platform";
 import {
   defaultAutosaveSettings,
   defaultCanvasSettings,
@@ -239,22 +239,29 @@ import { FolderIcon, VaultFileIcon } from "./vault/VaultIcons";
 import { VaultTitlebarActions } from "./vault/VaultTitlebarActions";
 import {
   allowVaultAssets,
+  cloneGithubVault,
   createCanvasInDirectory,
   createDirectoryInDirectory,
   createExcalidrawFile,
   createNoteInDirectory,
   createVaultMarkdownFile,
   deleteVaultFile,
+  getGithubToken,
+  getGithubVaultToken,
   listVaultDir,
   listVaultMarkdownFiles,
   moveVaultDirectory,
   moveVaultFile,
   openCalendarDayFile,
   openDirectoryShadowFile,
+  pullGithubVault,
+  pushGithubVault,
   readVaultFile,
   readVaultSettings,
   renameVaultDirectory,
   renameVaultFile,
+  saveGithubToken,
+  saveGithubVaultToken,
   searchVaultFiles,
   writeVaultFile,
   writeVaultSettings,
@@ -287,6 +294,7 @@ import type {
   FolderActionDialogState,
   FolderActionKind,
   FolderContextMenuState,
+  GithubSyncProgress,
   OpenedFile,
   PersistedWorkspace,
   PluginCatalog,
@@ -421,6 +429,16 @@ type ReleaseNotification = {
   tagName: string;
   url: string;
 };
+
+type GithubDialogState = {
+  mode: "clone" | "pull" | "push";
+  repoUrl: string;
+  branch: string;
+  token: string;
+  message: string;
+};
+
+type VaultOpenProgress = (completed: number, total: number, message: string) => void;
 
 type OpenPathsPayload = {
   paths: string[];
@@ -624,6 +642,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [richLinkSubmitting, setRichLinkSubmitting] = useState(false);
   const [releaseNotification, setReleaseNotification] =
     useState<ReleaseNotification | null>(null);
+  const [githubDialog, setGithubDialog] = useState<GithubDialogState | null>(null);
+  const [githubSubmitting, setGithubSubmitting] = useState(false);
+  const [githubSyncProgress, setGithubSyncProgress] = useState<GithubSyncProgress | null>(null);
+  const [githubError, setGithubError] = useState<string | null>(null);
+  const [fileMenuOpen, setFileMenuOpen] = useState(false);
   const [aiReview, setAiReview] = useState<AiReviewState | null>(null);
   const [aiPageBuilderOpen, setAiPageBuilderOpen] = useState(false);
   const [aiPageBuilderPrompt, setAiPageBuilderPrompt] = useState("");
@@ -685,9 +708,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [folderActionDialog, setFolderActionDialog] = useState<FolderActionDialogState | null>(null);
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState("No vault open");
+  const isIPad = isIPadPlatform(
+    window.navigator.platform,
+    window.navigator.userAgent,
+    window.navigator.maxTouchPoints,
+  );
   const isMacOs = isMacOsPlatform(window.navigator.platform, window.navigator.userAgent);
+  const isDesktopMacOs = isMacOs && !isIPad;
+  const showNativeDrawerActions = isDesktopMacOs || isIPad;
   const hideDuplicateDocumentActions =
-    isMacOs || isWindowsPlatform(window.navigator.platform, window.navigator.userAgent);
+    isDesktopMacOs || isWindowsPlatform(window.navigator.platform, window.navigator.userAgent);
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const calendarPreviewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const calendarPreviewRequestId = useRef(0);
@@ -1249,6 +1279,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   }
 
   const savedFileDisplaySettings = normalizeFileDisplaySettings(vaultSettings.files);
+  const calendarDayOpenAction = savedFileDisplaySettings.openDocumentsOnDoubleClick
+    ? "Double-click"
+    : "Click";
 
   function savedAutosaveSettings() {
     return normalizeAutosaveSettings(vaultSettings.autosave);
@@ -1396,7 +1429,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   }
 
   async function openSettings() {
-    if (isTauri() && !settingsWindowMode) {
+    if (isTauri() && !settingsWindowMode && !isIPad) {
       try {
         const existing = await WebviewWindow.getByLabel("settings");
 
@@ -2514,7 +2547,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   async function applyVaultWorkspace(
     root: string,
     workspace: PersistedWorkspace | null,
-    statusPrefix: "Opened" | "Restored",
+    statusPrefix: "Opened" | "Pulled" | "Restored",
+    progress?: VaultOpenProgress,
   ) {
     const currentDir = workspace?.currentDir ?? "";
     const recentFiles = workspace?.recentFiles ?? [];
@@ -2565,6 +2599,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setDrawerItem(nextDrawerItem);
     recentFilesRef.current = recentFiles;
     setRecentFiles(recentFiles);
+    progress?.(1, 4, "Loading vault settings");
     await loadVaultSettings(root);
     await loadAiBuilderHistory(root);
     currentDirRef.current = currentDir;
@@ -2573,9 +2608,12 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setSearchResults([]);
     setTaskResults([]);
     setEntries([]);
+    progress?.(2, 4, "Loading vault files");
     await loadEntries(root, currentDir);
     setWikiLinkIndexAndRef([]);
+    progress?.(3, 4, "Indexing wiki links");
     await rebuildWikiLinkIndex(root);
+    progress?.(4, 4, "Restoring open documents");
 
     if (workspace?.openFiles.length) {
       const tabs: DocumentTab[] = [];
@@ -2624,6 +2662,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     replacePrimaryTabs([tab], tab);
     hydrateDocumentTab(tab, "primary");
     persistAppliedWorkspace(null, []);
+    progress?.(4, 4, "Vault ready");
     setStatus(`${statusPrefix} vault ${root}`);
   }
 
@@ -2775,7 +2814,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       if (!hasExistingNote) {
         setCalendarDayPreview({
           dateKey,
-          markdown: "No calendar note yet. Double-click this day to create it.",
+          markdown: `No calendar note yet. ${calendarDayOpenAction} this day to create it.`,
           relativePath,
           title,
           ...position,
@@ -4416,23 +4455,220 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     return () => window.clearInterval(interval);
   }, [vaultRoot, autosaveSettings.enabled]);
 
-  async function openVaultRoot(root: string) {
+  async function openVaultRoot(root: string, progress?: VaultOpenProgress) {
     try {
       await saveCurrentFile();
-      await applyVaultWorkspace(root, readPersistedWorkspaceForVault(root), "Opened");
+      await applyVaultWorkspace(root, readPersistedWorkspaceForVault(root), "Opened", progress);
       setVaultLibraryOverlayOpen(false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
   }
 
+  function openGithubDialog(mode: GithubDialogState["mode"]) {
+    setGithubError(null);
+    setGithubSyncProgress(null);
+    setGithubDialog({
+      mode,
+      repoUrl: "",
+      branch: "main",
+      token: "",
+      message: "Update vault from Glyphary",
+    });
+
+    if (mode !== "clone" && vaultRoot) {
+      void getGithubVaultToken(vaultRoot)
+        .then((token) => {
+          setGithubDialog((dialog) =>
+            dialog?.mode === mode && !dialog.token.trim() ? { ...dialog, token } : dialog,
+          );
+        })
+        .catch(() => {
+          // Missing or unavailable credentials should leave the token field editable.
+        });
+    }
+  }
+
+  function loadGithubTokenForRepository(repoUrl: string) {
+    const normalizedRepoUrl = repoUrl.trim();
+    if (!normalizedRepoUrl) {
+      return;
+    }
+
+    void getGithubToken(normalizedRepoUrl)
+      .then((token) => {
+        setGithubDialog((dialog) =>
+          dialog?.mode === "clone" &&
+          dialog.repoUrl.trim() === normalizedRepoUrl &&
+          !dialog.token.trim()
+            ? { ...dialog, token }
+            : dialog,
+        );
+      })
+      .catch(() => {
+        // Missing or unavailable credentials should leave the token field editable.
+      });
+  }
+
+  async function rememberGithubToken(
+    dialog: GithubDialogState,
+    root: string | null,
+  ): Promise<string | null> {
+    const token = dialog.token.trim();
+    if (!token) {
+      return null;
+    }
+
+    try {
+      if (dialog.mode === "clone") {
+        await saveGithubToken(dialog.repoUrl, token);
+      } else if (root) {
+        await saveGithubVaultToken(root, token);
+      }
+      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return `Sync completed, but the GitHub token could not be saved: ${message}`;
+    }
+  }
+
+  function fileMenu() {
+    return (
+      <div className={fileMenuOpen ? "file-menu open" : "file-menu"}>
+        <button
+          className="secondary-action"
+          type="button"
+          aria-expanded={fileMenuOpen}
+          aria-haspopup="menu"
+          onClick={() => setFileMenuOpen((open) => !open)}
+        >
+          File
+        </button>
+        <div className="file-menu-popover">
+          <button type="button" onClick={() => runFileMenuAction(openVault)}>
+            Open Vault...
+          </button>
+          <button type="button" onClick={() => runFileMenuAction(() => openGithubDialog("clone"))}>
+            Open from GitHub...
+          </button>
+          {vaultRoot ? (
+            <>
+              <button type="button" onClick={() => runFileMenuAction(() => openGithubDialog("pull"))}>
+                Pull from GitHub...
+              </button>
+              <button type="button" onClick={() => runFileMenuAction(() => openGithubDialog("push"))}>
+                Push to GitHub...
+              </button>
+            </>
+          ) : null}
+          <button
+            disabled={!activeFile || !dirty}
+            type="button"
+            onClick={() => runFileMenuAction(saveCurrentFile)}
+          >
+            Save
+          </button>
+          <button
+            disabled={!vaultRoot}
+            type="button"
+            onClick={() => runFileMenuAction(resetDocument)}
+          >
+            New
+          </button>
+          <button type="button" onClick={() => runFileMenuAction(openSettings)}>
+            Settings...
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function runFileMenuAction(action: () => void | Promise<void>) {
+    setFileMenuOpen(false);
+    void action();
+  }
+
+  async function submitGithubDialog(event: ReactFormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const dialog = githubDialog;
+    if (!dialog || githubSubmitting) {
+      return;
+    }
+
+    setGithubError(null);
+    setGithubSyncProgress({
+      operation: dialog.mode,
+      phase: dialog.mode === "clone" ? "scanning" : "applying",
+      completed: 0,
+      total: 0,
+      message:
+        dialog.mode === "clone"
+          ? "Starting repository scan"
+          : dialog.mode === "pull"
+            ? "Checking GitHub for changes"
+            : "Preparing local changes",
+    });
+    setGithubSubmitting(true);
+    try {
+      let resultMessage = "";
+      if (dialog.mode === "clone") {
+        const result = await cloneGithubVault(dialog.repoUrl, dialog.branch, dialog.token);
+        setGithubSyncProgress({
+          operation: "clone",
+          phase: "applying",
+          completed: 0,
+          total: 4,
+          message: "Opening downloaded vault",
+        });
+        await openVaultRoot(result.root, (completed, total, message) => {
+          setGithubSyncProgress({
+            operation: "clone",
+            phase: "applying",
+            completed,
+            total,
+            message,
+          });
+        });
+        resultMessage = result.message;
+        const credentialWarning = await rememberGithubToken(dialog, result.root);
+        setStatus(credentialWarning ?? resultMessage);
+      } else if (!vaultRoot) {
+        setStatus("Open a GitHub vault before syncing it");
+      } else if (dialog.mode === "pull") {
+        await saveCurrentFile();
+        const result = await pullGithubVault(vaultRoot, dialog.token);
+        await applyVaultWorkspace(vaultRoot, readPersistedWorkspaceForVault(vaultRoot), "Pulled");
+        resultMessage = result.message;
+        const credentialWarning = await rememberGithubToken(dialog, vaultRoot);
+        setStatus(credentialWarning ?? resultMessage);
+      } else {
+        await saveCurrentFile();
+        const result = await pushGithubVault(vaultRoot, dialog.token, dialog.message);
+        resultMessage = result.message;
+        const credentialWarning = await rememberGithubToken(dialog, vaultRoot);
+        setStatus(credentialWarning ?? resultMessage);
+      }
+      setGithubDialog(null);
+      setGithubSyncProgress(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setGithubError(message);
+      setStatus(message);
+    } finally {
+      setGithubSubmitting(false);
+    }
+  }
+
   async function openVault() {
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Open Vault",
-      });
+      const selected = isIPad
+        ? await invoke<string | null>("pick_vault_folder")
+        : await open({
+            directory: true,
+            multiple: false,
+            title: "Open Vault",
+          });
 
       if (typeof selected !== "string") {
         return;
@@ -4927,6 +5163,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     });
 
     registerNativeEvent("settings-requested", openSettings);
+
+    registerNativeEvent<GithubSyncProgress>("github-sync-progress", (event) => {
+      setGithubSyncProgress(event.payload);
+    });
 
     registerNativeEvent<number>("open-recent-file-requested", (event) => {
       const file = recentFilesRef.current[event.payload];
@@ -8315,7 +8555,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     `section-corners-${normalizedVaultAppearanceDraft.sectionCorners}`,
     `workspace-margin-${normalizedVaultAppearanceDraft.workspaceMargin}`,
     `ui-weight-${normalizedVaultAppearanceDraft.uiFontWeight}`,
-    isMacOs ? "platform-macos" : null,
+    isDesktopMacOs ? "platform-macos" : null,
+    isIPad ? "platform-ipad" : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -8454,6 +8695,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       </datalist>
       <header className="titlebar" data-tauri-drag-region onMouseDown={startTitlebarDrag}>
         <div className="titlebar-drag-region" data-tauri-drag-region />
+        {isIPad ? fileMenu() : null}
         {vaultRoot ? (
           <>
         {vaultDrawerOpen && vaultDrawerItem === "files" ? (
@@ -8468,7 +8710,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
             onCreateNote={() => openFolderActionDialog("create-note", currentDirectoryEntry())}
           />
         ) : null}
-        {isMacOs ? (
+        {showNativeDrawerActions ? (
           <div className="titlebar-native-actions">
             <button
               className="secondary-action icon-action titlebar-drawer-toggle"
@@ -8504,27 +8746,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           </button>
         ) : null}
         <div className="app-actions">
-          {!hideDuplicateDocumentActions ? (
-            <div className="file-menu">
-              <button className="secondary-action" type="button">
-                File
-              </button>
-              <div className="file-menu-popover">
-                <button type="button" onClick={openVault}>
-                  Open Vault...
-                </button>
-                <button disabled={!activeFile || !dirty} type="button" onClick={saveCurrentFile}>
-                  Save
-                </button>
-                <button type="button" onClick={resetDocument}>
-                  New
-                </button>
-                <button type="button" onClick={openSettings}>
-                  Settings...
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {!hideDuplicateDocumentActions && !isIPad ? fileMenu() : null}
         <button
             className="secondary-action icon-action"
             disabled={!activeFile || !dirty}
@@ -8655,7 +8877,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               </svg>
             </button>
           </div>
-          {isMacOs ? (
+          {showNativeDrawerActions ? (
             <button
               className="secondary-action icon-action titlebar-drawer-toggle titlebar-inspector-toggle"
               type="button"
@@ -9480,13 +9702,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                             .join(" ")}
                           key={date.toISOString()}
                           type="button"
-                          onDoubleClick={() => openCalendarDay(date)}
+                          onClick={(event) =>
+                            handleDocumentClick(event, () => openCalendarDay(date))
+                          }
                           onMouseEnter={(event) => scheduleCalendarDayPreview(date, event)}
                           onMouseLeave={closeCalendarDayPreview}
                           onMouseMove={(event) => moveCalendarDayPreview(date, event)}
                           onPointerEnter={(event) => scheduleCalendarDayPreview(date, event)}
                           onPointerLeave={closeCalendarDayPreview}
-                          title={`Double-click to open ${calendarDayTitle(date)}`}
+                          title={`${calendarDayOpenAction} to open ${calendarDayTitle(date)}`}
                         >
                           <span>{date.getDate()}</span>
                           {hasNote ? <i aria-hidden="true" /> : null}
@@ -9521,6 +9745,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
             </div>
             <button className="primary-action vault-onboarding-action" type="button" onClick={openVault}>
               Select Vault Folder
+            </button>
+            <button
+              className="inline-action"
+              type="button"
+              onClick={() => openGithubDialog("clone")}
+            >
+              Open from GitHub
             </button>
           </div>
         </section>
@@ -10083,6 +10314,142 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                 type="submit"
               >
                 {richLinkSubmitting ? "Fetching..." : "Insert"}
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+      {githubDialog ? (
+        <div
+          className="folder-action-dialog-screen"
+          role="presentation"
+          onMouseDown={() => setGithubDialog(null)}
+        >
+          <form
+            className="folder-action-dialog-card github-vault-dialog-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="GitHub vault sync"
+            onMouseDown={(event) => event.stopPropagation()}
+            onSubmit={(event) => void submitGithubDialog(event)}
+          >
+            <div className="folder-action-dialog-header">
+              <h2>
+                {githubDialog.mode === "clone"
+                  ? "Open a GitHub vault"
+                  : githubDialog.mode === "pull"
+                    ? "Pull from GitHub"
+                    : "Push to GitHub"}
+              </h2>
+                <span>
+                  Saved in the device Keychain after a successful sync; never written into the
+                  vault.
+                </span>
+              </div>
+            {githubSyncProgress ? (
+              <div className="github-sync-progress" role="status" aria-live="polite">
+                <div className="github-sync-progress-copy">
+                  <strong>{githubSyncProgress.message}</strong>
+                  {githubSyncProgress.total > 0 ? (
+                    <span>
+                      {githubSyncProgress.completed} of {githubSyncProgress.total}
+                    </span>
+                  ) : null}
+                </div>
+                {githubSyncProgress.total > 0 ? (
+                  <progress
+                    max={githubSyncProgress.total}
+                    value={githubSyncProgress.completed}
+                    aria-label={githubSyncProgress.message}
+                  />
+                ) : (
+                  <span className="github-sync-spinner" aria-hidden="true" />
+                )}
+              </div>
+            ) : null}
+            {githubError ? <p className="github-sync-error">{githubError}</p> : null}
+            {githubDialog.mode === "clone" ? (
+              <>
+                <label>
+                  <span>Repository</span>
+                  <input
+                    autoFocus
+                    required
+                    spellCheck="false"
+                    placeholder="owner/repository"
+                    value={githubDialog.repoUrl}
+                    onChange={(event) => {
+                      const repoUrl = event.currentTarget.value;
+                      setGithubDialog((dialog) => (dialog ? { ...dialog, repoUrl } : dialog));
+                    }}
+                    onBlur={(event) => loadGithubTokenForRepository(event.currentTarget.value)}
+                  />
+                </label>
+                <label>
+                  <span>Branch</span>
+                  <input
+                    required
+                    spellCheck="false"
+                    value={githubDialog.branch}
+                    onChange={(event) => {
+                      const branch = event.currentTarget.value;
+                      setGithubDialog((dialog) => (dialog ? { ...dialog, branch } : dialog));
+                    }}
+                  />
+                </label>
+              </>
+            ) : null}
+            <label>
+              <span>GitHub token {githubDialog.mode === "pull" ? "(optional for public repositories)" : ""}</span>
+              <input
+                autoFocus={githubDialog.mode !== "clone"}
+                type="password"
+                spellCheck="false"
+                value={githubDialog.token}
+                onChange={(event) => {
+                  const token = event.currentTarget.value;
+                  setGithubDialog((dialog) => (dialog ? { ...dialog, token } : dialog));
+                }}
+              />
+            </label>
+            {githubDialog.mode === "push" ? (
+              <label>
+                <span>Commit message</span>
+                <input
+                  spellCheck="false"
+                  value={githubDialog.message}
+                  onChange={(event) => {
+                    const message = event.currentTarget.value;
+                    setGithubDialog((dialog) => (dialog ? { ...dialog, message } : dialog));
+                  }}
+                />
+              </label>
+            ) : null}
+            <div className="folder-action-dialog-actions">
+              <button
+                className="inline-action"
+                type="button"
+                onClick={() => setGithubDialog(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-action"
+                disabled={
+                  githubSubmitting ||
+                  (githubDialog.mode === "clone" &&
+                    (!githubDialog.repoUrl.trim() || !githubDialog.branch.trim())) ||
+                  (githubDialog.mode === "push" && !githubDialog.token.trim())
+                }
+                type="submit"
+              >
+                {githubSubmitting
+                  ? "Working..."
+                  : githubDialog.mode === "clone"
+                    ? "Open"
+                    : githubDialog.mode === "pull"
+                      ? "Pull"
+                      : "Push"}
               </button>
             </div>
           </form>

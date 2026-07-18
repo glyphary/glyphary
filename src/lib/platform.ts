@@ -26,3 +26,16 @@ export function isWindowsPlatform(platform: string, userAgent = "") {
 
   return normalizedPlatform.startsWith("win") || normalizedUserAgent.includes("windows");
 }
+
+export function isIPadPlatform(platform: string, userAgent = "", maxTouchPoints = 0) {
+  const normalizedPlatform = platform.toLowerCase();
+  const normalizedUserAgent = userAgent.toLowerCase();
+
+  return (
+    normalizedPlatform.includes("ipad") ||
+    normalizedUserAgent.includes("ipad") ||
+    (maxTouchPoints > 0 &&
+      normalizedPlatform === "macintel" &&
+      normalizedUserAgent.includes("macintosh"))
+  );
+}

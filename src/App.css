@@ -770,7 +770,8 @@ button {
 }
 
 .file-menu:focus-within .file-menu-popover,
-.file-menu:hover .file-menu-popover {
+.file-menu:hover .file-menu-popover,
+.file-menu.open .file-menu-popover {
   display: block;
 }
 
@@ -6342,6 +6343,62 @@ body.workspace-resizing * {
   white-space: nowrap;
 }
 
+.github-sync-progress {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  padding: 10px;
+}
+
+.github-sync-progress-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--heading);
+  font-size: 0.78rem;
+}
+
+.github-sync-progress-copy strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.github-sync-progress-copy span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.github-sync-progress progress {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+
+.github-sync-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: glyphary-spin 0.8s linear infinite;
+}
+
+.github-sync-error {
+  margin: 0;
+  color: var(--danger, #c94848);
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
 .folder-action-dialog-card label {
   display: grid;
   gap: 7px;
@@ -7003,6 +7060,93 @@ body.workspace-resizing * {
 
   .metadata-shell {
     gap: 10px;
+  }
+
+  .platform-ipad {
+    --glyphary-shell-padding-top: calc(env(safe-area-inset-top, 0px) + 58px);
+    --glyphary-shell-padding-inline: 8px;
+    --glyphary-shell-padding: 10px;
+  }
+
+  .platform-ipad .titlebar {
+    top: env(safe-area-inset-top, 0px);
+    right: 8px;
+    left: 8px;
+    min-height: 44px;
+    justify-content: flex-start;
+    overflow: visible;
+    border-radius: 8px;
+    padding: 4px;
+  }
+
+  .platform-ipad .titlebar-drag-region {
+    display: none;
+  }
+
+  .platform-ipad .titlebar > .file-menu {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+
+  .platform-ipad .titlebar > .file-menu .file-menu-popover {
+    right: auto;
+    left: 0;
+  }
+
+  .platform-ipad .titlebar-native-actions,
+  .platform-ipad .titlebar-vault-actions {
+    flex: 0 0 auto;
+  }
+
+  .platform-ipad .titlebar-document-proxy {
+    max-width: none;
+    flex: 1 1 150px;
+  }
+
+  .platform-ipad .app-actions {
+    min-width: max-content;
+    flex-wrap: nowrap;
+  }
+
+  .platform-ipad .workspace.with-vault {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .platform-ipad .workspace.with-vault .editor-groups {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .platform-ipad .workspace.with-vault .vault-pane,
+  .platform-ipad .workspace.with-vault .drawer-pane {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 20;
+    width: min(380px, calc(100% - 24px));
+    min-height: 0;
+  }
+
+  .platform-ipad .workspace.with-vault .vault-pane {
+    left: 0;
+  }
+
+  .platform-ipad .workspace.with-vault .drawer-pane {
+    right: 0;
+  }
+
+  .platform-ipad .workspace.with-vault.vault-drawer-closed .vault-pane,
+  .platform-ipad .workspace.with-vault.drawer-closed .drawer-pane {
+    display: none;
+  }
+
+  .platform-ipad .workspace.with-vault .workspace-resizer {
+    display: none;
   }
 }
 

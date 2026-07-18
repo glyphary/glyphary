@@ -11,7 +11,10 @@
 //! - At most one tidbit shortcut is registered per app process.
 //! - Native callback handlers must not touch editor state directly.
 use super::*;
+#[cfg(desktop)]
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
+#[cfg(desktop)]
 #[tauri::command]
 pub(crate) fn register_tidbit_global_shortcut(
     app: AppHandle,
@@ -63,6 +66,7 @@ pub(crate) fn register_tidbit_global_shortcut(
 
     Ok(registered)
 }
+#[cfg(desktop)]
 #[tauri::command]
 pub(crate) fn unregister_tidbit_global_shortcut(
     app: AppHandle,
@@ -82,6 +86,7 @@ pub(crate) fn unregister_tidbit_global_shortcut(
 
     Ok(())
 }
+#[cfg(desktop)]
 #[tauri::command]
 pub(crate) fn tidbit_global_shortcut_status(
     app: AppHandle,
@@ -102,8 +107,37 @@ pub(crate) fn tidbit_global_shortcut_status(
         registered,
     })
 }
+#[cfg(desktop)]
 #[tauri::command]
 pub(crate) fn test_tidbit_global_shortcut_event(app: AppHandle) -> Result<(), String> {
     app.emit("tidbit-global-shortcut", "test")
         .map_err(|error| format!("Could not emit tidbit shortcut test event: {error}"))
+}
+
+#[cfg(not(desktop))]
+#[tauri::command]
+pub(crate) fn register_tidbit_global_shortcut(_shortcut: String) -> Result<bool, String> {
+    Err("Global tidbit shortcuts are not available on iPad".into())
+}
+
+#[cfg(not(desktop))]
+#[tauri::command]
+pub(crate) fn unregister_tidbit_global_shortcut() -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(not(desktop))]
+#[tauri::command]
+pub(crate) fn tidbit_global_shortcut_status() -> Result<TidbitShortcutStatus, String> {
+    Ok(TidbitShortcutStatus {
+        shortcut: None,
+        registered: false,
+    })
+}
+
+#[cfg(not(desktop))]
+#[tauri::command]
+pub(crate) fn test_tidbit_global_shortcut_event(app: AppHandle) -> Result<(), String> {
+    app.emit("tidbit-global-shortcut", "test")
+        .map_err(|error| format!("Could not emit tidbit shortcut test: {error}"))
 }

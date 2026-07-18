@@ -73,6 +73,7 @@ import {
   expandDateTemplate,
 } from "../.test-dist/dates.js";
 import {
+  isIPadPlatform,
   isMacOsPlatform,
   isWindowsPlatform,
 } from "../.test-dist/platform.js";
@@ -165,6 +166,8 @@ test("vault documents open with one click by default and can require double-clic
     app,
     /shouldOpenDocumentOnClick\(\s*savedFileDisplaySettings\.openDocumentsOnDoubleClick,\s*event\.detail/,
   );
+  assert.match(app, /handleDocumentClick\(event, \(\) => openCalendarDay\(date\)\)/);
+  assert.doesNotMatch(app, /onDoubleClick=\{\(\) => openCalendarDay\(date\)\}/);
   assert.match(folderTree, /shouldOpenDocumentOnClick\(openDocumentsOnDoubleClick, event\.detail\)/);
   assert.match(settingsDialog, /Open documents with a double click/);
 });
@@ -424,6 +427,15 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.equal(isMacOsPlatform("", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"), true);
   assert.equal(isMacOsPlatform("Win32"), false);
   assert.equal(isMacOsPlatform("Linux x86_64"), false);
+  assert.equal(isIPadPlatform("iPad", "Mozilla/5.0 (iPad)"), true);
+  assert.equal(
+    isIPadPlatform("MacIntel", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 5),
+    true,
+  );
+  assert.equal(
+    isIPadPlatform("MacIntel", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"),
+    false,
+  );
   assert.equal(isWindowsPlatform("Win32"), true);
   assert.equal(isWindowsPlatform("", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"), true);
   assert.equal(isWindowsPlatform("MacIntel"), false);
@@ -435,6 +447,15 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.match(app, /getCurrentWindow\(\)\.setTheme\(resolvedAppearance\)/);
   assert.match(app, /titlebar-document-proxy/);
   assert.match(app, /showActiveDocumentProxyMenu/);
+  assert.match(app, /github-sync-progress/);
+  assert.match(app, /platform-ipad/);
+  assert.match(app, /isIPad \? fileMenu\(\)/);
+  assert.match(app, /isIPad[\s\S]*pick_vault_folder/);
+  assert.match(app, /function fileMenu\(\)/);
+  assert.match(app, /!settingsWindowMode && !isIPad/);
+  assert.match(css, /\.platform-ipad \.workspace\.with-vault \.vault-pane/);
+  assert.match(css, /\.platform-ipad \.workspace\.with-vault\.vault-drawer-closed \.vault-pane/);
+  assert.match(css, /\.platform-ipad \.titlebar > \.file-menu \.file-menu-popover[\s\S]*right: auto[\s\S]*left: 0/);
   assert.match(app, /active-document-copy-path/);
   assert.doesNotMatch(app, /app-brand/);
   assert.ok(capabilities.permissions.includes("core:window:allow-set-theme"));
@@ -460,6 +481,7 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.match(app, /titlebar-document-name/);
   assert.match(app, /titlebar-inspector-toggle/);
   assert.match(app, /onClick=\{\(\) => toggleDrawerItem\(drawerItem\)\}/);
+  assert.match(backend, /pick_vault_folder/);
   assert.match(css, /\.titlebar \{[\s\S]*app-region: drag/);
   assert.match(css, /\.titlebar-drawer-toggle svg \{[\s\S]*width: 22px/);
   assert.match(css, /\.titlebar-document-proxy \{[\s\S]*max-width: min\(34vw, 360px\)/);
@@ -518,7 +540,11 @@ test("calendar filenames match the requested note naming scheme and dot marker k
   assert.match(app, /function scheduleCalendarDayPreview\(\s*date: Date,\s*event: ReactMouseEvent<HTMLButtonElement> \| ReactPointerEvent<HTMLButtonElement>,\s*\)/);
   assert.match(app, /function moveCalendarDayPreview\(/);
   assert.match(app, /const hasExistingNote = calendarNoteDateKeySet\.has\(dateKey\)/);
-  assert.match(app, /No calendar note yet\. Double-click this day to create it\./);
+  assert.match(
+    app,
+    /markdown: `No calendar note yet\. \$\{calendarDayOpenAction\} this day to create it\.`/,
+  );
+  assert.match(app, /title=\{`\$\{calendarDayOpenAction\} to open \$\{calendarDayTitle\(date\)\}`\}/);
   assert.match(app, /calendarPreviewTimer\.current = setTimeout/);
   assert.match(app, /\}, editorBehavior\.calendarPreviewDelayMs\)/);
   assert.match(app, /readVaultFile\(vaultRootRef\.current, relativePath\)/);

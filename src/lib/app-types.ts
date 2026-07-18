@@ -51,6 +51,19 @@ export type SavedAsset = {
   relativePath: string;
 };
 
+export type GithubVaultResult = {
+  root: string;
+  message: string;
+};
+
+export type GithubSyncProgress = {
+  operation: "clone" | "pull" | "push";
+  phase: "scanning" | "downloading" | "applying" | "uploading" | "complete";
+  completed: number;
+  total: number;
+  message: string;
+};
+
 export type CssSnippetFile = {
   name: string;
   relativePath: string;

@@ -14,13 +14,17 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeSet, HashMap},
-    env, fs,
+    fs,
     path::{Component, Path, PathBuf},
     sync::Mutex,
     time::Duration,
 };
-use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+#[cfg(desktop)]
+use tauri::State;
+use tauri::{webview::PageLoadEvent, AppHandle, Emitter, Manager};
+
+#[cfg(target_os = "ios")]
+use glyphary_folder_picker::pick_folder;
 
 // Tauri's command macro emits helper macros beside each command. Keeping
 // command-bearing modules imported with `macro_use` lets `generate_handler!`
@@ -36,7 +40,10 @@ mod base;
 mod defaults;
 #[macro_use]
 mod calendar;
+#[macro_use]
+mod github;
 mod models;
+#[cfg(desktop)]
 #[macro_use]
 mod native_menu;
 mod paths;
@@ -64,7 +71,9 @@ use assets::*;
 use base::*;
 use calendar::*;
 use defaults::*;
+use github::*;
 use models::*;
+#[cfg(desktop)]
 use native_menu::*;
 use paths::*;
 use plugins::*;
@@ -107,6 +116,7 @@ fn clean_open_path(path: PathBuf) -> Option<String> {
     Some(absolute.to_string_lossy().into_owned())
 }
 
+#[cfg(desktop)]
 fn open_path_from_arg(arg: &str, cwd: &str) -> Option<String> {
     let trimmed = arg.trim();
 
@@ -132,6 +142,7 @@ fn open_path_from_arg(arg: &str, cwd: &str) -> Option<String> {
     clean_open_path(path)
 }
 
+#[cfg(desktop)]
 fn collect_open_paths(args: impl IntoIterator<Item = String>, cwd: &str) -> Vec<String> {
     let mut seen = BTreeSet::new();
 
@@ -182,36 +193,82 @@ fn take_opened_paths(app: AppHandle) -> Vec<String> {
     }
 }
 
+#[cfg(not(desktop))]
+#[tauri::command]
+fn update_native_menu_state(_state: serde_json::Value) -> Result<(), String> {
+    Ok(())
+}
+
+#[tauri::command]
+async fn pick_vault_folder(app: AppHandle) -> Result<Option<String>, String> {
+    #[cfg(target_os = "ios")]
+    return pick_folder(&app).await;
+
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = app;
+        Err("The native folder picker is only available on mobile".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .manage(OpenedPaths::default())
-        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-            queue_and_emit_open_paths(app, collect_open_paths(args, &cwd));
-        }))
-        .menu(|app| build_native_menu(app, &NativeMenuState::default()))
-        .on_menu_event(|app, event| {
-            handle_native_menu_event(app, event.id().as_ref());
-        })
+    #[cfg(desktop)]
+    let mut builder = tauri::Builder::default().manage(OpenedPaths::default());
+    #[cfg(not(desktop))]
+    let builder = tauri::Builder::default().manage(OpenedPaths::default());
+
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+                queue_and_emit_open_paths(app, collect_open_paths(args, &cwd));
+            }))
+            .menu(|app| build_native_menu(app, &NativeMenuState::default()))
+            .on_menu_event(|app, event| {
+                handle_native_menu_event(app, event.id().as_ref());
+            })
+            .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+            .plugin(tauri_plugin_macos_permissions::init())
+            .plugin(tauri_plugin_window_state::Builder::default().build())
+            .on_page_load(|webview, payload| {
+                if webview.label() == "main" && payload.event() == PageLoadEvent::Finished {
+                    let window = webview.window();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            });
+    }
+
+    builder
+        .plugin(glyphary_folder_picker::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_macos_permissions::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
-            if let Err(err) = apply_macos_titlebar_chrome(app.handle()) {
-                eprintln!("Could not apply macOS titlebar chrome: {err}");
-            }
+            #[cfg(not(desktop))]
+            let _ = app;
 
-            let cwd = env::current_dir()
-                .ok()
-                .map(|path| path.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            let startup_paths = collect_open_paths(env::args(), &cwd);
+            #[cfg(desktop)]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
 
-            if let Ok(mut pending_paths) = app.state::<OpenedPaths>().0.lock() {
-                pending_paths.extend(startup_paths);
+                #[cfg(target_os = "macos")]
+                if let Err(err) = apply_macos_titlebar_chrome(app.handle()) {
+                    eprintln!("Could not apply macOS titlebar chrome: {err}");
+                }
+
+                let cwd = std::env::current_dir()
+                    .ok()
+                    .map(|path| path.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                let startup_paths = collect_open_paths(std::env::args(), &cwd);
+
+                if let Ok(mut pending_paths) = app.state::<OpenedPaths>().0.lock() {
+                    pending_paths.extend(startup_paths);
+                }
             }
 
             Ok(())
@@ -253,6 +310,14 @@ pub fn run() {
             set_window_glass_effect,
             save_vault_asset,
             import_remote_vault_image_asset,
+            pick_vault_folder,
+            github_clone_vault,
+            github_pull_vault,
+            github_push_vault,
+            github_get_token,
+            github_get_vault_token,
+            github_save_token,
+            github_save_vault_token,
             query_base,
             search_vault,
             fetch_rich_link_metadata,
