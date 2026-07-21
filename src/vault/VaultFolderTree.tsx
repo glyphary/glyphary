@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { vaultImagePathCandidates } from "../app-state/documents";
 import {
   expandedFolderPathsForSelection,
@@ -30,6 +34,10 @@ type VaultFolderTreeProps = {
   openDocumentsOnDoubleClick?: boolean;
   movingEntry?: VaultEntry | null;
   onEntryContextMenu?: (entry: VaultEntry, event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onFilePointerDown?: (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    relativePath: string,
+  ) => void;
   onFileOpen?: (relativePath: string) => void;
   onSelect: (relativePath: string) => void;
   onStatus: (message: string) => void;
@@ -58,6 +66,7 @@ export function VaultFolderTree({
   openDocumentsOnDoubleClick = false,
   movingEntry = null,
   onEntryContextMenu,
+  onFilePointerDown,
   onFileOpen,
   onSelect,
   onStatus,
@@ -162,6 +171,7 @@ export function VaultFolderTree({
           <button
             className={isSelected ? "folder-tree-file active" : "folder-tree-file"}
             type="button"
+            onPointerDown={(event) => onFilePointerDown?.(event, entry.relativePath)}
             onContextMenu={(event) => onEntryContextMenu?.(entry, event)}
             onClick={(event) => {
               if (shouldOpenDocumentOnClick(openDocumentsOnDoubleClick, event.detail)) {

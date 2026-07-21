@@ -15,6 +15,11 @@
 //!   remain frontend/editor responsibilities.
 use super::*;
 
+const DROPPED_TEXT_EXTENSIONS: &[&str] = &[
+    "css", "csv", "html", "js", "json", "log", "md", "markdown", "py", "rs", "sql", "toml", "ts",
+    "tsx", "txt", "xml", "yaml", "yml",
+];
+
 pub(crate) fn walk_note_files(
     root: &Path,
     dir: &Path,
@@ -153,6 +158,29 @@ pub(crate) fn read_vault_file(root: String, relative: String) -> Result<OpenedFi
         relative_path: relative_string(&root, &path)?,
         content,
     })
+}
+
+#[tauri::command]
+pub(crate) fn read_dropped_text_file(source: String) -> Result<String, String> {
+    // External paths are canonicalized and restricted to known text extensions
+    // before the backend reads them, keeping native drops within their contract.
+    let source = fs::canonicalize(source.trim())
+        .map_err(|err| format!("Could not read dropped text file: {err}"))?;
+
+    if !source.is_file() || !has_extension(&source, DROPPED_TEXT_EXTENSIONS) {
+        return Err("Dropped file must be a supported text file".into());
+    }
+
+    let metadata = fs::metadata(&source)
+        .map_err(|err| format!("Could not inspect dropped text file: {err}"))?;
+
+    // Bound synchronous native reads so a large file cannot block the editor
+    // while its contents are transferred into the webview.
+    if metadata.len() > 10 * 1024 * 1024 {
+        return Err("Dropped text file is larger than 10 MB".into());
+    }
+
+    fs::read_to_string(&source).map_err(|err| format!("Could not read dropped text file: {err}"))
 }
 #[tauri::command]
 pub(crate) fn write_vault_file(

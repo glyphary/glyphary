@@ -66,6 +66,9 @@ import {
 import {
   excalidrawFileNameForTitle,
   fileNameForDroppedImage,
+  fileNameForDroppedPath,
+  imageFilesFromDataTransfer,
+  imagePathsFromDrop,
   isSupportedImageFile,
 } from "../.test-dist/assets.js";
 import {
@@ -394,21 +397,54 @@ test("dropped image names follow the pasted-image timestamp convention", () => {
     fileNameForDroppedImage({ name: "diagram.webp", type: "" }, date),
     "diagram 20230102173741.webp",
   );
+  assert.equal(
+    fileNameForDroppedPath("/tmp/Screen Shot: Draft?.jpeg", date),
+    "Screen Shot- Draft 20230102173741.jpg",
+  );
+  assert.deepEqual(imagePathsFromDrop(["/tmp/photo.png", "/tmp/notes.txt"]), [
+    "/tmp/photo.png",
+  ]);
 });
 
 test("drag and paste image filtering accepts supported image formats", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
+  const assets = readFileSync("src-tauri/src/assets.rs", "utf8");
+  const vault = readFileSync("src-tauri/src/vault.rs", "utf8");
 
   assert.equal(isSupportedImageFile({ name: "photo.png", type: "" }), true);
   assert.equal(isSupportedImageFile({ name: "photo.dat", type: "image/webp" }), true);
   assert.equal(isSupportedImageFile({ name: "notes.txt", type: "text/plain" }), false);
+  assert.match(editorOptions, /handleDrop: \(view: EditorView, event: DragEvent\) =>/);
+  assert.match(editorOptions, /transfer\?\.getData\("text\/plain"\)/);
+  assert.match(editorOptions, /file\.type\.startsWith\("text\/"\)/);
+  assert.match(editorOptions, /void file\.text\(\)\.then/);
+  assert.match(editorOptions, /view\.pasteText\(text\)/);
   assert.match(editorOptions, /handlePaste: \(_view: unknown, event: ClipboardEvent\) =>/);
-  assert.match(editorOptions, /queueImageImport\(event\.clipboardData\?\.files\)/);
+  assert.match(editorOptions, /queueImageImport\(event\.clipboardData\)/);
   assert.match(editorOptions, /handleKeyDown: \(view: EditorView, event: KeyboardEvent\) =>/);
   assert.match(editorOptions, /event\.shiftKey && \(event\.metaKey \|\| event\.ctrlKey\) && event\.key\.toLowerCase\(\) === "v"/);
   assert.match(editorOptions, /navigator\.clipboard\?\.readText/);
   assert.match(editorOptions, /view\.pasteText\(text\)/);
+  assert.match(app, /onDragDropEvent\(\(event\) =>/);
+  assert.match(app, /import_dropped_vault_image/);
+  assert.match(app, /assetDirectory: defaultVaultImageDirectory/);
+  assert.match(app, /fileName: fileNameForDroppedPath\(source\)/);
+  assert.match(app, /findNativeDropTarget/);
+  assert.match(app, /focusNativeDropTarget/);
+  assert.match(app, /read_dropped_text_file/);
+  assert.match(assets, /pub\(crate\) fn import_dropped_vault_image/);
+  assert.match(vault, /pub\(crate\) fn read_dropped_text_file/);
+});
+
+test("pasted clipboard image items are converted into importable files", () => {
+  const image = { name: "image.png", type: "image/png" };
+  const transfer = {
+    files: [],
+    items: [{ kind: "file", getAsFile: () => image }],
+  };
+
+  assert.deepEqual(imageFilesFromDataTransfer(transfer), [image]);
 });
 
 test("desktop platform detection controls platform-specific window actions", () => {
@@ -2248,7 +2284,7 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(app, /activeFilePath=\{activeFile\?\.relativePath\}/);
   assert.match(app, /hideHeader/);
   assert.match(app, /onEntryContextMenu=\{handleFolderContextMenu\}/);
-  assert.match(app, /onFileOpen=\{\(relativePath\) => openFile\(relativePath\)\}/);
+  assert.match(app, /onFileOpen=\{handleVaultFileOpen\}/);
   assert.match(app, /showFilePreviews=\{savedFileDisplaySettings\.showFilePreviewsInFolderTree\}/);
   assert.match(app, /showPreviewImages=\{savedFileDisplaySettings\.showImagesInFilePreviews\}/);
   assert.match(app, /import \{ TreeFilePreview, VaultFolderTree \}/);
@@ -3470,6 +3506,56 @@ test("closing the active tab selects a neighboring remaining tab", () => {
     nextActiveTabId: "",
     wasActiveTab: true,
   });
+});
+
+test("document tabs expose native close actions from their context menu", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const editorPane = readFileSync("src/editor/EditorPane.tsx", "utf8");
+
+  assert.match(app, /function closeOtherDocumentTabs\(tabId: string, groupId: EditorGroupId\)/);
+  assert.match(app, /text: "Close Tab"/);
+  assert.match(app, /text: "Close Other Tabs"/);
+  assert.match(app, /id: "document-tab-toggle-star"/);
+  assert.match(app, /text:\s*tab\.activeFile && starredFiles\.includes\(tab\.activeFile\.relativePath\)/);
+  assert.match(app, /Save \$\{tabTitle\(dirtyTab\)\} before closing other tabs/);
+  assert.match(editorPane, /onContextMenu=\{\(event\) => onTabContextMenu\(event, tab, groupId\)\}/);
+});
+
+test("vault files can preview and open into either split pane by drag and drop", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const folderTree = readFileSync("src/vault/VaultFolderTree.tsx", "utf8");
+  const editorPane = readFileSync("src/editor/EditorPane.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+
+  assert.match(app, /function handleVaultFilePointerDown/);
+  assert.match(app, /event\.currentTarget\.setPointerCapture\(event\.pointerId\)/);
+  assert.match(app, /activeVaultFileDragPath/);
+  assert.match(app, /function moveVaultFileDragCursor/);
+  assert.match(app, /className="vault-file-drag-cursor"/);
+  assert.match(app, /editorDropAnimation/);
+  assert.match(app, /function editorDropTargetRect/);
+  assert.match(app, /setTimeout\(\(\) => \{/);
+  assert.match(app, /pendingVaultFileDragRef/);
+  assert.match(app, /function editorGroupsAtPointer/);
+  assert.match(app, /window\.addEventListener\("pointermove", handlePointerMove, true\)/);
+  assert.match(app, /window\.addEventListener\("pointerup", finishPointerDrag, true\)/);
+  assert.match(app, /pending\.active && preview\?\.relativePath === pending\.relativePath/);
+  assert.match(app, /async function openFileFromEditorDrop/);
+  assert.match(app, /openFileFromEditorDropRef\.current\(\s*pending\.relativePath,\s*target\.side,?\s*\)/s);
+  assert.match(app, /lastPreview\?\.relativePath === pending\.relativePath/);
+  assert.match(app, /side === "left" \? "primary" : "secondary"/);
+  assert.match(app, /setSplitOpen\(true\)/);
+  assert.match(app, /onFilePointerDown=\{handleVaultFilePointerDown\}/);
+  assert.match(folderTree, /onFilePointerDown\?:/);
+  assert.match(folderTree, /onPointerDown=\{\(event\) => onFilePointerDown\?\.\(event, entry\.relativePath\)\}/);
+  assert.match(editorPane, /onDragOver=\{\(event\) => \{[\s\S]*event\.preventDefault\(\);/);
+  assert.match(css, /\.editor-groups\.split-drop-preview/);
+  assert.match(css, /\.editor-split-drop-preview/);
+  assert.match(css, /\.vault-file-drag-cursor/);
+  assert.match(css, /\.vault-file-drop-animation/);
+  assert.match(css, /@keyframes vault-file-drop-expand/);
+  assert.doesNotMatch(app, /vaultFileDragMimeType|handleEditorDragOver|editor-drag-overlay/);
+  assert.doesNotMatch(folderTree, /draggable=|onDragStart=|onDragEnd=/);
 });
 
 test("closing the final tab in a split pane leaves the other pane as primary", () => {

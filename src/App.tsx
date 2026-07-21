@@ -103,7 +103,9 @@ import {
 import {
   excalidrawFileNameForTitle,
   fileNameForDroppedImage,
-  isSupportedImageFile,
+  fileNameForDroppedPath,
+  imageFilesFromDataTransfer,
+  imagePathsFromDrop,
 } from "./lib/assets";
 import { expandDateTemplate } from "./lib/dates";
 import { isIPadPlatform, isMacOsPlatform, isWindowsPlatform } from "./lib/platform";
@@ -174,6 +176,11 @@ import {
   selectedGalleryImages,
 } from "./editor/commands";
 import { EditorPane, type ToolbarAction } from "./editor/EditorPane";
+import {
+  findNativeDropTarget,
+  focusNativeDropTarget,
+  type NativeDropTarget,
+} from "./editor/native-drop";
 import { CanvasMarkdownPreview } from "./canvas/CanvasNodes";
 import {
   useWikiLinkState,
@@ -354,6 +361,37 @@ const codeLanguages = [
 const currentAppVersion = packageJson.version;
 const githubLatestReleaseApiUrl =
   "https://api.github.com/repos/glyphary/glyphary/releases/latest";
+
+type EditorDropSide = "left" | "right";
+type EditorDropPreview = {
+  relativePath: string;
+  side: EditorDropSide;
+};
+
+type EditorDropTarget = {
+  groups: HTMLElement;
+  side: EditorDropSide;
+};
+
+type EditorDropAnimation = {
+  relativePath: string;
+  startX: number;
+  startY: number;
+  target: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  };
+};
+
+type PendingVaultFileDrag = {
+  pointerId: number;
+  relativePath: string;
+  startX: number;
+  startY: number;
+  active: boolean;
+};
 
 function releaseNotificationFromGitHubRelease(value: unknown) {
   if (!value || typeof value !== "object") {
@@ -601,6 +639,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     useState<Record<EditorGroupId, EditorGroupState>>(createEditorGroups);
   const [activeGroupId, setActiveGroupId] = useState<EditorGroupId>("primary");
   const [splitOpen, setSplitOpen] = useState(false);
+  const [editorDropPreview, setEditorDropPreview] = useState<EditorDropPreview | null>(null);
+  const [activeVaultFileDragPath, setActiveVaultFileDragPath] = useState<string | null>(null);
+  const [editorDropAnimation, setEditorDropAnimation] =
+    useState<EditorDropAnimation | null>(null);
   const [pageName, setPageName] = useState("Untitled note");
   const [metaHeader, setMetaHeader] = useState("");
   const [metaDelimiter, setMetaDelimiter] =
@@ -729,6 +771,17 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const editorGroupsRef = useRef<Record<EditorGroupId, EditorGroupState>>(editorGroups);
   const activeGroupIdRef = useRef<EditorGroupId>("primary");
   const activeEditorRef = useRef<Editor | null>(null);
+  const nativeFileDropRef = useRef<
+    (paths: string[], physicalX: number, physicalY: number) => void
+  >(() => undefined);
+  const editorDropPreviewRef = useRef<EditorDropPreview | null>(null);
+  const pendingVaultFileDragRef = useRef<PendingVaultFileDrag | null>(null);
+  const suppressVaultFileClickRef = useRef(false);
+  const vaultFileDragCursorRef = useRef<HTMLDivElement | null>(null);
+  const vaultFileDragPositionRef = useRef({ x: 0, y: 0 });
+  const openFileFromEditorDropRef = useRef<
+    (relativePath: string, side: EditorDropSide) => void
+  >(() => undefined);
   const workspaceRef = useRef<HTMLElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
   const commandPaletteSelectionRef = useRef<{
@@ -2006,8 +2059,86 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setStatus(`Closed ${tabTitle(tab)}`);
   }
 
-  function insertVaultImage(fileName: string) {
-    const groupEditor = editorForGroup(activeGroupIdRef.current);
+  function closeOtherDocumentTabs(tabId: string, groupId: EditorGroupId) {
+    snapshotActiveTab(groupId);
+    const group = editorGroupsRef.current[groupId];
+    const tab = group.tabs.find((documentTab) => documentTab.id === tabId);
+
+    if (!tab || group.tabs.length < 2) {
+      return;
+    }
+
+    const dirtyTab = group.tabs.find(
+      (documentTab) => documentTab.id !== tabId && documentTab.dirty,
+    );
+
+    if (dirtyTab) {
+      setStatus(`Save ${tabTitle(dirtyTab)} before closing other tabs`);
+      return;
+    }
+
+    const nextGroups = {
+      ...editorGroupsRef.current,
+      [groupId]: {
+        ...group,
+        tabs: [tab],
+        activeTabId: tab.id,
+      },
+    };
+
+    setEditorGroupsAndRef(nextGroups);
+    activeGroupIdRef.current = groupId;
+    setActiveGroupId(groupId);
+    hydrateDocumentTabAfterCommit(tab, groupId);
+    persistWorkspace({ activeFile: tab.activeFile, openFiles: fileBackedTabs(nextGroups) });
+    setStatus(`Closed ${group.tabs.length - 1} other tabs`);
+  }
+
+  async function showDocumentTabMenu(
+    event: ReactMouseEvent<HTMLDivElement>,
+    tab: DocumentTab,
+    groupId: EditorGroupId,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const group = editorGroupsRef.current[groupId];
+    const opened = await popupNativeMenu(
+      [
+        {
+          id: "document-tab-close",
+          text: "Close Tab",
+          action: () => closeDocumentTab(tab.id, groupId),
+        },
+        {
+          id: "document-tabs-close-others",
+          text: "Close Other Tabs",
+          enabled: group.tabs.length > 1,
+          action: () => closeOtherDocumentTabs(tab.id, groupId),
+        },
+        nativeMenuSeparator,
+        {
+          id: "document-tab-toggle-star",
+          text:
+            tab.activeFile && starredFiles.includes(tab.activeFile.relativePath)
+              ? "Unstar File"
+              : "Star File",
+          enabled: Boolean(tab.activeFile),
+          action: () => void toggleFileStar(tab.activeFile?.relativePath ?? ""),
+        },
+      ],
+      { x: event.clientX, y: event.clientY },
+    );
+
+    if (!opened) {
+      setStatus("Tab actions are available in the desktop app");
+    }
+  }
+
+  function insertVaultImage(fileName: string, targetEditor?: Editor) {
+    // Native drops may target a secondary pane while async import work changes
+    // the active group, so insertion must retain the editor captured at drop time.
+    const groupEditor = targetEditor ?? editorForGroup(activeGroupIdRef.current);
 
     if (!groupEditor) {
       return;
@@ -2222,8 +2353,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
   }
 
-  function queueImageImport(files: FileList | File[] | null | undefined) {
-    const images = Array.from(files ?? []).filter(isSupportedImageFile);
+  function queueImageImport(transfer: DataTransfer | null | undefined) {
+    const images = imageFilesFromDataTransfer(transfer);
 
     if (images.length === 0) {
       return false;
@@ -2266,6 +2397,80 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
   const primaryEditor = useEditor(createEditorOptions("primary"), [editorBehavior.vimMode]);
   const secondaryEditor = useEditor(createEditorOptions("secondary"), [editorBehavior.vimMode]);
+
+  async function importNativeDroppedImages(
+    root: string,
+    paths: string[],
+    target: NativeDropTarget,
+  ) {
+    for (const source of paths) {
+      const saved = await invoke<SavedAsset>("import_dropped_vault_image", {
+        root,
+        assetDirectory: defaultVaultImageDirectory,
+        source,
+        fileName: fileNameForDroppedPath(source),
+      });
+      insertVaultImage(saved.fileName, target.editor);
+    }
+  }
+
+  async function insertNativeDroppedText(path: string, target: NativeDropTarget) {
+    const text = await invoke<string>("read_dropped_text_file", { source: path });
+
+    if (text) {
+      target.editor.view.pasteText(text);
+    }
+  }
+
+  async function handleNativeFileDrop(paths: string[], physicalX: number, physicalY: number) {
+    const target = findNativeDropTarget(
+      [
+        { groupId: "primary", editor: editorForGroup("primary") },
+        { groupId: "secondary", editor: editorForGroup("secondary") },
+      ],
+      physicalX,
+      physicalY,
+    );
+    const root = vaultRootRef.current;
+
+    if (!target || !root) {
+      return;
+    }
+
+    // Native drops are window-level events, so reject canvas/base tabs before
+    // reading external paths or attempting to insert into a non-editor view.
+    const tab = editorGroupsRef.current[target.groupId].tabs.find(
+      (documentTab) => documentTab.id === editorGroupsRef.current[target.groupId].activeTabId,
+    );
+
+    if (!tab?.activeFile || tab.kind !== "markdown") {
+      return;
+    }
+
+    // Focus the pane synchronously before imports await the backend; otherwise
+    // the eventual insertion can follow a different active group or caret.
+    activateEditorGroup(target.groupId);
+    focusNativeDropTarget(target, physicalX, physicalY);
+
+    try {
+      const imagePaths = imagePathsFromDrop(paths);
+
+      if (imagePaths.length > 0) {
+        await importNativeDroppedImages(root, imagePaths, target);
+        return;
+      }
+
+      if (paths.length === 1) {
+        await insertNativeDroppedText(paths[0], target);
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  nativeFileDropRef.current = (paths, physicalX, physicalY) => {
+    void handleNativeFileDrop(paths, physicalX, physicalY);
+  };
   const activeEditor = activeGroupId === "secondary" ? secondaryEditor : primaryEditor;
   const editor = isEditorReady(activeEditor) ? activeEditor : null;
   const activeDocumentTab =
@@ -3734,24 +3939,25 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
   }
 
-  async function toggleActiveFileStar() {
-    if (!activeFileBackedPath) {
+  async function toggleFileStar(relativePath: string) {
+    if (!relativePath) {
       setStatus("Open a saved file before starring it");
       return;
     }
 
     const current = normalizeStarredFiles(vaultSettingsRef.current.starredFiles);
-    const next = current.includes(activeFileBackedPath)
-      ? current.filter((path) => path !== activeFileBackedPath)
-      : [activeFileBackedPath, ...current];
+    const isStarred = current.includes(relativePath);
+    const next = isStarred
+      ? current.filter((path) => path !== relativePath)
+      : [relativePath, ...current];
 
     if (await persistStarredFiles(next)) {
-      setStatus(
-        current.includes(activeFileBackedPath)
-          ? `Unstarred ${activeFileBackedPath}`
-          : `Starred ${activeFileBackedPath}`,
-      );
+      setStatus(`${isStarred ? "Unstarred" : "Starred"} ${relativePath}`);
     }
+  }
+
+  async function toggleActiveFileStar() {
+    await toggleFileStar(activeFileBackedPath);
   }
 
   async function updateStarredFiles(mapper: (path: string) => string | null) {
@@ -5207,6 +5413,25 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       nativeCommandRunnerRef.current(event.payload);
     });
 
+    // Tauri consumes native file drags before the browser creates a DataTransfer,
+    // so file drops must be routed through the window event with their coordinates.
+    getCurrentWindow()
+      .onDragDropEvent((event) => {
+        if (event.payload.type === "drop") {
+          nativeFileDropRef.current(
+            event.payload.paths,
+            event.payload.position.x,
+            event.payload.position.y,
+          );
+        }
+      })
+      .then((nextUnlisten) => {
+        unlisteners.push(nextUnlisten);
+      })
+      .catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+
     registerNativeEvent<OpenPathsPayload>("open-paths-requested", (event) => {
       void openExternalPathsRef.current(event.payload.paths);
     });
@@ -5278,6 +5503,321 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
   }
+
+  function updateEditorDropPreview(next: EditorDropPreview | null) {
+    const current = editorDropPreviewRef.current;
+
+    if (
+      current?.relativePath === next?.relativePath &&
+      current?.side === next?.side
+    ) {
+      return;
+    }
+
+    editorDropPreviewRef.current = next;
+    setEditorDropPreview(next);
+  }
+
+  function editorGroupsAtPointer(clientX: number, clientY: number): EditorDropTarget | null {
+    const target = document.elementFromPoint(clientX, clientY);
+    const groups = target instanceof Element
+      ? target.closest<HTMLElement>(".editor-groups")
+      : null;
+
+    if (!groups) {
+      return null;
+    }
+
+    const bounds = groups.getBoundingClientRect();
+
+    if (
+      clientX < bounds.left ||
+      clientX > bounds.right ||
+      clientY < bounds.top ||
+      clientY > bounds.bottom
+    ) {
+      return null;
+    }
+
+    return {
+      groups,
+      side: clientX < bounds.left + bounds.width / 2 ? "left" : "right",
+    };
+  }
+
+  function editorDropTargetRect(target: EditorDropTarget) {
+    const panes = Array.from(
+      target.groups.querySelectorAll<HTMLElement>(".editor-pane-shell"),
+    );
+    const pane = target.groups.classList.contains("split")
+      ? panes[target.side === "left" ? 0 : 1]
+      : null;
+
+    if (pane) {
+      const bounds = pane.getBoundingClientRect();
+      return {
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      };
+    }
+
+    const bounds = target.groups.getBoundingClientRect();
+    const gap = Number.parseFloat(getComputedStyle(target.groups).getPropertyValue("--glyphary-split-gap")) || 12;
+    const width = (bounds.width - gap) / 2;
+
+    return {
+      left: target.side === "left" ? bounds.left : bounds.left + width + gap,
+      top: bounds.top,
+      width,
+      height: bounds.height,
+    };
+  }
+
+  function handleVaultFilePointerDown(
+    event: ReactPointerEvent<HTMLButtonElement>,
+    relativePath: string,
+  ) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    vaultFileDragPositionRef.current = { x: event.clientX, y: event.clientY };
+    pendingVaultFileDragRef.current = {
+      pointerId: event.pointerId,
+      relativePath,
+      startX: event.clientX,
+      startY: event.clientY,
+      active: false,
+    };
+  }
+
+  function moveVaultFileDragCursor(clientX: number, clientY: number) {
+    vaultFileDragPositionRef.current = { x: clientX, y: clientY };
+    const cursor = vaultFileDragCursorRef.current;
+
+    if (cursor) {
+      cursor.style.left = `${clientX}px`;
+      cursor.style.top = `${clientY}px`;
+    }
+  }
+
+  function handleVaultFileOpen(relativePath: string) {
+    if (suppressVaultFileClickRef.current) {
+      suppressVaultFileClickRef.current = false;
+      return;
+    }
+
+    void openFile(relativePath);
+  }
+
+  async function openFileFromEditorDrop(relativePath: string, side: EditorDropSide) {
+    if (!vaultRootRef.current) {
+      return;
+    }
+
+    const targetGroupId: EditorGroupId = side === "left" ? "primary" : "secondary";
+
+    if (splitOpen) {
+      activeGroupIdRef.current = targetGroupId;
+      setActiveGroupId(targetGroupId);
+      await openFile(relativePath, { revealInVaultDrawer: false });
+      return;
+    }
+
+    const existing = findOpenFileTab(relativePath);
+
+    if (existing) {
+      switchToDocumentTab(existing.tab.id, existing.groupId);
+      return;
+    }
+
+    try {
+      const file = await readVaultFile(vaultRootRef.current, relativePath);
+      snapshotActiveTab("primary");
+      const tab = createDocumentTabFromFile(file);
+      const currentPrimary = editorGroupsRef.current.primary;
+      const nextGroups =
+        side === "left"
+          ? {
+              primary: {
+                id: "primary" as const,
+                tabs: [tab],
+                activeTabId: tab.id,
+              },
+              secondary: {
+                ...currentPrimary,
+                id: "secondary" as const,
+              },
+            }
+          : {
+              primary: currentPrimary,
+              secondary: {
+                id: "secondary" as const,
+                tabs: [tab],
+                activeTabId: tab.id,
+              },
+            };
+
+      setEditorGroupsAndRef(nextGroups);
+      setSplitOpen(true);
+      activeGroupIdRef.current = targetGroupId;
+      setActiveGroupId(targetGroupId);
+
+      hydrateDocumentTab(tab, targetGroupId, { revealInVaultDrawer: false });
+
+      if (side === "left") {
+        const preservedTab = nextGroups.secondary.tabs.find(
+          (documentTab) => documentTab.id === nextGroups.secondary.activeTabId,
+        );
+
+        if (preservedTab) {
+          hydrateDocumentTab(preservedTab, "secondary", { revealInVaultDrawer: false });
+        }
+      }
+
+      persistWorkspace({
+        activeFile: tab.activeFile,
+        openFiles: fileBackedTabs(nextGroups),
+        splitOpen: true,
+      });
+      setStatus(`Opened ${file.relativePath} in the ${side} split`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  openFileFromEditorDropRef.current = (relativePath, side) => {
+    void openFileFromEditorDrop(relativePath, side);
+  };
+
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      const pending = pendingVaultFileDragRef.current;
+
+      if (!pending || pending.pointerId !== event.pointerId) {
+        return;
+      }
+
+      if (!pending.active) {
+        const distance = Math.hypot(
+          event.clientX - pending.startX,
+          event.clientY - pending.startY,
+        );
+
+        if (distance < 8) {
+          return;
+        }
+
+        pending.active = true;
+        suppressVaultFileClickRef.current = true;
+        setActiveVaultFileDragPath(pending.relativePath);
+      }
+
+      event.preventDefault();
+      moveVaultFileDragCursor(event.clientX, event.clientY);
+      const target = editorGroupsAtPointer(event.clientX, event.clientY);
+      updateEditorDropPreview(
+        target
+          ? { relativePath: pending.relativePath, side: target.side }
+          : null,
+      );
+    }
+
+    function finishPointerDrag(event: PointerEvent) {
+      const pending = pendingVaultFileDragRef.current;
+
+      if (!pending || pending.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const lastPreview = editorDropPreviewRef.current;
+      const pointerTarget = pending.active
+        ? editorGroupsAtPointer(event.clientX, event.clientY)
+        : null;
+      const fallbackGroups = document.querySelector<HTMLElement>(".editor-groups");
+      const target = pointerTarget ?? (
+        pending.active &&
+        fallbackGroups &&
+        lastPreview?.relativePath === pending.relativePath
+          ? { groups: fallbackGroups, side: lastPreview.side }
+          : null
+      );
+      pendingVaultFileDragRef.current = null;
+      setActiveVaultFileDragPath(null);
+
+      if (pending.active && target) {
+        openFileFromEditorDropRef.current(
+          pending.relativePath,
+          target.side,
+        );
+
+        const groupBounds = target.groups.getBoundingClientRect();
+        let targetRect = {
+          left: groupBounds.left,
+          top: groupBounds.top,
+          width: groupBounds.width,
+          height: groupBounds.height,
+        };
+
+        try {
+          targetRect = editorDropTargetRect(target);
+        } catch {
+          // The split is already opening; the animation can use the editor bounds.
+        }
+
+        const animation = {
+          relativePath: pending.relativePath,
+          startX: event.clientX,
+          startY: event.clientY,
+          target: targetRect,
+        };
+
+        updateEditorDropPreview(null);
+        setEditorDropAnimation(animation);
+        setTimeout(() => {
+          setEditorDropAnimation((current) =>
+            current === animation ? null : current,
+          );
+        }, 260);
+        return;
+      }
+
+      updateEditorDropPreview(null);
+    }
+
+    function cancelPointerDrag(event: PointerEvent) {
+      const pending = pendingVaultFileDragRef.current;
+      const preview = editorDropPreviewRef.current;
+
+      if (!pending || pending.pointerId !== event.pointerId) {
+        return;
+      }
+
+      if (pending.active && preview?.relativePath === pending.relativePath) {
+        finishPointerDrag(event);
+        return;
+      }
+
+      pendingVaultFileDragRef.current = null;
+      suppressVaultFileClickRef.current = false;
+      setActiveVaultFileDragPath(null);
+      setEditorDropAnimation(null);
+      updateEditorDropPreview(null);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove, true);
+    window.addEventListener("pointerup", finishPointerDrag, true);
+    window.addEventListener("pointercancel", cancelPointerDrag, true);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove, true);
+      window.removeEventListener("pointerup", finishPointerDrag, true);
+      window.removeEventListener("pointercancel", cancelPointerDrag, true);
+    };
+  }, []);
 
   openFileByRelativePathRef.current = openFile;
 
@@ -8456,6 +8996,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         onCanvasChange={updateCanvasDocument}
         onCloseTab={closeDocumentTab}
         onEditorContextMenu={handleEditorContextMenu}
+        onTabContextMenu={showDocumentTabMenu}
         onFinishPageNameEdit={finishPageNameEdit}
         onMarkPageNameDirty={markPageNameDirty}
         onMetaHeaderChange={setActiveMetaHeader}
@@ -9113,7 +9654,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                           savedFileDisplaySettings.openDocumentsOnDoubleClick
                         }
                         onEntryContextMenu={handleFolderContextMenu}
-                        onFileOpen={(relativePath) => openFile(relativePath)}
+                        onFileOpen={handleVaultFileOpen}
+                        onFilePointerDown={handleVaultFilePointerDown}
                         onSelect={(relativePath) => enterDirectory(relativePath)}
                         onStatus={setStatus}
                       />
@@ -9126,11 +9668,20 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                               : "vault-entry"
                           }
                           key={entry.relativePath}
+                          onPointerDown={(event) => {
+                            if (!entry.isDir) {
+                              handleVaultFilePointerDown(event, entry.relativePath);
+                            }
+                          }}
                           onMouseDown={(event) => handleVaultEntryMouseDown(entry, event)}
                           onClick={(event) => {
                             if (entry.isDir) {
                               handleDirectoryClick(entry, event);
                             } else {
+                              if (suppressVaultFileClickRef.current) {
+                                suppressVaultFileClickRef.current = false;
+                                return;
+                              }
                               handleDocumentClick(event, () => openFile(entry.relativePath));
                             }
                           }}
@@ -9455,9 +10006,74 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           onPointerDown={(event) => beginWorkspaceResize("vault", event)}
         />
 
-        <div className={splitOpen ? "editor-groups split" : "editor-groups"}>
+        <div
+          className={[
+            splitOpen ? "editor-groups split" : "editor-groups",
+            !splitOpen && editorDropPreview ? "split-drop-preview" : "",
+            splitOpen && editorDropPreview
+              ? `split-drop-target-${editorDropPreview.side}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          {!splitOpen && editorDropPreview?.side === "left" ? (
+            <div
+              className="editor-split-drop-preview"
+              aria-label={`Drop ${editorDropPreview.relativePath} on the left`}
+            >
+              <VaultFileIcon relativePath={editorDropPreview.relativePath} />
+              <strong>{relativePathFileName(editorDropPreview.relativePath)}</strong>
+            </div>
+          ) : null}
           {editorPaneFor("primary", primaryEditor)}
           {splitOpen ? editorPaneFor("secondary", secondaryEditor) : null}
+          {!splitOpen && editorDropPreview?.side === "right" ? (
+            <div
+              className="editor-split-drop-preview"
+              aria-label={`Drop ${editorDropPreview.relativePath} on the right`}
+            >
+              <VaultFileIcon relativePath={editorDropPreview.relativePath} />
+              <strong>{relativePathFileName(editorDropPreview.relativePath)}</strong>
+            </div>
+          ) : null}
+          {activeVaultFileDragPath ? (
+            <div
+              ref={(element) => {
+                vaultFileDragCursorRef.current = element;
+
+                if (element) {
+                  const { x, y } = vaultFileDragPositionRef.current;
+                  element.style.left = `${x}px`;
+                  element.style.top = `${y}px`;
+                }
+              }}
+              className="vault-file-drag-cursor"
+              aria-hidden="true"
+            >
+              <VaultFileIcon relativePath={activeVaultFileDragPath} />
+              <strong>{relativePathFileName(activeVaultFileDragPath)}</strong>
+            </div>
+          ) : null}
+          {editorDropAnimation ? (
+            <div
+              className="vault-file-drop-animation"
+              style={
+                {
+                  "--drop-start-x": `${editorDropAnimation.startX}px`,
+                  "--drop-start-y": `${editorDropAnimation.startY}px`,
+                  "--drop-target-left": `${editorDropAnimation.target.left}px`,
+                  "--drop-target-top": `${editorDropAnimation.target.top}px`,
+                  "--drop-target-width": `${editorDropAnimation.target.width}px`,
+                  "--drop-target-height": `${editorDropAnimation.target.height}px`,
+                } as CSSProperties
+              }
+              aria-hidden="true"
+            >
+              <VaultFileIcon relativePath={editorDropAnimation.relativePath} />
+              <strong>{relativePathFileName(editorDropAnimation.relativePath)}</strong>
+            </div>
+          ) : null}
         </div>
 
         <div

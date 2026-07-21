@@ -53,6 +53,16 @@ pub(crate) fn clean_settings_asset_directory(asset_directory: &str) -> Result<Pa
 
     clean_relative(asset_directory)
 }
+
+// Centralizing case-insensitive extension checks keeps each import command's
+// allowlist behavior consistent across platforms.
+pub(crate) fn has_extension(path: &Path, extensions: &[&str]) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extensions.contains(&extension.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
 pub(crate) fn resolve_existing(root: &str, relative: &str) -> Result<(PathBuf, PathBuf), String> {
     let root = vault_root(root)?;
     let relative = clean_relative(relative)?;

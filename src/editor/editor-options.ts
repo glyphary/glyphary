@@ -56,6 +56,14 @@ import { createGlypharyMarked } from "../lib/markdown-table";
 
 const lowlight = createLowlight();
 
+function droppedTextFile(transfer: DataTransfer | null | undefined) {
+  // External file drags often omit MIME metadata, so known text extensions are
+  // accepted as the fallback that keeps plain-text drops interoperable.
+  return Array.from(transfer?.files ?? []).find(
+    (file) => file.type.startsWith("text/") || /\.(md|markdown|txt)$/i.test(file.name),
+  );
+}
+
 // Keep lowlight registration explicit so Markdown language names can be
 // round-tripped through fenced code blocks and rendered with predictable aliases.
 lowlight.register("plaintext", plaintext);
@@ -112,7 +120,7 @@ export function createGlypharyEditorOptions({
   loadExcalidrawPreview: (target: string) => Promise<string>;
   openExcalidrawDrawing: (target: string) => void;
   openWikiLinkSearch: () => void;
-  queueImageImport: (files: FileList | File[] | null | undefined) => boolean;
+  queueImageImport: (transfer: DataTransfer | null | undefined) => boolean;
   resolveVaultAssetSrc: (target: string) => string;
   resolveVaultImageSrc: (target: string) => string;
   resolveWikiLinkTarget: (target: string) => WikiLinkResolution;
@@ -202,16 +210,37 @@ export function createGlypharyEditorOptions({
         "aria-label": "Markdown document editor",
         spellcheck: "true",
       },
-      handleDrop: (_view: unknown, event: DragEvent) => {
-        if (!queueImageImport(event.dataTransfer?.files)) {
+      handleDrop: (view: EditorView, event: DragEvent) => {
+        const transfer = event.dataTransfer;
+
+        if (queueImageImport(transfer)) {
+          event.preventDefault();
+          return true;
+        }
+
+        const file = droppedTextFile(transfer);
+        if (file) {
+          event.preventDefault();
+          void file.text().then((text) => {
+            if (text) {
+              view.pasteText(text);
+            }
+          });
+          return true;
+        }
+
+        const text = transfer?.getData("text/plain");
+
+        if (!text) {
           return false;
         }
 
         event.preventDefault();
+        view.pasteText(text);
         return true;
       },
       handlePaste: (_view: unknown, event: ClipboardEvent) => {
-        if (!queueImageImport(event.clipboardData?.files)) {
+        if (!queueImageImport(event.clipboardData)) {
           return false;
         }
 

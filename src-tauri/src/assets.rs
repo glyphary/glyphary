@@ -15,6 +15,7 @@ use super::*;
 
 const VAULT_LIBRARY_COVER_DIRECTORY: &str = "vault-covers";
 const COVER_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "avif", "svg"];
+const DROPPED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp"];
 
 fn vault_library_covers_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(app
@@ -25,10 +26,11 @@ fn vault_library_covers_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 fn is_cover_image_path(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| COVER_IMAGE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str()))
-        .unwrap_or(false)
+    has_extension(path, COVER_IMAGE_EXTENSIONS)
+}
+
+fn is_dropped_image_path(path: &Path) -> bool {
+    has_extension(path, DROPPED_IMAGE_EXTENSIONS)
 }
 
 pub(crate) fn copy_vault_library_cover_to_dir(
@@ -121,6 +123,27 @@ pub(crate) fn save_vault_asset(
     file_name: String,
     bytes: Vec<u8>,
 ) -> Result<SavedAsset, String> {
+    save_vault_asset_bytes(root, asset_directory, file_name, bytes)
+}
+
+#[tauri::command]
+pub(crate) fn import_dropped_vault_image(
+    root: String,
+    asset_directory: String,
+    source: String,
+    file_name: String,
+) -> Result<SavedAsset, String> {
+    // Native drop paths cross the frontend boundary, so canonicalize and
+    // validate them before reading bytes or writing into the vault.
+    let source = fs::canonicalize(source.trim())
+        .map_err(|err| format!("Could not read dropped image: {err}"))?;
+
+    if !source.is_file() || !is_dropped_image_path(&source) {
+        return Err("Dropped file must be a supported image".into());
+    }
+
+    let bytes = fs::read(&source).map_err(|err| format!("Could not read dropped image: {err}"))?;
+
     save_vault_asset_bytes(root, asset_directory, file_name, bytes)
 }
 

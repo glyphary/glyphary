@@ -69,6 +69,7 @@ export function EditorPane({
   onCanvasChange,
   onCloseTab,
   onEditorContextMenu,
+  onTabContextMenu,
   onFinishPageNameEdit,
   onMarkPageNameDirty,
   onMetaHeaderChange,
@@ -107,6 +108,11 @@ export function EditorPane({
   onEditorContextMenu: (
     event: ReactMouseEvent<HTMLDivElement>,
     editor: Editor | null,
+    groupId: EditorGroupId,
+  ) => void;
+  onTabContextMenu: (
+    event: ReactMouseEvent<HTMLDivElement>,
+    tab: DocumentTab,
     groupId: EditorGroupId,
   ) => void;
   onFinishPageNameEdit: () => void;
@@ -203,6 +209,7 @@ export function EditorPane({
         group={group}
         groupId={groupId}
         onCloseTab={onCloseTab}
+        onTabContextMenu={onTabContextMenu}
         onSwitchTab={onSwitchTab}
       />
       {!groupActiveTab ? (
@@ -510,9 +517,13 @@ export function EditorPane({
             />
           ) : (
             <div className="editor-surface-frame">
+              {/* WebKit only dispatches external drops after dragover is accepted. */}
               <EditorContent
                 className="editor-surface markdown-rendered markdown-preview-view"
                 editor={groupEditor}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                }}
                 onClick={onOpenRemoteImageSource}
                 onDoubleClick={onOpenImagePreview}
                 onErrorCapture={handleEditorImageError}
@@ -535,11 +546,17 @@ function DocumentTabs({
   group,
   groupId,
   onCloseTab,
+  onTabContextMenu,
   onSwitchTab,
 }: {
   group: EditorGroupState;
   groupId: EditorGroupId;
   onCloseTab: (tabId: string, groupId: EditorGroupId) => void;
+  onTabContextMenu: (
+    event: ReactMouseEvent<HTMLDivElement>,
+    tab: DocumentTab,
+    groupId: EditorGroupId,
+  ) => void;
   onSwitchTab: (tabId: string, groupId: EditorGroupId) => void;
 }) {
   return (
@@ -551,6 +568,7 @@ function DocumentTabs({
           role="tab"
           aria-selected={tab.id === group.activeTabId}
           title={tab.activeFile?.relativePath ?? tabTitle(tab)}
+          onContextMenu={(event) => onTabContextMenu(event, tab, groupId)}
         >
           <button
             className="document-tab-select"
