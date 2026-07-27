@@ -13,6 +13,7 @@ import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrent as getCurrentDeepLinks, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { confirm as confirmNativeDialog, open } from "@tauri-apps/plugin-dialog";
 import {
   isPermissionGranted,
@@ -166,6 +167,11 @@ import {
   writePersistedWorkspace,
 } from "./lib/settings";
 import { richLinkMarkdown } from "./lib/rich-links";
+import {
+  glypharyOpenUrl,
+  parseGlypharyOpenUrl,
+  resolveDeepLinkVaultRoot,
+} from "./lib/deep-links";
 import { jumpToHeadingInEditor } from "./editor/code-block-renderers";
 import {
   alignCurrentTableColumn,
@@ -181,6 +187,15 @@ import {
   focusNativeDropTarget,
   type NativeDropTarget,
 } from "./editor/native-drop";
+import {
+  editorDropTargetRect,
+  editorGroupsAtPointer,
+  type EditorDropSide,
+} from "./lib/editor-drop-target";
+import {
+  reorderedStarredFiles,
+  starredDropIndexFromPointer,
+} from "./lib/starred-files";
 import { CanvasMarkdownPreview } from "./canvas/CanvasNodes";
 import {
   useWikiLinkState,
@@ -362,14 +377,8 @@ const currentAppVersion = packageJson.version;
 const githubLatestReleaseApiUrl =
   "https://api.github.com/repos/glyphary/glyphary/releases/latest";
 
-type EditorDropSide = "left" | "right";
 type EditorDropPreview = {
   relativePath: string;
-  side: EditorDropSide;
-};
-
-type EditorDropTarget = {
-  groups: HTMLElement;
   side: EditorDropSide;
 };
 
@@ -864,6 +873,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const mainWindowShownRef = useRef(false);
   const pendingOpenPathsRef = useRef<string[]>([]);
   const openExternalPathsRef = useRef<(paths: string[]) => Promise<void>>(async () => {
+    return undefined;
+  });
+  const openGlypharyUrlsRef = useRef<(urls: string[]) => Promise<void>>(async () => {
     return undefined;
   });
   const restoredWorkspace = useRef(false);
@@ -1818,10 +1830,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     options: { revealInVaultDrawer?: boolean } = {},
   ) {
     const groupEditor = editorForGroup(groupId);
-
-    if (!groupEditor && tab.kind === "markdown") {
-      return;
-    }
 
     hydratingEditor.current[groupId] = true;
     const nextGroups = {
@@ -3897,6 +3905,31 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
   }
 
+  async function copyEntryDeepLinkFromContextMenu(entry: VaultEntry) {
+    if (!vaultRoot) {
+      return;
+    }
+
+    setFolderContextMenu(null);
+
+    if (!window.navigator.clipboard?.writeText) {
+      setStatus("Clipboard is unavailable");
+      return;
+    }
+
+    const vaultName =
+      vaultLibrary.find((candidate) => candidate.root === vaultRoot)?.name ??
+      vaultRoot.split(/[\\/]/).filter(Boolean).at(-1) ??
+      "Vault";
+
+    try {
+      await window.navigator.clipboard.writeText(glypharyOpenUrl(vaultName, entry.relativePath));
+      setStatus("Copied deep link");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   function samePathList(left: string[], right: string[]) {
     return left.length === right.length && left.every((path, index) => path === right[index]);
   }
@@ -3965,43 +3998,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     const next = current.map(mapper).filter((path): path is string => Boolean(path));
 
     await persistStarredFiles(next);
-  }
-
-  function starredDropIndexFromPointer(container: HTMLElement, pointerY: number) {
-    const rows = Array.from(
-      container.querySelectorAll<HTMLElement>("[data-starred-path]"),
-    );
-
-    if (rows.length === 0) {
-      return -1;
-    }
-
-    const targetIndex = rows.findIndex((row) => {
-      const rect = row.getBoundingClientRect();
-
-      return pointerY < rect.top + rect.height / 2;
-    });
-
-    return targetIndex === -1 ? rows.length : targetIndex;
-  }
-
-  function reorderedStarredFiles(current: string[], draggedPath: string, dropIndex: number) {
-    const draggedIndex = current.indexOf(draggedPath);
-    let targetIndex = Math.max(0, Math.min(dropIndex, current.length));
-
-    if (draggedIndex === -1) {
-      return current;
-    }
-
-    const next = [...current];
-    const [dragged] = next.splice(draggedIndex, 1);
-
-    if (draggedIndex < targetIndex) {
-      targetIndex -= 1;
-    }
-
-    next.splice(targetIndex, 0, dragged);
-    return next;
   }
 
   function previewStarredFileReorder(pointerY: number) {
@@ -4666,8 +4662,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       await saveCurrentFile();
       await applyVaultWorkspace(root, readPersistedWorkspaceForVault(root), "Opened", progress);
       setVaultLibraryOverlayOpen(false);
+      return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+      return false;
     }
   }
 
@@ -5436,6 +5434,26 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       void openExternalPathsRef.current(event.payload.paths);
     });
 
+    // Running instances receive future URLs through the event; a cold launch
+    // exposes its initial URLs through getCurrent instead.
+    onOpenUrl((urls) => {
+      void openGlypharyUrlsRef.current(urls);
+    })
+      .then((nextUnlisten) => {
+        unlisteners.push(nextUnlisten);
+      })
+      .catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+
+    void getCurrentDeepLinks()
+      .then((urls) => {
+        void openGlypharyUrlsRef.current(urls ?? []);
+      })
+      .catch((error) => {
+        setStatus(error instanceof Error ? error.message : String(error));
+      });
+
     return () => {
       unlisteners.forEach((unlisten) => unlisten());
     };
@@ -5467,7 +5485,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     relativePath: string,
     options: { revealInVaultDrawer?: boolean } = {},
   ) {
-    if (!vaultRoot) {
+    const root = vaultRootRef.current;
+
+    if (!root) {
       return;
     }
 
@@ -5488,7 +5508,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         return;
       }
 
-      const file = await readVaultFile(vaultRoot, relativePath);
+      const file = await readVaultFile(root, relativePath);
       const tab = createDocumentTabFromFile(file);
 
       if (hasNoOpenDocumentTabs(editorGroupsRef.current)) {
@@ -5518,68 +5538,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setEditorDropPreview(next);
   }
 
-  function editorGroupsAtPointer(clientX: number, clientY: number): EditorDropTarget | null {
-    const target = document.elementFromPoint(clientX, clientY);
-    const groups = target instanceof Element
-      ? target.closest<HTMLElement>(".editor-groups")
-      : null;
-
-    if (!groups) {
-      return null;
-    }
-
-    const bounds = groups.getBoundingClientRect();
-
-    if (
-      clientX < bounds.left ||
-      clientX > bounds.right ||
-      clientY < bounds.top ||
-      clientY > bounds.bottom
-    ) {
-      return null;
-    }
-
-    return {
-      groups,
-      side: clientX < bounds.left + bounds.width / 2 ? "left" : "right",
-    };
-  }
-
-  function editorDropTargetRect(target: EditorDropTarget) {
-    const panes = Array.from(
-      target.groups.querySelectorAll<HTMLElement>(".editor-pane-shell"),
-    );
-    const pane = target.groups.classList.contains("split")
-      ? panes[target.side === "left" ? 0 : 1]
-      : null;
-
-    if (pane) {
-      const bounds = pane.getBoundingClientRect();
-      return {
-        left: bounds.left,
-        top: bounds.top,
-        width: bounds.width,
-        height: bounds.height,
-      };
-    }
-
-    const bounds = target.groups.getBoundingClientRect();
-    const gap = Number.parseFloat(getComputedStyle(target.groups).getPropertyValue("--glyphary-split-gap")) || 12;
-    const width = (bounds.width - gap) / 2;
-
-    return {
-      left: target.side === "left" ? bounds.left : bounds.left + width + gap,
-      top: bounds.top,
-      width,
-      height: bounds.height,
-    };
-  }
-
   function handleVaultFilePointerDown(
     event: ReactPointerEvent<HTMLButtonElement>,
     relativePath: string,
   ) {
-    if (event.button !== 0) {
+    if (event.button !== 0 || (event.buttons & 1) === 0) {
       return;
     }
 
@@ -5621,6 +5584,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     const targetGroupId: EditorGroupId = side === "left" ? "primary" : "secondary";
 
     if (splitOpen) {
+      // openFile routes new tabs through the active group, so select the drop
+      // pane before awaiting the file read or the tab can land in the other pane.
       activeGroupIdRef.current = targetGroupId;
       setActiveGroupId(targetGroupId);
       await openFile(relativePath, { revealInVaultDrawer: false });
@@ -5708,6 +5673,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         );
 
         if (distance < 8) {
+          // A short pointer movement is still a click; waiting for a real drag
+          // keeps opening a file from also starting a split-drop gesture.
           return;
         }
 
@@ -5745,6 +5712,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           ? { groups: fallbackGroups, side: lastPreview.side }
           : null
       );
+      // Pointer-up can arrive just outside the editor after the last preview
+      // update. Preserve that previewed side so a valid drop is not cancelled
+      // merely because the release event missed the DOM hit target.
       pendingVaultFileDragRef.current = null;
       setActiveVaultFileDragPath(null);
 
@@ -5857,6 +5827,36 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   }
 
   openExternalPathsRef.current = openExternalPaths;
+
+  async function openGlypharyUrls(urls: string[]) {
+    for (const value of urls) {
+      const request = parseGlypharyOpenUrl(value);
+
+      if (!request) {
+        continue;
+      }
+
+      if (request.vaultName) {
+        const currentRoot = vaultRootRef.current;
+        const root = resolveDeepLinkVaultRoot(request.vaultName, currentRoot, vaultLibrary);
+
+        if (!root) {
+          setStatus(`Deep link vault not found: ${request.vaultName}`);
+          continue;
+        }
+
+        if (root !== currentRoot && !(await openVaultRoot(root))) {
+          continue;
+        }
+      }
+
+      if (request.filePath) {
+        await openFile(request.filePath);
+      }
+    }
+  }
+
+  openGlypharyUrlsRef.current = openGlypharyUrls;
 
   useEffect(() => {
     if (!vaultRoot || pendingOpenPathsRef.current.length === 0) {
@@ -6277,6 +6277,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         text: "Copy Path",
         action: () => void copyEntryPathFromContextMenu(entry),
       },
+      {
+        id: "vault-copy-deep-link",
+        text: "Copy Deep Link",
+        action: () => void copyEntryDeepLinkFromContextMenu(entry),
+      },
       nativeMenuSeparator,
       {
         id: "vault-delete-file",
@@ -6312,6 +6317,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   ) {
     event.preventDefault();
     event.stopPropagation();
+    pendingVaultFileDragRef.current = null;
+    suppressVaultFileClickRef.current = false;
+    setActiveVaultFileDragPath(null);
+    setEditorDropAnimation(null);
+    updateEditorDropPreview(null);
     suppressDirectoryClickRef.current = true;
     if (clickTimer.current) {
       clearTimeout(clickTimer.current);
@@ -11204,6 +11214,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           onReveal={(entry) => void revealEntryFromContextMenu(entry)}
           onOpenExternal={(entry) => void openEntryFromContextMenu(entry)}
           onCopyPath={(entry) => void copyEntryPathFromContextMenu(entry)}
+          onCopyDeepLink={(entry) => void copyEntryDeepLinkFromContextMenu(entry)}
         />
       ) : null}
       {folderActionDialog ? (

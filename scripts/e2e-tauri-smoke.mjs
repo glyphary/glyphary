@@ -9,6 +9,8 @@ const scratchDir = "_glyphary_e2e";
 const scratchName = "Glyphary E2E Scratch.md";
 const scratchRelativePath = `${scratchDir}/${scratchName}`;
 const scratchContent = "glyphary e2e selection target\n";
+const dragTargetName = "Glyphary E2E Drag Target.md";
+const splitTabName = "Glyphary E2E Split Tab.md";
 const betaUnsupported = process.platform === "darwin" && !process.env.GLYPHARY_E2E_FORCE;
 
 function assert(condition, message) {
@@ -158,6 +160,54 @@ class WebDriverSession {
     });
   }
 
+  async pointerAction(actions) {
+    await request("POST", this.endpoint("/actions"), {
+      actions: [
+        {
+          id: "mouse",
+          type: "pointer",
+          parameters: { pointerType: "mouse" },
+          actions,
+        },
+      ],
+    });
+  }
+
+  async pointerPosition(selector, xRatio, yRatio) {
+    await this.waitForSelector(selector);
+    const rect = await this.execute(
+      `
+        const element = document.querySelector(arguments[0]);
+        if (!element) throw new Error("Pointer target is not visible");
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+      `,
+      [selector],
+    );
+
+    return {
+      x: Math.round(rect.left + rect.width * xRatio),
+      y: Math.round(rect.top + rect.height * yRatio),
+    };
+  }
+
+  async pointerDown(selector) {
+    const position = await this.pointerPosition(selector, 0.5, 0.5);
+    await this.pointerAction([
+      { type: "pointerMove", origin: "viewport", ...position },
+      { type: "pointerDown", button: 0 },
+    ]);
+  }
+
+  async pointerMove(selector, xRatio = 0.75, yRatio = 0.5) {
+    const position = await this.pointerPosition(selector, xRatio, yRatio);
+    await this.pointerAction([{ type: "pointerMove", origin: "viewport", ...position }]);
+  }
+
+  async pointerUp() {
+    await this.pointerAction([{ type: "pointerUp", button: 0 }]);
+  }
+
   async shortcut(key) {
     await request("POST", this.endpoint("/actions"), {
       actions: [
@@ -233,6 +283,8 @@ async function openScratchWorkspace(session, vaultFromCli) {
   const scratchPath = join(vault, scratchRelativePath);
   mkdirSync(dirname(scratchPath), { recursive: true });
   writeFileSync(scratchPath, scratchContent);
+  writeFileSync(join(vault, scratchDir, dragTargetName), "glyphary e2e drag target\n");
+  writeFileSync(join(vault, scratchDir, splitTabName), "glyphary e2e split tab target\n");
 
   await session.execute(
     `
@@ -249,7 +301,7 @@ async function openScratchWorkspace(session, vaultFromCli) {
   await session.waitForSelector(".app-shell", 30000);
   await dismissReleaseDialog(session);
 
-  return { scratchPath, vault };
+  return { dragTargetName, scratchPath, splitTabName, vault };
 }
 
 async function dismissReleaseDialog(session) {
@@ -308,6 +360,56 @@ async function runCommandPaletteSmoke(session, scratchPath) {
   await waitFor(() => readFileSync(scratchPath, "utf8").includes("=="), "highlighted file");
 }
 
+async function markE2EDragSource(session, fileName, attribute) {
+  await session.execute(
+    `
+      const entry = [...document.querySelectorAll(".vault-entry")]
+        .find((button) => button.textContent.includes(arguments[0]));
+      if (!entry) throw new Error("Drag source is not visible in the vault tree");
+      entry.setAttribute(arguments[1], "true");
+    `,
+    [fileName, attribute],
+  );
+  await session.waitForSelector(`[${attribute}="true"]`, 5000);
+}
+
+async function runVaultFileDragDropSmoke(session, dragTarget, splitTabTarget) {
+  await markE2EDragSource(session, dragTarget, "data-e2e-drag-source");
+  await markE2EDragSource(session, splitTabTarget, "data-e2e-split-tab-source");
+
+  await session.pointerDown('[data-e2e-drag-source="true"]');
+  await session.pointerMove(".editor-groups", 0.75, 0.5);
+  await session.waitForSelector(
+    '.editor-groups.split-drop-preview .editor-split-drop-preview[aria-label*="on the right"]',
+    5000,
+  );
+  await session.pointerUp();
+
+  await session.waitForSelector(".editor-groups.split", 10000);
+  await waitFor(
+    () =>
+      session.execute(
+        `return document.querySelectorAll(".editor-pane-shell").length === 2 &&
+          document.querySelector('[aria-label="secondary open documents"]')?.textContent.includes(arguments[0]);`,
+        [dragTarget],
+      ),
+    "dragged file in right split",
+  );
+
+  await session.pointerDown('[data-e2e-split-tab-source="true"]');
+  await session.pointerMove(".editor-groups", 0.75, 0.5);
+  await session.pointerUp();
+
+  await waitFor(
+    () =>
+      session.execute(
+        `return document.querySelector('[aria-label="secondary open documents"]')?.textContent.includes(arguments[0]);`,
+        [splitTabTarget],
+      ),
+    "dragged file as right split tab",
+  );
+}
+
 async function main() {
   const options = parseArgs();
 
@@ -346,6 +448,7 @@ async function main() {
     await runSettingsSmoke(session);
     await runVaultReopenSmoke(session);
     await runCommandPaletteSmoke(session, scratchPath);
+    await runVaultFileDragDropSmoke(session, workspace.dragTargetName, workspace.splitTabName);
 
     console.log("tauri e2e smoke ok");
   } finally {

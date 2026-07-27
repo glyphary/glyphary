@@ -221,6 +221,7 @@ pub fn run() {
     #[cfg(desktop)]
     {
         builder = builder
+            .plugin(tauri_plugin_deep_link::init())
             .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
                 queue_and_emit_open_paths(app, collect_open_paths(args, &cwd));
             }))

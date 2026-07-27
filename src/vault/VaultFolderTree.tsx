@@ -74,6 +74,7 @@ export function VaultFolderTree({
   const [nodes, setNodes] = useState<Record<string, VaultFolderTreeNodeState>>({});
   const [expandedPaths, setExpandedPaths] = useState<string[]>([""]);
   const treeScopeRef = useRef({ root, showFiles });
+  const fileButtonsRef = useRef<Record<string, HTMLButtonElement | null>>({});
 
   async function loadChildren(relativePath: string, force = false) {
     const existing = nodes[relativePath];
@@ -95,6 +96,9 @@ export function VaultFolderTree({
     try {
       const children = await listVaultDir(root, relativePath);
 
+      // A folder request may finish after the user switched vaults or changed
+      // the tree's file-visibility mode; stale results must not replace the
+      // newer tree scope.
       if (treeScopeRef.current.root !== root || treeScopeRef.current.showFiles !== showFiles) {
         return;
       }
@@ -147,6 +151,17 @@ export function VaultFolderTree({
     }
   }, [root, showFiles, selectedPath, activeFilePath]);
 
+  useEffect(() => {
+    if (!activeFilePath) {
+      return;
+    }
+
+    fileButtonsRef.current[activeFilePath]?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [activeFilePath, expandedPaths, nodes]);
+
   function toggleExpanded(relativePath: string) {
     setExpandedPaths((paths) =>
       paths.includes(relativePath)
@@ -171,6 +186,9 @@ export function VaultFolderTree({
           <button
             className={isSelected ? "folder-tree-file active" : "folder-tree-file"}
             type="button"
+            ref={(button) => {
+              fileButtonsRef.current[entry.relativePath] = button;
+            }}
             onPointerDown={(event) => onFilePointerDown?.(event, entry.relativePath)}
             onContextMenu={(event) => onEntryContextMenu?.(entry, event)}
             onClick={(event) => {

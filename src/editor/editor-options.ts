@@ -213,6 +213,8 @@ export function createGlypharyEditorOptions({
       handleDrop: (view: EditorView, event: DragEvent) => {
         const transfer = event.dataTransfer;
 
+        // Image imports must win over text-file handling because browsers can
+        // expose an image's filename as plain text during an external drop.
         if (queueImageImport(transfer)) {
           event.preventDefault();
           return true;

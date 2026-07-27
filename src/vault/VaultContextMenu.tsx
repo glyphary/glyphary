@@ -18,6 +18,7 @@ type VaultContextMenuProps = {
   onReveal: (entry: VaultEntry) => void;
   onOpenExternal: (entry: VaultEntry) => void;
   onCopyPath: (entry: VaultEntry) => void;
+  onCopyDeepLink: (entry: VaultEntry) => void;
 };
 
 export function VaultContextMenu({
@@ -27,6 +28,7 @@ export function VaultContextMenu({
   onReveal,
   onOpenExternal,
   onCopyPath,
+  onCopyDeepLink,
 }: VaultContextMenuProps) {
   return (
     <div
@@ -62,6 +64,7 @@ export function VaultContextMenu({
           <MenuButton onClick={() => onOpenExternal(menu.entry)}>Open in Default App</MenuButton>
           <MenuButton onClick={() => onReveal(menu.entry)}>Reveal in Finder</MenuButton>
           <MenuButton onClick={() => onCopyPath(menu.entry)}>Copy Path</MenuButton>
+          <MenuButton onClick={() => onCopyDeepLink(menu.entry)}>Copy Deep Link</MenuButton>
           <MenuButton onClick={() => onAction("delete-file", menu.entry)}>Delete</MenuButton>
         </>
       )}

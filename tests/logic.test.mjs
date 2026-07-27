@@ -84,6 +84,12 @@ import {
   richLinkMarkdown,
 } from "../.test-dist/rich-links.js";
 import {
+  glypharyOpenUrl,
+  parseGlypharyOpenUrl,
+  resolveDeepLinkVaultRoot,
+} from "../.test-dist/deep-links.js";
+import { reorderedStarredFiles } from "../.test-dist/starred-files.js";
+import {
   defaultFileDisplaySettings,
   normalizeFileDisplaySettings,
   normalizeStarredFiles,
@@ -110,6 +116,40 @@ test("frontmatter is split out of the editor body and composed back without losi
     body: "# Body\n",
   });
   assert.equal(composeMarkdown(parts.metaHeader, parts.metaDelimiter, parts.body), source);
+});
+
+test("Glyphary deep links parse Obsidian-style open requests", () => {
+  assert.deepEqual(
+    parseGlypharyOpenUrl("glyphary://open?vault=Demo&file=00%20Start%20Here.md"),
+    { vaultName: "Demo", filePath: "00 Start Here.md" },
+  );
+  assert.deepEqual(parseGlypharyOpenUrl("glyphary://open?file=Note.md"), {
+    vaultName: undefined,
+    filePath: "Note.md",
+  });
+  assert.equal(
+    glypharyOpenUrl("Demo", "00 Start Here/01 Quick Start.md"),
+    "glyphary://open?vault=Demo&file=00+Start+Here%2F01+Quick+Start.md",
+  );
+  assert.equal(parseGlypharyOpenUrl("glyphary://new?file=Note.md"), null);
+  assert.equal(
+    resolveDeepLinkVaultRoot("demo", "/vaults/current", [
+      { name: "Demo", root: "/vaults/demo", lastOpenedAt: 1 },
+    ]),
+    "/vaults/demo",
+  );
+  assert.equal(resolveDeepLinkVaultRoot("current", "/vaults/current", []), "/vaults/current");
+});
+
+test("starred file reordering keeps the dragged item in the requested position", () => {
+  assert.deepEqual(
+    reorderedStarredFiles(["A.md", "B.md", "C.md"], "A.md", 3),
+    ["B.md", "C.md", "A.md"],
+  );
+  assert.deepEqual(
+    reorderedStarredFiles(["A.md", "B.md", "C.md"], "C.md", 0),
+    ["C.md", "A.md", "B.md"],
+  );
 });
 
 test("frontmatter supports toml delimiters and ignores unterminated headers", () => {
@@ -2014,6 +2054,7 @@ test("vault drawer exposes files search recent and task views", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
   const commandPalette = readFileSync("src/command-palette/commands.ts", "utf8");
+  const starredFiles = readFileSync("src/lib/starred-files.ts", "utf8");
   const settings = readFileSync("src/lib/settings.ts", "utf8");
   const vaultTasks = readFileSync("src/tasks/vault-tasks.ts", "utf8");
   const vaultSearch = readFileSync("src/search/vault-search.ts", "utf8");
@@ -2079,12 +2120,12 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(app, /const starredDragOrderRef = useRef<string\[\] \| null>\(null\)/);
   assert.match(app, /const starredPointerIdRef = useRef<number \| null>\(null\)/);
   assert.match(app, /const \[starredDropIndex, setStarredDropIndex\] = useState<number \| null>\(null\)/);
-  assert.match(app, /function starredDropIndexFromPointer\(container: HTMLElement, pointerY: number\)/);
-  assert.match(app, /querySelectorAll<HTMLElement>\("\[data-starred-path\]"\)/);
-  assert.match(app, /function reorderedStarredFiles\(current: string\[\], draggedPath: string, dropIndex: number\)/);
+  assert.match(starredFiles, /function starredDropIndexFromPointer\(container: HTMLElement, pointerY: number\)/);
+  assert.match(starredFiles, /querySelectorAll<HTMLElement>\("\[data-starred-path\]"\)/);
+  assert.match(starredFiles, /function reorderedStarredFiles\(/);
   assert.match(app, /function previewStarredFileReorder\(pointerY: number\)/);
-  assert.match(app, /let targetIndex = Math\.max\(0, Math\.min\(dropIndex, current\.length\)\)/);
-  assert.match(app, /next\.splice\(targetIndex, 0, dragged\)/);
+  assert.match(starredFiles, /let targetIndex = Math\.max\(0, Math\.min\(dropIndex, current\.length\)\)/);
+  assert.match(starredFiles, /next\.splice\(targetIndex, 0, dragged\)/);
   assert.match(app, /onPointerDown=\{\(event: ReactPointerEvent<HTMLButtonElement>\) => \{/);
   assert.match(app, /startStarredPointerDrag\(event, file\.relativePath, index\)/);
   assert.match(app, /onPointerMove=\{updateStarredPointerDrag\}/);
@@ -2231,6 +2272,8 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(vaultTree, /isMoveFolderDestinationDisabled/);
   assert.match(vaultTree, /expandedFolderPathsForSelection/);
   assert.match(vaultTree, /mergeExpandedFolderPaths/);
+  assert.match(vaultTree, /fileButtonsRef\.current\[activeFilePath\]\?\.scrollIntoView/);
+  assert.match(vaultTree, /block: "nearest"/);
   assert.match(vaultTree, /treeScopeRef/);
   assert.match(vaultTree, /treeScopeRef\.current\.root !== root/);
   assert.match(vaultTree, /setExpandedPaths\(paths\)/);
@@ -3523,20 +3566,22 @@ test("document tabs expose native close actions from their context menu", () => 
 
 test("vault files can preview and open into either split pane by drag and drop", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const dropTarget = readFileSync("src/lib/editor-drop-target.ts", "utf8");
   const folderTree = readFileSync("src/vault/VaultFolderTree.tsx", "utf8");
   const editorPane = readFileSync("src/editor/EditorPane.tsx", "utf8");
   const css = readFileSync("src/App.css", "utf8");
 
   assert.match(app, /function handleVaultFilePointerDown/);
   assert.match(app, /event\.currentTarget\.setPointerCapture\(event\.pointerId\)/);
+  assert.match(app, /event\.buttons & 1/);
   assert.match(app, /activeVaultFileDragPath/);
   assert.match(app, /function moveVaultFileDragCursor/);
   assert.match(app, /className="vault-file-drag-cursor"/);
   assert.match(app, /editorDropAnimation/);
-  assert.match(app, /function editorDropTargetRect/);
+  assert.match(dropTarget, /function editorDropTargetRect/);
   assert.match(app, /setTimeout\(\(\) => \{/);
   assert.match(app, /pendingVaultFileDragRef/);
-  assert.match(app, /function editorGroupsAtPointer/);
+  assert.match(dropTarget, /function editorGroupsAtPointer/);
   assert.match(app, /window\.addEventListener\("pointermove", handlePointerMove, true\)/);
   assert.match(app, /window\.addEventListener\("pointerup", finishPointerDrag, true\)/);
   assert.match(app, /pending\.active && preview\?\.relativePath === pending\.relativePath/);
@@ -3546,6 +3591,8 @@ test("vault files can preview and open into either split pane by drag and drop",
   assert.match(app, /side === "left" \? "primary" : "secondary"/);
   assert.match(app, /setSplitOpen\(true\)/);
   assert.match(app, /onFilePointerDown=\{handleVaultFilePointerDown\}/);
+  assert.match(app, /pendingVaultFileDragRef\.current = null/);
+  assert.match(app, /function handleFolderContextMenu/);
   assert.match(folderTree, /onFilePointerDown\?:/);
   assert.match(folderTree, /onPointerDown=\{\(event\) => onFilePointerDown\?\.\(event, entry\.relativePath\)\}/);
   assert.match(editorPane, /onDragOver=\{\(event\) => \{[\s\S]*event\.preventDefault\(\);/);
