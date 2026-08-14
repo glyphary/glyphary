@@ -10,6 +10,7 @@ import type {
 } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { cleanVaultAssetReference } from "../lib/paths";
+import { ModalDialog } from "../ui/ModalDialog";
 
 // Responsibilities:
 // - Own Excalidraw scene parsing, preview rendering, and Markdown embed syntax.
@@ -316,14 +317,13 @@ export function ExcalidrawDialog({
   }
 
   return (
-    <div className="excalidraw-dialog-screen" role="presentation">
+    <ModalDialog
+      className="excalidraw-dialog-screen"
+      aria-label={`Edit drawing ${dialog.name}`}
+      onRequestClose={onClose}
+    >
       <section
         className="excalidraw-dialog-card"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Edit drawing ${dialog.name}`}
-        onMouseDown={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
       >
         <header className="excalidraw-dialog-header">
           <div>
@@ -351,7 +351,7 @@ export function ExcalidrawDialog({
           </Suspense>
         </div>
       </section>
-    </div>
+    </ModalDialog>
   );
 }
 
@@ -377,10 +377,10 @@ export function ExcalidrawCreateDialog({
   }
 
   return (
-    <div
+    <ModalDialog
       className="excalidraw-create-dialog-screen"
-      role="presentation"
-      onMouseDown={() => {
+      aria-label="Insert Excalidraw drawing"
+      onRequestClose={() => {
         if (!submitting) {
           onCancel();
         }
@@ -388,10 +388,6 @@ export function ExcalidrawCreateDialog({
     >
       <form
         className="excalidraw-create-dialog-card"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Insert Excalidraw drawing"
-        onMouseDown={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();
           onCreate();
@@ -435,6 +431,6 @@ export function ExcalidrawCreateDialog({
           </button>
         </div>
       </form>
-    </div>
+    </ModalDialog>
   );
 }

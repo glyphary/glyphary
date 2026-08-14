@@ -208,6 +208,7 @@ export function createGlypharyEditorOptions({
     editorProps: {
       attributes: {
         "aria-label": "Markdown document editor",
+        dir: "auto",
         spellcheck: "true",
       },
       handleDrop: (view: EditorView, event: DragEvent) => {

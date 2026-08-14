@@ -1,5 +1,6 @@
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import type { CommandPaletteCommand, CommandPaletteScope } from "./commands";
+import { ModalDialog } from "../ui/ModalDialog";
 
 // Responsibilities:
 // - Render the command palette dialog without owning app commands.
@@ -48,14 +49,14 @@ export function CommandPaletteDialog({
   }
 
   return (
-    <div className="command-palette-screen" role="presentation" onMouseDown={close}>
+    <ModalDialog
+      className="command-palette-screen"
+      aria-label="Quick command"
+      onRequestClose={close}
+    >
       <div
         className="command-palette-card"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Quick command"
         onKeyDown={handleKeyDown}
-        onMouseDown={(event) => event.stopPropagation()}
       >
         {scope !== "root" ? (
           <div className="command-palette-scopebar">
@@ -108,6 +109,6 @@ export function CommandPaletteDialog({
           )}
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 }

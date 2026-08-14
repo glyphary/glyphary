@@ -629,6 +629,13 @@ test("calendar filenames match the requested note naming scheme and dot marker k
   assert.match(app, /onMouseMove=\{\(event\) => moveCalendarDayPreview\(date, event\)\}/);
   assert.match(app, /onPointerEnter=\{\(event\) => scheduleCalendarDayPreview\(date, event\)\}/);
   assert.match(app, /onPointerLeave=\{closeCalendarDayPreview\}/);
+  assert.match(app, /aria-label="Previous month"[\s\S]*title="Previous month"/);
+  assert.match(app, /aria-label="Next month"[\s\S]*title="Next month"/);
+  assert.match(app, /aria-label="Jump to today"[\s\S]*title="Jump to today"/);
+  assert.match(app, /const today = new Date\(\);\s*setCalendarMonth\(new Date\(today\.getFullYear\(\), today\.getMonth\(\), 1\)\)/);
+  assert.match(css, /grid-template-columns: 30px minmax\(0, 1fr\) 30px/);
+  assert.match(css, /\.calendar-navigation-button \{[\s\S]*width: 30px/);
+  assert.match(css, /\.calendar-footer \{[\s\S]*justify-content: flex-start/);
   assert.match(app, /className="calendar-day-preview"/);
   assert.match(app, /style=\{\{ left: calendarDayPreview\.x, top: calendarDayPreview\.y \}\}/);
   assert.match(app, /<CanvasMarkdownPreview markdown=\{calendarDayPreview\.markdown\} \/>/);
@@ -3513,6 +3520,38 @@ test("split editor groups find an already open file across both panes", () => {
   assert.match(css, /\.app-error-screen/);
   assert.match(main, /class ErrorBoundary extends React\.Component/);
   assert.match(main, /<ErrorBoundary>/);
+});
+
+test("Markdown editors use automatic text direction with direction-safe content styles", () => {
+  const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
+  const tidbitCapture = readFileSync("src/TidbitCapture.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+
+  assert.match(editorOptions, /"aria-label": "Markdown document editor",\s*dir: "auto"/);
+  assert.match(tidbitCapture, /"aria-label": "Tidbit capture editor",\s*dir: "auto"/);
+  assert.match(css, /\.editor-surface blockquote \{[\s\S]*border-inline-start:/);
+  assert.match(css, /\.editor-surface \.markdown-callout \{[\s\S]*border-inline-start:/);
+  assert.match(css, /\.editor-surface ul,[\s\S]*padding-inline-start: 1\.35rem/);
+});
+
+test("interactive overlays use native modal and viewport-aware popover primitives", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const palette = readFileSync("src/command-palette/CommandPaletteDialog.tsx", "utf8");
+  const canvasDialogs = readFileSync("src/canvas/CanvasDialogs.tsx", "utf8");
+  const excalidraw = readFileSync("src/excalidraw/editor.tsx", "utf8");
+  const modal = readFileSync("src/ui/ModalDialog.tsx", "utf8");
+  const popover = readFileSync("src/ui/AnchoredPopover.tsx", "utf8");
+
+  assert.match(modal, /dialog\.showModal\(\)/);
+  assert.match(modal, /event\.target === event\.currentTarget/);
+  assert.match(popover, /createPortal\(/);
+  assert.match(popover, /window\.addEventListener\("scroll", updatePosition, true\)/);
+  assert.match(app, /<AnchoredPopover[\s\S]*className="file-menu-popover"/);
+  assert.match(palette, /<ModalDialog[\s\S]*className="command-palette-screen"/);
+  assert.match(canvasDialogs, /<ModalDialog[\s\S]*className="canvas-dialog-screen"/);
+  assert.match(excalidraw, /<ModalDialog[\s\S]*className="excalidraw-dialog-screen"/);
+  assert.doesNotMatch(app, /role="dialog"/);
+  assert.doesNotMatch(excalidraw, /role="dialog"/);
 });
 
 test("split editor refuses to close a secondary group with dirty tabs", () => {

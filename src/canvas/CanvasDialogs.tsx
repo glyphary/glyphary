@@ -19,6 +19,7 @@
 import type { FormEvent } from "react";
 import type { VaultEntry } from "../lib/app-types.js";
 import { canvasVaultPickerFileVisible } from "../lib/canvas.js";
+import { ModalDialog } from "../ui/ModalDialog";
 
 export type CanvasFlowPosition = {
   flowX: number;
@@ -157,10 +158,13 @@ export function CanvasDialogs({
   return (
     <>
       {promptDialog ? (
-        <div className="canvas-dialog-screen" role="presentation" onMouseDown={onClose}>
+        <ModalDialog
+          className="canvas-dialog-screen"
+          aria-label={promptDialog.kind === "web" ? "Add web page" : "Create group"}
+          onRequestClose={onClose}
+        >
           <form
             className="canvas-dialog"
-            onMouseDown={(event) => event.stopPropagation()}
             onSubmit={onSubmitPrompt}
           >
             <h2>{promptDialog.kind === "web" ? "Add Web Page" : "Create Group"}</h2>
@@ -181,14 +185,16 @@ export function CanvasDialogs({
               </button>
             </div>
           </form>
-        </div>
+        </ModalDialog>
       ) : null}
       {vaultPickerDialog ? (
-        <div className="canvas-dialog-screen" role="presentation" onMouseDown={onClose}>
+        <ModalDialog
+          className="canvas-dialog-screen"
+          aria-label={vaultPickerDialog.kind === "note" ? "Add note from vault" : "Add media from vault"}
+          onRequestClose={onClose}
+        >
           <section
             className="canvas-dialog canvas-vault-picker"
-            aria-label={vaultPickerDialog.kind === "note" ? "Add note from vault" : "Add media from vault"}
-            onMouseDown={(event) => event.stopPropagation()}
           >
             <h2>
               {vaultPickerDialog.kind === "note" ? "Add Note From Vault" : "Add Media From Vault"}
@@ -211,7 +217,7 @@ export function CanvasDialogs({
               </button>
             </div>
           </section>
-        </div>
+        </ModalDialog>
       ) : null}
     </>
   );

@@ -161,6 +161,7 @@ export default function TidbitCapture() {
     editorProps: {
       attributes: {
         "aria-label": "Tidbit capture editor",
+        dir: "auto",
         spellcheck: "true",
       },
     },

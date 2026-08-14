@@ -243,6 +243,8 @@ import {
   type CommandPaletteScope,
 } from "./command-palette/commands";
 import { CommandPaletteDialog } from "./command-palette/CommandPaletteDialog";
+import { AnchoredPopover } from "./ui/AnchoredPopover";
+import { ModalDialog } from "./ui/ModalDialog";
 import {
   activeFileWithRelativePath,
   rebasePathAfterDirectoryRename,
@@ -698,6 +700,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [githubSyncProgress, setGithubSyncProgress] = useState<GithubSyncProgress | null>(null);
   const [githubError, setGithubError] = useState<string | null>(null);
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  const fileMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const [aiReview, setAiReview] = useState<AiReviewState | null>(null);
   const [aiPageBuilderOpen, setAiPageBuilderOpen] = useState(false);
   const [aiPageBuilderPrompt, setAiPageBuilderPrompt] = useState("");
@@ -4738,8 +4741,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
   function fileMenu() {
     return (
-      <div className={fileMenuOpen ? "file-menu open" : "file-menu"}>
+      <div className="file-menu">
         <button
+          ref={fileMenuTriggerRef}
           className="secondary-action"
           type="button"
           aria-expanded={fileMenuOpen}
@@ -4748,7 +4752,12 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         >
           File
         </button>
-        <div className="file-menu-popover">
+        <AnchoredPopover
+          anchorRef={fileMenuTriggerRef}
+          className="file-menu-popover"
+          open={fileMenuOpen}
+          onRequestClose={() => setFileMenuOpen(false)}
+        >
           <button type="button" onClick={() => runFileMenuAction(openVault)}>
             Open Vault...
           </button>
@@ -4782,7 +4791,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           <button type="button" onClick={() => runFileMenuAction(openSettings)}>
             Settings...
           </button>
-        </div>
+        </AnchoredPopover>
       </div>
     );
   }
@@ -10277,27 +10286,35 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                 <div className="drawer-panel calendar-panel">
                   <div className="calendar-toolbar">
                     <button
-                      className="inline-action"
+                      className="inline-action calendar-navigation-button"
                       type="button"
+                      aria-label="Previous month"
+                      title="Previous month"
                       onClick={() =>
                         setCalendarMonth(
                           (month) => new Date(month.getFullYear(), month.getMonth() - 1, 1),
                         )
                       }
                     >
-                      Prev
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="m14.5 6-6 6 6 6" />
+                      </svg>
                     </button>
                     <strong>{monthTitle(calendarMonth)}</strong>
                     <button
-                      className="inline-action"
+                      className="inline-action calendar-navigation-button"
                       type="button"
+                      aria-label="Next month"
+                      title="Next month"
                       onClick={() =>
                         setCalendarMonth(
                           (month) => new Date(month.getFullYear(), month.getMonth() + 1, 1),
                         )
                       }
                     >
-                      Next
+                      <svg aria-hidden="true" viewBox="0 0 24 24">
+                        <path d="m9.5 6 6 6-6 6" />
+                      </svg>
                     </button>
                   </div>
                   <div
@@ -10343,6 +10360,21 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                         </button>
                       );
                     })}
+                  </div>
+                  <div className="calendar-footer">
+                    <button
+                      className="inline-action calendar-today-button"
+                      type="button"
+                      aria-label="Jump to today"
+                      title="Jump to today"
+                      onClick={() => {
+                        closeCalendarDayPreview();
+                        const today = new Date();
+                        setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+                      }}
+                    >
+                      Today
+                    </button>
                   </div>
                 </div>
               )}
@@ -10394,17 +10426,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         </aside>
       ) : null}
       {vaultLibraryOverlayOpen ? (
-        <div
+        <ModalDialog
           className="vault-library-screen"
-          role="presentation"
-          onMouseDown={() => setVaultLibraryOverlayOpen(false)}
+          aria-label="Switch vault"
+          onRequestClose={() => setVaultLibraryOverlayOpen(false)}
         >
           <section
             className="vault-library-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Switch vault"
-            onMouseDown={(event) => event.stopPropagation()}
           >
             <header className="vault-library-card-header">
               <div>
@@ -10484,7 +10512,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               ) : null}
             </div>
           </section>
-        </div>
+        </ModalDialog>
       ) : null}
       {settingsDialog}
       <ExcalidrawDialog
@@ -10500,17 +10528,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         onSave={saveExcalidrawDrawing}
       />
       {imagePreview ? (
-        <div
+        <ModalDialog
           className="image-preview-screen"
-          role="presentation"
-          onMouseDown={() => setImagePreview(null)}
+          aria-label="Image preview"
+          onRequestClose={() => setImagePreview(null)}
         >
           <figure
             className="image-preview-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Image preview"
-            onMouseDown={(event) => event.stopPropagation()}
           >
             <button
               className="image-preview-close"
@@ -10523,20 +10547,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
             <img src={imagePreview.src} alt={imagePreview.alt} />
             {imagePreview.alt ? <figcaption>{imagePreview.alt}</figcaption> : null}
           </figure>
-        </div>
+        </ModalDialog>
       ) : null}
       {aiPageBuilderOpen ? (
-        <div
+        <ModalDialog
           className="ai-builder-screen"
-          role="presentation"
-          onMouseDown={() => setAiPageBuilderOpen(false)}
+          aria-label="AI Page Builder"
+          onRequestClose={() => setAiPageBuilderOpen(false)}
         >
           <section
             className="ai-builder-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="AI Page Builder"
-            onMouseDown={(event) => event.stopPropagation()}
           >
             <header>
               <div>
@@ -10629,20 +10649,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               </button>
             </footer>
           </section>
-        </div>
+        </ModalDialog>
       ) : null}
       {aiPageBuilderAssetReview ? (
-        <div
+        <ModalDialog
           className="ai-builder-asset-screen"
-          role="presentation"
-          onMouseDown={() => setAiPageBuilderAssetReview(null)}
+          aria-label="Review AI Page Builder assets"
+          onRequestClose={() => setAiPageBuilderAssetReview(null)}
         >
           <section
             className="ai-builder-asset-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Review AI Page Builder assets"
-            onMouseDown={(event) => event.stopPropagation()}
           >
             <header>
               <div>
@@ -10693,20 +10709,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               </button>
             </footer>
           </section>
-        </div>
+        </ModalDialog>
       ) : null}
       {aiReview ? (
-        <div
+        <ModalDialog
           className="ai-review-screen"
-          role="presentation"
-          onMouseDown={() => setAiReview(null)}
+          aria-label="Review AI result"
+          onRequestClose={() => setAiReview(null)}
         >
           <section
             className="ai-review-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Review AI result"
-            onMouseDown={(event) => event.stopPropagation()}
           >
             <header>
               <div>
@@ -10761,7 +10773,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               ) : null}
             </footer>
           </section>
-        </div>
+        </ModalDialog>
       ) : null}
       {aiSubmitting ? (
         <div className="ai-progress-screen" role="presentation">
@@ -10808,18 +10820,14 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         selectedIndex={commandPaletteSelectedIndex}
       />
       {wikiLinkSearchOpen ? (
-        <div
+        <ModalDialog
           className="wikilink-search-screen"
-          role="presentation"
-          onMouseDown={closeWikiLinkSearch}
+          aria-label="Find page"
+          onRequestClose={closeWikiLinkSearch}
         >
           <div
             className="wikilink-search-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Find page"
             onKeyDown={handleWikiLinkSearchKeyDown}
-            onMouseDown={(event) => event.stopPropagation()}
           >
             <input
               ref={wikiLinkSearchInputRef}
@@ -10868,7 +10876,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               )}
             </div>
           </div>
-        </div>
+        </ModalDialog>
       ) : null}
       <ExcalidrawCreateDialog
         inputRef={excalidrawCreateInputRef}
@@ -10882,10 +10890,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         submitting={excalidrawCreateSubmitting}
       />
       {richLinkDialogOpen ? (
-        <div
+        <ModalDialog
           className="rich-link-dialog-screen"
-          role="presentation"
-          onMouseDown={() => {
+          aria-label="Insert rich link"
+          onRequestClose={() => {
             if (!richLinkSubmitting) {
               setRichLinkDialogOpen(false);
             }
@@ -10893,10 +10901,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         >
           <form
             className="rich-link-dialog-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Insert rich link"
-            onMouseDown={(event) => event.stopPropagation()}
             onSubmit={(event) => {
               event.preventDefault();
               void insertRichLinkFromUrl(richLinkUrlDraft);
@@ -10943,20 +10947,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               </button>
             </div>
           </form>
-        </div>
+        </ModalDialog>
       ) : null}
       {githubDialog ? (
-        <div
+        <ModalDialog
           className="folder-action-dialog-screen"
-          role="presentation"
-          onMouseDown={() => setGithubDialog(null)}
+          aria-label="GitHub vault sync"
+          onRequestClose={() => setGithubDialog(null)}
         >
           <form
             className="folder-action-dialog-card github-vault-dialog-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="GitHub vault sync"
-            onMouseDown={(event) => event.stopPropagation()}
             onSubmit={(event) => void submitGithubDialog(event)}
           >
             <div className="folder-action-dialog-header">
@@ -11079,20 +11079,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               </button>
             </div>
           </form>
-        </div>
+        </ModalDialog>
       ) : null}
       {releaseNotification ? (
-        <div
+        <ModalDialog
           className="release-update-screen"
-          role="presentation"
-          onMouseDown={() => setReleaseNotification(null)}
+          aria-label="Glyphary update available"
+          onRequestClose={() => setReleaseNotification(null)}
         >
           <section
             className="release-update-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Glyphary update available"
-            onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="release-update-header">
               <h2>Glyphary {releaseNotification.tagName} is available</h2>
@@ -11128,7 +11124,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               </a>
             </div>
           </section>
-        </div>
+        </ModalDialog>
       ) : null}
       {wikiLinkPicker ? (
         <div
@@ -11218,20 +11214,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         />
       ) : null}
       {folderActionDialog ? (
-        <div
+        <ModalDialog
           className="folder-action-dialog-screen"
-          role="presentation"
-          onMouseDown={() => setFolderActionDialog(null)}
+          aria-label={folderActionDialogTitle(
+            folderActionDialog.action,
+            isCanvasPath(folderActionDialog.entry.relativePath),
+          )}
+          onRequestClose={() => setFolderActionDialog(null)}
         >
           <form
             className="folder-action-dialog-card"
-            role="dialog"
-            aria-modal="true"
-            aria-label={folderActionDialogTitle(
-              folderActionDialog.action,
-              isCanvasPath(folderActionDialog.entry.relativePath),
-            )}
-            onMouseDown={(event) => event.stopPropagation()}
             onSubmit={(event) => void submitFolderActionDialog(event)}
           >
             <div className="folder-action-dialog-header">
@@ -11317,7 +11309,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               </button>
             </div>
           </form>
-        </div>
+        </ModalDialog>
       ) : null}
       {vaultRoot && normalizedVaultAppearanceDraft.statusBarVisible ? (
         <footer className="statusbar" key={status}>
