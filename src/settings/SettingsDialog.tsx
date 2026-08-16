@@ -656,6 +656,20 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     />
                     <span>Use Vim keybindings</span>
                   </label>
+                  <label className="settings-check-control">
+                    <input
+                      checked={editorBehaviorDraft.slashMenu}
+                      disabled={!vaultRoot}
+                      type="checkbox"
+                      onChange={(event) =>
+                        setEditorBehaviorDraft((settings) => ({
+                          ...settings,
+                          slashMenu: event.currentTarget.checked,
+                        }))
+                      }
+                    />
+                    <span>Open the command menu with "/"</span>
+                  </label>
                   <label>
                     <span>Calendar preview delay</span>
                     <input

@@ -69,6 +69,7 @@ export const defaultFrontmatterPillSettings: FrontmatterPillSettings = {
 export const defaultEditorBehaviorSettings: EditorBehaviorSettings = {
   calendarPreviewDelayMs: 2000,
   vimMode: false,
+  slashMenu: true,
 };
 
 export const defaultFileDisplaySettings: FileDisplaySettings = {
@@ -434,6 +435,7 @@ export function normalizeEditorBehaviorSettings(
         )
       : defaultEditorBehaviorSettings.calendarPreviewDelayMs,
     vimMode: settings?.vimMode ?? defaultEditorBehaviorSettings.vimMode,
+    slashMenu: settings?.slashMenu ?? defaultEditorBehaviorSettings.slashMenu,
   };
 }
 

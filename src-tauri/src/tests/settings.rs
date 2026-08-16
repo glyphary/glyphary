@@ -241,6 +241,7 @@ fn writes_vault_settings_file() {
             editor: EditorSettings {
                 calendar_preview_delay_ms: 1400,
                 vim_mode: true,
+                slash_menu: false,
             },
             appearance: AppearanceSettings {
                 glass_effect: true,
@@ -313,6 +314,7 @@ fn clamps_editor_settings() {
             editor: EditorSettings {
                 calendar_preview_delay_ms: 10_000,
                 vim_mode: true,
+                slash_menu: true,
             },
             ..VaultSettings::default()
         },

@@ -275,8 +275,13 @@ impl Default for EditorSettings {
         Self {
             calendar_preview_delay_ms: DEFAULT_CALENDAR_PREVIEW_DELAY_MS,
             vim_mode: false,
+            slash_menu: true,
         }
     }
+}
+
+pub(crate) fn default_slash_menu() -> bool {
+    true
 }
 
 impl Default for AppearanceSettings {

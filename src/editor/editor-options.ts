@@ -98,6 +98,7 @@ export function createGlypharyEditorOptions({
   groupId,
   isHydrating,
   loadExcalidrawPreview,
+  openCommandPalette,
   openExcalidrawDrawing,
   openWikiLinkSearch,
   queueImageImport,
@@ -109,6 +110,7 @@ export function createGlypharyEditorOptions({
   setMarkdown,
   setMarkdownDraft,
   setStatus,
+  slashMenuEnabled,
   syncEditorState,
   updateGroupTab,
   vimMode,
@@ -120,6 +122,7 @@ export function createGlypharyEditorOptions({
   groupId: EditorGroupId;
   isHydrating: () => boolean;
   loadExcalidrawPreview: (target: string) => Promise<string>;
+  openCommandPalette: () => void;
   openExcalidrawDrawing: (target: string) => void;
   openWikiLinkSearch: () => void;
   queueImageImport: (transfer: DataTransfer | null | undefined) => boolean;
@@ -131,6 +134,7 @@ export function createGlypharyEditorOptions({
   setMarkdown: (markdown: string) => void;
   setMarkdownDraft: (markdown: string) => void;
   setStatus: (message: string) => void;
+  slashMenuEnabled: boolean;
   syncEditorState: (editor: Editor) => void;
   updateGroupTab: (groupId: EditorGroupId, tabId: string, patch: Partial<DocumentTab>) => void;
   vimMode: boolean;
@@ -267,6 +271,40 @@ export function createGlypharyEditorOptions({
         return true;
       },
       handleKeyDown: (view: EditorView, event: KeyboardEvent) => {
+        const { selection } = view.state;
+
+        // Obsidian-style slash menu: "/" at the start of a line or after
+        // whitespace opens the command palette instead of typing a slash.
+        // Slashes inside words (URLs, paths) and code blocks are unaffected.
+        if (
+          slashMenuEnabled &&
+          event.key === "/" &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          selection.empty &&
+          selection.$from.parent.isTextblock &&
+          selection.$from.parent.type.name !== "codeBlock"
+        ) {
+          // Inline atoms count as non-whitespace so "/" after an image or
+          // embed still types a literal slash.
+          const textBeforeCursor = selection.$from.parent.textBetween(
+            0,
+            selection.$from.parentOffset,
+            "￼",
+            "￼",
+          );
+
+          if (textBeforeCursor === "" || /\s$/.test(textBeforeCursor)) {
+            // Insert the "/" first, Notion-style: dismissing the menu keeps
+            // the typed slash, while running a command removes it again.
+            event.preventDefault();
+            view.dispatch(view.state.tr.insertText("/"));
+            openCommandPalette();
+            return true;
+          }
+        }
+
         if (!(event.shiftKey && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "v")) {
           return false;
         }

@@ -690,6 +690,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [calendarDayPreview, setCalendarDayPreview] =
     useState<CalendarDayPreviewState | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const openCommandPaletteRootRef = useRef<(scope?: CommandPaletteScope) => void>(() => {});
+  // Caret viewport position captured when the slash menu opens; null renders
+  // the palette as the usual centered dialog.
+  const [commandPaletteAnchor, setCommandPaletteAnchor] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  // The "/" typed to open the slash menu stays in the document on dismissal;
+  // running a command deletes it. `from` is the caret right after the slash.
+  const slashTriggerRef = useRef<{ editor: Editor; from: number } | null>(null);
   const [commandPaletteScope, setCommandPaletteScope] =
     useState<CommandPaletteScope>("root");
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
@@ -2511,6 +2521,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       groupId,
       isHydrating: () => hydratingEditor.current[groupId],
       loadExcalidrawPreview: (target) => loadExcalidrawPreviewRef.current(target),
+      openCommandPalette: () => openCommandPaletteRootRef.current("flat"),
       openExcalidrawDrawing: (target) => openExcalidrawDrawingRef.current(target),
       openWikiLinkSearch: () => openWikiLinkSearchRef.current(),
       queueImageImport,
@@ -2527,14 +2538,21 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       setMarkdown,
       setMarkdownDraft,
       setStatus,
+      slashMenuEnabled: editorBehavior.slashMenu,
       syncEditorState,
       updateGroupTab,
       vimMode: editorBehavior.vimMode,
     });
   }
 
-  const primaryEditor = useEditor(createEditorOptions("primary"), [editorBehavior.vimMode]);
-  const secondaryEditor = useEditor(createEditorOptions("secondary"), [editorBehavior.vimMode]);
+  const primaryEditor = useEditor(createEditorOptions("primary"), [
+    editorBehavior.vimMode,
+    editorBehavior.slashMenu,
+  ]);
+  const secondaryEditor = useEditor(createEditorOptions("secondary"), [
+    editorBehavior.vimMode,
+    editorBehavior.slashMenu,
+  ]);
 
   async function importNativeDroppedImages(
     root: string,
@@ -5038,18 +5056,35 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
   };
 
-  function openCommandPaletteRoot() {
+  function openCommandPaletteRoot(scope: CommandPaletteScope = "root") {
     if (!hasActiveDocumentTab()) {
       setStatus("Open or create a note before using the command palette");
       return;
     }
 
-    setCommandPaletteScope("root");
+    if (scope === "flat") {
+      const targetEditor = activeEditorRef.current;
+      const coords = targetEditor
+        ? targetEditor.view.coordsAtPos(targetEditor.state.selection.from)
+        : null;
+
+      setCommandPaletteAnchor(coords ? { x: coords.left, y: coords.bottom } : null);
+      slashTriggerRef.current = targetEditor
+        ? { editor: targetEditor, from: targetEditor.state.selection.from }
+        : null;
+    } else {
+      setCommandPaletteAnchor(null);
+      slashTriggerRef.current = null;
+    }
+
+    setCommandPaletteScope(scope);
     setCommandPaletteQuery("");
     setCommandPaletteSelectedIndex(0);
     captureCommandPaletteSelection();
     setCommandPaletteOpen(true);
   }
+
+  openCommandPaletteRootRef.current = openCommandPaletteRoot;
 
   async function pastePlainAtCursor() {
     const targetEditor = activeEditorRef.current;
@@ -8502,6 +8537,12 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         ...activeFileCommandPaletteCommands,
       ]
     : [];
+  // The slash menu shows one filterable list of the writing-insertion groups
+  // only: the AI and Insert children, flattened.
+  const flatCommandPaletteCommands = [
+    ...aiCommandPaletteCommands,
+    ...activeInsertCommandPaletteCommands,
+  ];
   // All scopes share the same filtering, selection, and rendering pipeline.
   // Adding a new grouped menu should usually mean adding one command list here
   // and a root "Name ..." command that switches to that scope.
@@ -8514,6 +8555,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           ? formatCommandPaletteCommands
         : commandPaletteScope === "table" && activeDocumentIsMarkdown
           ? tableCommandPaletteCommands
+        : commandPaletteScope === "flat"
+          ? flatCommandPaletteCommands
           : commandPaletteCommands;
   const activeCommandPaletteScopeTitle = commandPaletteScopeTitle(
     commandPaletteScope,
@@ -8661,13 +8704,14 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       event.preventDefault();
       // Escape follows the same hierarchy as Alfred-style palettes: first back
       // out of the submenu, then close the dialog from the root.
-      if (commandPaletteScope !== "root") {
+      if (commandPaletteScope !== "root" && commandPaletteScope !== "flat") {
         setCommandPaletteScope("root");
         setCommandPaletteQuery("");
         setCommandPaletteSelectedIndex(0);
         return;
       }
 
+      // The slash menu's "/" is already in the document; dismissal keeps it.
       closeCommandPalette();
       return;
     }
@@ -8675,6 +8719,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     if (
       event.key === "Backspace" &&
       commandPaletteScope !== "root" &&
+      commandPaletteScope !== "flat" &&
       commandPaletteQuery.length === 0
     ) {
       event.preventDefault();
@@ -8713,7 +8758,21 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       return;
     }
 
+    const slashTrigger = commandPaletteScope === "flat" ? slashTriggerRef.current : null;
+
     closeCommandPalette();
+
+    // Running a slash-menu command consumes the "/" that opened it.
+    if (
+      slashTrigger &&
+      slashTrigger.from >= 1 &&
+      slashTrigger.editor.state.doc.textBetween(slashTrigger.from - 1, slashTrigger.from) === "/"
+    ) {
+      slashTrigger.editor.view.dispatch(
+        slashTrigger.editor.state.tr.delete(slashTrigger.from - 1, slashTrigger.from),
+      );
+    }
+
     await command.run();
     setEditorFocused(true);
     if (shouldReportCommandPaletteStatus(command)) {
@@ -9458,7 +9517,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
             type="button"
             aria-label="Open command palette"
             title="Command Palette"
-            onClick={openCommandPaletteRoot}
+            onClick={() => openCommandPaletteRoot()}
           >
             <svg aria-hidden="true" viewBox="0 0 24 24">
               <path d="M18 9a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12" />
@@ -10923,6 +10982,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         </div>
       ) : null}
       <CommandPaletteDialog
+        anchor={commandPaletteScope === "flat" ? commandPaletteAnchor : null}
         close={closeCommandPalette}
         commands={filteredCommandPaletteCommands}
         handleKeyDown={handleCommandPaletteKeyDown}

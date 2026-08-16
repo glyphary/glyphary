@@ -10,6 +10,7 @@ import { ModalDialog } from "../ui/ModalDialog";
 // - Empty results render a stable no-results state.
 
 export function CommandPaletteDialog({
+  anchor = null,
   close,
   commands,
   handleKeyDown,
@@ -27,6 +28,7 @@ export function CommandPaletteDialog({
   selectedCommand,
   selectedIndex,
 }: {
+  anchor?: { x: number; y: number } | null;
   close: () => void;
   commands: CommandPaletteCommand[];
   handleKeyDown: (event: ReactKeyboardEvent<HTMLElement>) => void;
@@ -48,17 +50,29 @@ export function CommandPaletteDialog({
     return null;
   }
 
+  // Clamp the caret-anchored card so it stays inside the viewport; the
+  // estimates cover the card width and the results max-height.
+  const anchorStyle = anchor
+    ? {
+        position: "fixed" as const,
+        left: Math.max(12, Math.min(anchor.x, window.innerWidth - 572)),
+        top: Math.max(12, Math.min(anchor.y + 6, window.innerHeight - 452)),
+        margin: 0,
+      }
+    : undefined;
+
   return (
     <ModalDialog
-      className="command-palette-screen"
+      className={anchor ? "command-palette-screen anchored" : "command-palette-screen"}
       aria-label="Quick command"
       onRequestClose={close}
     >
       <div
         className="command-palette-card"
+        style={anchorStyle}
         onKeyDown={handleKeyDown}
       >
-        {scope !== "root" ? (
+        {scope !== "root" && scope !== "flat" ? (
           <div className="command-palette-scopebar">
             <button type="button" onClick={onBack}>
               Back

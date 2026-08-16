@@ -5,7 +5,9 @@
 // - Menu commands stay open after running; leaf commands close the palette.
 // - Filtering is case-insensitive across title and description.
 
-export type CommandPaletteScope = "root" | "ai" | "insert" | "format" | "table";
+// "flat" is the slash-menu view: every leaf command from all groups in one
+// filterable list, with no submenu navigation.
+export type CommandPaletteScope = "root" | "ai" | "insert" | "format" | "table" | "flat";
 
 export type CommandPaletteCommand = {
   id: string;
@@ -32,6 +34,10 @@ export function commandPaletteScopeTitle(
 
   if (scope === "table") {
     return "Table commands";
+  }
+
+  if (scope === "flat") {
+    return "All commands";
   }
 
   return "";

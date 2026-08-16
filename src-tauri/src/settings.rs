@@ -76,6 +76,7 @@ pub(crate) fn clean_editor_settings(settings: EditorSettings) -> EditorSettings 
             .calendar_preview_delay_ms
             .clamp(MIN_CALENDAR_PREVIEW_DELAY_MS, MAX_CALENDAR_PREVIEW_DELAY_MS),
         vim_mode: settings.vim_mode,
+        slash_menu: settings.slash_menu,
     }
 }
 pub(crate) fn clean_starred_files(files: Vec<String>) -> Result<Vec<String>, String> {

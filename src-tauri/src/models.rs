@@ -84,6 +84,9 @@ pub(crate) struct EditorSettings {
     #[serde(default = "crate::defaults::default_calendar_preview_delay_ms")]
     pub(crate) calendar_preview_delay_ms: u32,
     pub(crate) vim_mode: bool,
+    // Older vault files omit this field; the slash menu defaults to enabled.
+    #[serde(default = "crate::defaults::default_slash_menu")]
+    pub(crate) slash_menu: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

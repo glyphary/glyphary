@@ -206,6 +206,7 @@ export type FrontmatterPillSettings = {
 export type EditorBehaviorSettings = {
   calendarPreviewDelayMs: number;
   vimMode: boolean;
+  slashMenu: boolean;
 };
 
 export type FileDisplaySettings = {

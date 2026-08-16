@@ -5952,6 +5952,12 @@ body.workspace-resizing * {
   animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
 }
 
+/* Caret-anchored slash menu: no dimmed backdrop, card placed inline. */
+.command-palette-screen.anchored {
+  background: transparent;
+  animation: none;
+}
+
 .command-palette-card {
   width: min(560px, 100%);
   overflow: hidden;

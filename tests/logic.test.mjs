@@ -2813,7 +2813,18 @@ test("command save shortcut is wrapped in the webview", () => {
   assert.match(app, /switchToDocumentTab\(group\.tabs\[nextIndex\]\.id, groupId\)/);
   assert.match(app, /setCommandPaletteOpen\(true\)/);
   assert.match(app, /aria-label="Open command palette"/);
-  assert.match(app, /onClick=\{openCommandPaletteRoot\}/);
+  assert.match(app, /onClick=\{\(\) => openCommandPaletteRoot\(\)\}/);
+  // The editor slash menu opens the flattened all-commands scope.
+  assert.match(app, /openCommandPaletteRootRef\.current\("flat"\)/);
+  // The slash menu flattens only the AI and Insert groups. The typed "/"
+  // stays in the document; running a command deletes it again.
+  assert.match(
+    app,
+    /const flatCommandPaletteCommands = \[\s*\.\.\.aiCommandPaletteCommands,\s*\.\.\.activeInsertCommandPaletteCommands,\s*\]/,
+  );
+  const editorOptionsForSlash = readFileSync("src/editor/editor-options.ts", "utf8");
+  assert.match(editorOptionsForSlash, /view\.dispatch\(view\.state\.tr\.insertText\("\/"\)\)/);
+  assert.match(app, /slashTrigger\.editor\.state\.tr\.delete\(slashTrigger\.from - 1, slashTrigger\.from\)/);
   assert.match(app, /className="quiet-icon-action titlebar-command-palette"/);
   assert.match(editorPane, /className="page-search-bar"/);
   assert.match(editorPane, /aria-label="Find in page"/);
@@ -3578,7 +3589,11 @@ test("interactive overlays use native modal and viewport-aware popover primitive
   assert.match(popover, /createPortal\(/);
   assert.match(popover, /window\.addEventListener\("scroll", updatePosition, true\)/);
   assert.match(app, /<AnchoredPopover[\s\S]*className="file-menu-popover"/);
-  assert.match(palette, /<ModalDialog[\s\S]*className="command-palette-screen"/);
+  assert.match(palette, /<ModalDialog[\s\S]*className=\{anchor \? "command-palette-screen anchored" : "command-palette-screen"\}/);
+  // The caret-anchored slash menu positions the card at the cursor and has no
+  // Back navigation into the hierarchical root scope.
+  assert.match(palette, /scope !== "root" && scope !== "flat"/);
+  assert.match(app, /commandPaletteScope !== "root" && commandPaletteScope !== "flat"/);
   assert.match(canvasDialogs, /<ModalDialog[\s\S]*className="canvas-dialog-screen"/);
   assert.match(excalidraw, /<ModalDialog[\s\S]*className="excalidraw-dialog-screen"/);
   assert.doesNotMatch(app, /role="dialog"/);
