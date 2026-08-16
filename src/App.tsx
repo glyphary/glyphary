@@ -140,6 +140,8 @@ import {
   normalizeStarredFiles,
   normalizeTidbitSettings,
   normalizeVaultAppearanceSettings,
+  appearanceStorageKey,
+  themePreviewStorageKey,
   readPersistedAppearance,
   readPersistedVaultLibrary,
   readPersistedWorkspace,
@@ -665,6 +667,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [resolvedAppearance, setResolvedAppearance] = useState(() =>
     resolveAppearance(readPersistedAppearance()),
   );
+  // Applying a theme preset switches the appearance mode as a live preview;
+  // remember the mode from before the first preview so closing or reverting
+  // the settings dialog without saving can restore it.
+  const appearanceBeforeThemePreviewRef = useRef<AppearanceMode | null>(null);
   const [vaultDrawerOpen, setVaultDrawerOpen] = useState(defaultVaultDrawerOpen);
   const [vaultDrawerWidth, setVaultDrawerWidth] = useState(defaultVaultDrawerWidth);
   const [vaultDrawerItem, setVaultDrawerItem] = useState<VaultDrawerItem>("files");
@@ -1168,8 +1174,12 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       return;
     }
 
-    void getCurrentWindow().setTheme(resolvedAppearance);
-  }, [resolvedAppearance]);
+    // Forcing the native theme also changes what prefers-color-scheme reports
+    // in this webview. "auto" must release the window back to follow-system
+    // (null); forcing the resolved value instead would freeze matchMedia on
+    // the previous forced theme and "auto" could never resolve correctly.
+    void getCurrentWindow().setTheme(appearance === "auto" ? null : appearance);
+  }, [appearance]);
 
   useEffect(() => {
     document.documentElement.dataset.windowGlass = vaultAppearanceDraft.glassEffect
@@ -1319,6 +1329,23 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   function applyThemePreset(preset: ThemePreset) {
     setSelectedThemePresetIdDraft(preset.id);
     setThemeDraft(normalizeThemeTokens(preset.tokens));
+
+    // Glass materials and native window chrome follow the appearance mode, not
+    // the theme tokens; a mismatched mode makes preset text unreadable there.
+    // Always commit the explicit mode so the appearance control reflects the
+    // preset instead of staying on system selection.
+    if (appearanceBeforeThemePreviewRef.current === null) {
+      appearanceBeforeThemePreviewRef.current = appearance;
+    }
+    setAppearance(preset.base);
+
+    // The settings dialog can live in its own window; peer windows follow the
+    // preview through synchronous localStorage writes and storage events.
+    // Async channels are unusable here: they lose the race against this
+    // window's destruction when the preview is reverted on close.
+    writePersistedAppearance(preset.base);
+    window.localStorage.setItem(themePreviewStorageKey, JSON.stringify(preset.tokens));
+
     setStatus(`Previewing theme template: ${preset.name}. Save Settings to keep it.`);
   }
 
@@ -1463,6 +1490,21 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setStatus("Reset theme preview");
   }
 
+  function restorePreviewedAppearance() {
+    const before = appearanceBeforeThemePreviewRef.current;
+
+    if (before === null) {
+      return Promise.resolve();
+    }
+
+    appearanceBeforeThemePreviewRef.current = null;
+    setAppearance(before);
+    // Write synchronously too: the settings window can be destroyed before
+    // React flushes the state change, and peer windows follow localStorage.
+    writePersistedAppearance(before);
+    window.localStorage.removeItem(themePreviewStorageKey);
+  }
+
   function revertSettingsDraft() {
     const savedCssSnippets = savedCssSnippetSettings();
     const savedPlugins = savedPluginSettings();
@@ -1487,6 +1529,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setThemeDraft(savedThemeTokens());
     setThemeOptionsDraft(savedThemeOptions());
     setThemeCalloutDraft(savedThemeCalloutSettings());
+    restorePreviewedAppearance();
+    window.localStorage.removeItem(themePreviewStorageKey);
     void refreshCssSnippets(vaultRoot, savedCssSnippets).catch((error) => {
       setStatus(error instanceof Error ? error.message : String(error));
     });
@@ -1542,6 +1586,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   }
 
   function closeSettings() {
+    // Closing without saving must not keep previewed settings applied. The
+    // revert only uses synchronous state and localStorage writes, so closing
+    // immediately afterwards cannot lose it.
+    if (settingsHaveChanges() || appearanceBeforeThemePreviewRef.current !== null) {
+      revertSettingsDraft();
+    }
+
     if (settingsWindowMode && isTauri()) {
       void getCurrentWindow().close();
       return;
@@ -1573,6 +1624,72 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       JSON.stringify({ root, updatedAt: Date.now() }),
     );
   }
+
+  // The settings window and main window are separate App instances sharing
+  // localStorage; follow appearance and theme-preview changes made by the
+  // peer window live. Storage writes are synchronous in the peer, so these
+  // events survive even when the settings window closes right after writing.
+  useEffect(() => {
+    const adoptPeerAppearance = (event: StorageEvent) => {
+      if (event.key === appearanceStorageKey) {
+        if (
+          event.newValue === "light" ||
+          event.newValue === "dark" ||
+          event.newValue === "auto"
+        ) {
+          setAppearance(event.newValue);
+        }
+        return;
+      }
+
+      if (event.key === themePreviewStorageKey) {
+        let previewTokens: Record<string, string> | null = null;
+
+        if (event.newValue) {
+          try {
+            previewTokens = JSON.parse(event.newValue) as Record<string, string>;
+          } catch {
+            previewTokens = null;
+          }
+        }
+
+        // A removed preview restores this window's saved theme.
+        setThemeDraft(
+          normalizeThemeTokens(previewTokens ?? vaultSettingsRef.current.theme?.tokens),
+        );
+      }
+    };
+
+    window.addEventListener("storage", adoptPeerAppearance);
+
+    // A crashed or force-closed settings window can leave a stale preview
+    // behind; the main window clears it on startup.
+    if (!settingsWindowMode) {
+      window.localStorage.removeItem(themePreviewStorageKey);
+    }
+
+    return () => window.removeEventListener("storage", adoptPeerAppearance);
+  }, []);
+
+  // The macOS traffic-light close button never reaches closeSettings, so the
+  // unsaved appearance preview must also be restored when this window goes
+  // away. pagehide is used instead of onCloseRequested because registering a
+  // Tauri close-requested listener makes JS responsible for destroying the
+  // window and can leave it unclosable if that chain breaks.
+  useEffect(() => {
+    if (!settingsWindowMode) {
+      return;
+    }
+
+    const restoreOnWindowClose = () => {
+      restorePreviewedAppearance();
+      window.localStorage.removeItem(themePreviewStorageKey);
+    };
+
+    window.addEventListener("pagehide", restoreOnWindowClose);
+
+    return () => window.removeEventListener("pagehide", restoreOnWindowClose);
+  }, [settingsWindowMode]);
 
   useEffect(() => {
     if (!settingsWindowMode || !isTauri()) {
@@ -4497,6 +4614,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       await refreshPlugins(vaultRoot, plugins);
       await loadEntries(vaultRoot, currentDir);
       notifyVaultSettingsChanged(vaultRoot);
+      // The previewed appearance and theme are now the saved ones; peers
+      // reload from disk, so the preview must not revert them afterwards.
+      appearanceBeforeThemePreviewRef.current = null;
+      window.localStorage.removeItem(themePreviewStorageKey);
       setStatus("Saved vault settings");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -6904,7 +7025,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       return;
     }
 
-    setEditorBody(`${markdown.trimEnd()}\n\n${emptyTableMarkdown}`, false);
+    editor.chain().focus().insertContent(emptyTableMarkdown, { contentType: "markdown" }).run();
   }
 
   function appendColumns() {
@@ -6946,7 +7067,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       return;
     }
 
-    setEditorBody(`${markdown.trimEnd()}\n\n${emptyCalloutMarkdown}`, false);
+    editor.chain().focus().insertContent(emptyCalloutMarkdown, { contentType: "markdown" }).run();
   }
 
   function insertCollapseBlock() {
@@ -10297,7 +10418,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                       }
                     >
                       <svg aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="m14.5 6-6 6 6 6" />
+                        <path d="m15 6-6 6 6 6" />
                       </svg>
                     </button>
                     <strong>{monthTitle(calendarMonth)}</strong>
@@ -10313,7 +10434,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                       }
                     >
                       <svg aria-hidden="true" viewBox="0 0 24 24">
-                        <path d="m9.5 6 6 6-6 6" />
+                        <path d="m9 6 6 6-6 6" />
                       </svg>
                     </button>
                   </div>

@@ -5042,7 +5042,9 @@ body.workspace-resizing * {
   padding: 5px;
 }
 
-.calendar-navigation-button {
+/* Double class beats the later `.inline-action { padding: 0 10px }` rule;
+   leftover horizontal padding pushes the overflowing icon track off-center. */
+.inline-action.calendar-navigation-button {
   width: 30px;
   height: 30px;
   padding: 0;

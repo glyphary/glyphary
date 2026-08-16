@@ -43,6 +43,10 @@ import type {
 export const workspaceStorageKey = "glyphary.workspace";
 export const workspaceSessionsStorageKey = "glyphary.workspaceSessions";
 export const appearanceStorageKey = "glyphary.appearance";
+// Cross-window theme preset preview: the settings window writes the previewed
+// tokens synchronously so peer windows follow via storage events even while
+// the settings window is being destroyed. Cleared on save, revert, and close.
+export const themePreviewStorageKey = "glyphary.themePreview";
 export const vaultLibraryStorageKey = "glyphary.vaultLibrary";
 export const closedDrawerWidth = 48;
 export const workspaceResizeHandleWidth = 10;

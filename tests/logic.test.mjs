@@ -446,6 +446,22 @@ test("dropped image names follow the pasted-image timestamp convention", () => {
   ]);
 });
 
+test("strike input rule expands ~~text~~ without requiring a leading boundary", () => {
+  const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
+
+  // The stock Tiptap rule only fires after whitespace, which disagreed with
+  // the GFM parser that strikes x~~text~~ anywhere. Lock the loosened rule.
+  assert.match(editorOptions, /strike: false/);
+  assert.match(editorOptions, /Strike\.extend\(/);
+  const strikeFind = /\(\?<!~\)\(~~\(\?!\\s\+~~\)\(\[\^~\\n\]\+\?\)~~\)\$/;
+  assert.match(editorOptions, strikeFind);
+  const rule = /(?<!~)(~~(?!\s+~~)([^~\n]+?)~~)$/;
+  assert.equal(rule.test("word~~struck~~"), true);
+  assert.equal(rule.test("~~struck~~"), true);
+  assert.equal(rule.test("~~~struck~~"), false);
+  assert.equal(rule.test("~single~"), false);
+});
+
 test("drag and paste image filtering accepts supported image formats", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
@@ -520,7 +536,7 @@ test("desktop platform detection controls platform-specific window actions", () 
   assert.match(css, /\.titlebar[\s\S]*background: var\(--surface\)/);
   assert.doesNotMatch(css, /data-window-glass="enabled"] \.document-tabs,\n:root\[data-window-glass="enabled"] \.titlebar/);
   assert.match(css, /data-window-glass="enabled"] \.app-shell:not\(\.platform-macos\) \.titlebar[\s\S]*backdrop-filter: none/);
-  assert.match(app, /getCurrentWindow\(\)\.setTheme\(resolvedAppearance\)/);
+  assert.match(app, /getCurrentWindow\(\)\.setTheme\(appearance === "auto" \? null : appearance\)/);
   assert.match(app, /titlebar-document-proxy/);
   assert.match(app, /showActiveDocumentProxyMenu/);
   assert.match(app, /github-sync-progress/);
@@ -2019,7 +2035,7 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
   assert.match(capture, /import \{ normalizeThemeTokens \} from "\.\/settings\/theme-options"/);
   assert.match(capture, /const tokens = normalizeThemeTokens\(settings\.theme\?\.tokens\)/);
   assert.match(capture, /document\.documentElement\.style\.setProperty\(token, value\)/);
-  assert.match(capture, /getCurrentWindow\(\)\.setTheme\(resolvedAppearance\)/);
+  assert.match(capture, /getCurrentWindow\(\)\.setTheme\(appearance === "auto" \? null : appearance\)/);
   assert.match(capture, /requestAnimationFrame/);
   assert.match(capture, /getCurrentWindow\(\)[\s\S]*\.show\(\)/);
   assert.match(capture, /useEditor\(\{/);
@@ -2425,6 +2441,10 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(themeOptions, /export const themePresets: ThemePreset\[\]/);
   const presetBlock = themeOptions.match(/export const themePresets: ThemePreset\[\] = \[([\s\S]*?)\];/)?.[1] ?? "";
   assert.equal((presetBlock.match(/id: "[a-z-]+"/g) ?? []).length, 12);
+  // Every preset declares its light/dark base so applying it can switch the
+  // appearance mode to match the palette.
+  assert.equal((presetBlock.match(/base: "(?:light|dark)"/g) ?? []).length, 12);
+  assert.match(app, /setAppearance\(preset\.base\)/);
   assert.match(themeOptions, /for \(const preset of themePresets\)/);
   assert.match(themeBuilderPanel, /Theme Templates/);
   assert.match(themeBuilderPanel, /Theme Options/);

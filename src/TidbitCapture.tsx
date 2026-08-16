@@ -79,7 +79,9 @@ function applyCaptureAppearance(appearance: AppearanceMode) {
     target.classList.toggle("theme-dark", resolvedAppearance === "dark");
   }
 
-  void getCurrentWindow().setTheme(resolvedAppearance);
+  // "auto" releases the native window to follow the system; forcing the
+  // resolved value would freeze this webview's prefers-color-scheme.
+  void getCurrentWindow().setTheme(appearance === "auto" ? null : appearance);
 }
 
 function applyCaptureGlassSettings(settings: VaultSettings["appearance"] | undefined | null) {

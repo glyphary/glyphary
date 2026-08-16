@@ -1,6 +1,8 @@
+import { markInputRule } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 import { Markdown } from "@tiptap/markdown";
+import { Strike } from "@tiptap/extension-strike";
 import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
 import { TaskItem } from "@tiptap/extension-task-item";
@@ -137,6 +139,20 @@ export function createGlypharyEditorOptions({
     extensions: [
       StarterKit.configure({
         codeBlock: false,
+        strike: false,
+      }),
+      // GFM strikethrough needs no leading boundary, so parsed x~~text~~
+      // renders struck while the stock input rule (whitespace-prefixed only)
+      // never expanded it. Loosen typing to match the parser.
+      Strike.extend({
+        addInputRules() {
+          return [
+            markInputRule({
+              find: /(?<!~)(~~(?!\s+~~)([^~\n]+?)~~)$/,
+              type: this.type,
+            }),
+          ];
+        },
       }),
       TaskList,
       TaskItem.configure({

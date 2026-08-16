@@ -28,7 +28,7 @@ export function VaultTitlebarActions({
         onClick={onBack}
       >
         <svg aria-hidden="true" viewBox="0 0 24 24">
-          <path d="m14.5 6-6 6 6 6" />
+          <path d="m15 6-6 6 6 6" />
         </svg>
       </button>
       {showCreateNote ? (

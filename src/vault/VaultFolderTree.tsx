@@ -296,7 +296,7 @@ function previewText(content: string) {
     splitMetaHeader(content)
       .body
       .split(/\r?\n/)
-      .map((line) => line.trim())
+      .map((line) => line.trim().replace(/^#{1,6}\s+/, ""))
       .filter((line) => !firstImageReference(line))
       .find(Boolean)
       ?.slice(0, 90) || "Empty file"

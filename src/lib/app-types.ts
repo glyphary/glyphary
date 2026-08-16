@@ -417,5 +417,9 @@ export type ThemePreset = {
   id: string;
   name: string;
   description: string;
+  // The appearance mode this palette is designed for. Applying the preset
+  // switches the app to this mode so glass materials and native window
+  // chrome match the palette.
+  base: "light" | "dark";
   tokens: Record<string, string>;
 };

@@ -21,6 +21,7 @@
     "@tauri-apps/plugin-notification": "^2.3.3",
     "@tauri-apps/plugin-opener": "^2",
     "@tiptap/extension-code-block-lowlight": "^3.26.1",
+    "@tiptap/extension-strike": "^3.26.1",
     "@tiptap/extension-table": "^3.26.1",
     "@tiptap/extension-task-item": "^3.26.1",
     "@tiptap/extension-task-list": "^3.26.1",

@@ -307,6 +307,7 @@ const editableThemeTokens = new Set(
 export const themePresets: ThemePreset[] = [
   {
     id: "field-notes",
+    base: "light",
     name: "Field Notes",
     description: "Warm paper, green accents, quiet editorial contrast.",
     tokens: {
@@ -343,6 +344,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "ink-linen",
+    base: "light",
     name: "Ink & Linen",
     description: "Clean white surfaces with crisp ink and restrained blue.",
     tokens: {
@@ -379,6 +381,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "harbor",
+    base: "light",
     name: "Harbor",
     description: "Cool gray-blue workspace with a calm maritime accent.",
     tokens: {
@@ -415,6 +418,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "moss-glass",
+    base: "light",
     name: "Moss Glass",
     description: "Soft green-gray surfaces with low-noise reading tones.",
     tokens: {
@@ -451,6 +455,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "nordic-dawn",
+    base: "light",
     name: "Nordic Dawn",
     description: "Pale cool canvas, muted coral accent, clear document text.",
     tokens: {
@@ -487,6 +492,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "sepia-study",
+    base: "light",
     name: "Sepia Study",
     description: "Library paper, subdued umber accent, comfortable long-form writing.",
     tokens: {
@@ -523,6 +529,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "graphite",
+    base: "dark",
     name: "Graphite",
     description: "Neutral dark graphite with sharp text and restrained amber.",
     tokens: {
@@ -559,6 +566,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "night-owl",
+    base: "dark",
     name: "Night Owl",
     description: "Deep teal-black writing surface with luminous syntax colors.",
     tokens: {
@@ -595,6 +603,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "alpine-dark",
+    base: "dark",
     name: "Alpine Dark",
     description: "Cool dark mountain palette with green-blue emphasis.",
     tokens: {
@@ -631,6 +640,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "plum-ledger",
+    base: "dark",
     name: "Plum Ledger",
     description: "Charcoal base with plum accent and accountant-clean contrast.",
     tokens: {
@@ -667,6 +677,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "slate-rose",
+    base: "light",
     name: "Slate Rose",
     description: "Pale slate UI with a dried-rose accent and soft borders.",
     tokens: {
@@ -703,6 +714,7 @@ export const themePresets: ThemePreset[] = [
   },
   {
     id: "blueprint",
+    base: "dark",
     name: "Blueprint",
     description: "Technical blue-gray dark mode with diagram-clean contrast.",
     tokens: {
