@@ -758,6 +758,17 @@ test("block-widget boundaries expose an editable insertion point", () => {
   assert.match(blockBoundary, /TextSelection\.near\(resolvedPosition, bias\)/);
   assert.match(blockBoundary, /const blockBoundaryInsertNodeNames = new Set/);
   assert.match(blockBoundary, /"table"/);
+  // Container blocks trap the caret; adjacent callouts/columns/collapses need
+  // the + affordance to insert a paragraph between them.
+  assert.match(blockBoundary, /"callout"/);
+  assert.match(blockBoundary, /"columns"/);
+  assert.match(blockBoundary, /"collapse"/);
+  // A required target keeps the high-priority excalidraw atom out of
+  // ProseMirror createAndFill, which otherwise appends a phantom embed to
+  // every parsed document.
+  const excalidrawEditor = readFileSync("src/excalidraw/editor.tsx", "utf8");
+  assert.match(excalidrawEditor, /isRequired: true/);
+  assert.doesNotMatch(excalidrawEditor, /target: \{\s*default:/);
   assert.match(blockBoundary, /"htmlBlock"/);
   assert.match(blockBoundary, /"richLink"/);
   assert.match(blockBoundary, /"excalidrawEmbed"/);

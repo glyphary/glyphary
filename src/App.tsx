@@ -1998,6 +1998,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     if (groupEditor) {
       syncEditorState(groupEditor);
     }
+    if (groupEditor && tab.kind === "markdown") {
+      // Ready the caret inside the document; without an explicit focus the
+      // browser paints a stray caret at the container origin until the user
+      // clicks. Deferred so focus never races this turn's view hydration.
+      window.requestAnimationFrame(() => {
+        if (editorGroupsRef.current[groupId]?.activeTabId === tab.id) {
+          groupEditor.commands.focus("start");
+        }
+      });
+    }
     window.setTimeout(() => {
       hydratingEditor.current[groupId] = false;
     }, 0);

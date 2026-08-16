@@ -219,7 +219,12 @@ export function createExcalidrawEmbedExtension(options: ExcalidrawEmbedOptions) 
     addAttributes() {
       return {
         target: {
-          default: "",
+          // Required on purpose: priority 1100 places this node before
+          // Paragraph in the schema, so an auto-creatable atom became
+          // ProseMirror's createAndFill filler and every parsed document
+          // gained a phantom empty embed at the end. A required attribute
+          // keeps the node out of automatic filling.
+          isRequired: true,
           parseHTML: (element) => element.getAttribute("data-excalidraw-target") ?? "",
         },
       };

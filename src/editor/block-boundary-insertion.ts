@@ -95,6 +95,11 @@ const blockBoundaryInsertNodeNames = new Set([
   "richLink",
   "excalidrawEmbed",
   "gallery",
+  // Container blocks trap the caret inside their content: two adjacent
+  // callouts/columns/collapses have no natural caret position between them.
+  "callout",
+  "columns",
+  "collapse",
 ]);
 
 function supportsBlockBoundaryInsert(node: ProseMirrorNode) {
