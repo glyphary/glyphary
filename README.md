@@ -164,6 +164,19 @@ setup, and troubleshooting:
 
 [Open the Glyphary documentation](https://glyphary.github.io/)
 
+## Obsidian Sync
+
+If you are paying for Obsidian Sync (I am!) and find that you are almost never opening Obsidian anymore
+(I am so glad that Glyphary is working out for you!), you can still keep Obsidian sync going in the background:
+
+```
+npm install -g obsidian-headless
+ob login
+cd /path/to/vault
+ob sync-setup --vault "<your vault name>"
+ob sync --continuous
+```
+
 ## Real-App Smoke Test
 
 Run the desktop smoke test with `npm run e2e:tauri`. It uses `tauri-driver` to

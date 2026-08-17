@@ -25,6 +25,11 @@ import {
   escapeMarkdownUrl,
 } from "../.test-dist/paths.js";
 import {
+  parseOnboardingTipsEnabled,
+  parseSeenOnboardingTips,
+  serializeSeenOnboardingTips,
+} from "../.test-dist/onboarding.js";
+import {
   expandedFolderPathsForSelection,
   folderExpansionPaths,
   mergeExpandedFolderPaths,
@@ -444,6 +449,41 @@ test("dropped image names follow the pasted-image timestamp convention", () => {
   assert.deepEqual(imagePathsFromDrop(["/tmp/photo.png", "/tmp/notes.txt"]), [
     "/tmp/photo.png",
   ]);
+});
+
+test("onboarding tips persist seen ids and survive corrupted storage", () => {
+  assert.deepEqual(parseSeenOnboardingTips(null), []);
+  assert.deepEqual(parseSeenOnboardingTips("not json"), []);
+  assert.deepEqual(parseSeenOnboardingTips('{"a":1}'), []);
+  assert.deepEqual(parseSeenOnboardingTips('["a",2,"b"]'), ["a", "b"]);
+  assert.equal(serializeSeenOnboardingTips([], "slash-command-menu"), '["slash-command-menu"]');
+  assert.equal(serializeSeenOnboardingTips(["a"], "a"), '["a"]');
+  assert.equal(serializeSeenOnboardingTips(["a"], "b"), '["a","b"]');
+
+  // Hints are on unless explicitly disabled; unknown storage stays enabled.
+  assert.equal(parseOnboardingTipsEnabled(null), true);
+  assert.equal(parseOnboardingTipsEnabled("true"), true);
+  assert.equal(parseOnboardingTipsEnabled("garbage"), true);
+  assert.equal(parseOnboardingTipsEnabled("false"), false);
+
+  // The slash menu is the first consumer: opening the flat scope routes
+  // through the one-time tip, and dismissal resumes the intercepted open.
+  const app = readFileSync("src/App.tsx", "utf8");
+  assert.match(app, /function withOnboardingTip/);
+  assert.match(app, /readOnboardingTipsEnabled\(\) \|\| hasSeenOnboardingTip/);
+  assert.match(app, /withOnboardingTip\(\s*\{\s*id: "slash-command-menu"/);
+  assert.match(app, /withOnboardingTip\(\s*\{\s*id: "source-drawer"/);
+  assert.match(app, /markOnboardingTipSeen\(onboardingTip\.id\)/);
+
+  // Settings exposes a dedicated Hints section with a toggle and reset.
+  const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
+  assert.match(settingsDialog, /aria-label="Hint settings"/);
+  assert.match(settingsDialog, /setOnboardingTipsEnabled\(event\.currentTarget\.checked\)/);
+  assert.match(settingsDialog, /void resetOnboardingTips\(\)\.then/);
+  // Reset requires native confirmation and reports back inside the dialog,
+  // because the settings window has no status bar.
+  assert.match(app, /confirmDestructiveAction\(\s*"Reset first-use hints\?/);
+  assert.match(settingsDialog, /hintsResetDone/);
 });
 
 test("strike input rule expands ~~text~~ without requiring a leading boundary", () => {
@@ -2076,8 +2116,10 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
   assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-header/);
   assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-editor/);
   assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-actions button/);
-  assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-actions button\.primary \{[\s\S]*background: var\(--accent\)/);
-  assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-actions button\.primary \{[\s\S]*color: var\(--accent-text\)/);
+  assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-actions button\.primary,[\s\S]*background: var\(--accent\)/);
+  assert.match(css, /data-window-glass="enabled"\] \.tidbit-capture-actions button\.primary,[\s\S]*color: var\(--accent-text\)/);
+  // The onboarding tip primary button keeps accent styling under glass too.
+  assert.match(css, /data-window-glass="enabled"\] \.onboarding-tip-card \.primary-action/);
   assert.match(css, /\.tidbit-capture\.platform-macos \.tidbit-capture-header/);
   assert.doesNotMatch(tidbitGlassRootRule, /backdrop-filter: none/);
   assert.match(css, /\.tidbit-capture-editor \.tiptap/);

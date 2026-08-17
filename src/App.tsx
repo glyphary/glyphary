@@ -248,6 +248,14 @@ import { CommandPaletteDialog } from "./command-palette/CommandPaletteDialog";
 import { AnchoredPopover } from "./ui/AnchoredPopover";
 import { ModalDialog } from "./ui/ModalDialog";
 import {
+  hasSeenOnboardingTip,
+  markOnboardingTipSeen,
+  readOnboardingTipsEnabled,
+  resetSeenOnboardingTips,
+  writeOnboardingTipsEnabled,
+  type OnboardingTip,
+} from "./lib/onboarding";
+import {
   activeFileWithRelativePath,
   rebasePathAfterDirectoryRename,
   relativePathFileName,
@@ -700,6 +708,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   // The "/" typed to open the slash menu stays in the document on dismissal;
   // running a command deletes it. `from` is the caret right after the slash.
   const slashTriggerRef = useRef<{ editor: Editor; from: number } | null>(null);
+  // On-the-fly onboarding: a one-time tip shown the first time a feature is
+  // used. Dismissing the tip marks it seen and resumes the intercepted action.
+  const [onboardingTip, setOnboardingTip] = useState<OnboardingTip | null>(null);
+  const onboardingTipContinueRef = useRef<() => void>(() => {});
+  const [onboardingTipsEnabled, setOnboardingTipsEnabledState] = useState(
+    readOnboardingTipsEnabled,
+  );
   const [commandPaletteScope, setCommandPaletteScope] =
     useState<CommandPaletteScope>("root");
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
@@ -5056,12 +5071,80 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
   };
 
+  // Run `proceed` immediately, or show a one-time onboarding tip first and
+  // run it on dismissal. Reusable for any feature that deserves a first-use
+  // explanation: withOnboardingTip({id, title, body}, () => doTheThing()).
+  function withOnboardingTip(tip: OnboardingTip, proceed: () => void) {
+    // Read enablement fresh from localStorage so the settings window's toggle
+    // applies to this window without any cross-window sync.
+    if (!readOnboardingTipsEnabled() || hasSeenOnboardingTip(tip.id)) {
+      proceed();
+      return;
+    }
+
+    onboardingTipContinueRef.current = proceed;
+    setOnboardingTip(tip);
+  }
+
+  function dismissOnboardingTip() {
+    if (onboardingTip) {
+      markOnboardingTipSeen(onboardingTip.id);
+    }
+
+    const proceed = onboardingTipContinueRef.current;
+
+    // Clear the continuation before running it so a re-entrant
+    // withOnboardingTip triggered by `proceed` can't replay a stale action.
+    onboardingTipContinueRef.current = () => {};
+    setOnboardingTip(null);
+    proceed();
+  }
+
+  function setOnboardingTipsEnabled(enabled: boolean) {
+    writeOnboardingTipsEnabled(enabled);
+    setOnboardingTipsEnabledState(enabled);
+  }
+
+  async function resetOnboardingTips() {
+    const confirmed = await confirmDestructiveAction(
+      "Reset first-use hints? Every hint will appear again the next time its feature is used.",
+      { okLabel: "Reset", title: "Reset Hints" },
+    );
+
+    if (!confirmed) {
+      return false;
+    }
+
+    resetSeenOnboardingTips();
+    setStatus("First-use hints reset");
+    return true;
+  }
+
   function openCommandPaletteRoot(scope: CommandPaletteScope = "root") {
     if (!hasActiveDocumentTab()) {
       setStatus("Open or create a note before using the command palette");
       return;
     }
 
+    // The "flat" scope is only ever reached from the "/" trigger, so this is
+    // where its first-use tip hooks in rather than at the keystroke handler.
+    if (scope === "flat") {
+      withOnboardingTip(
+        {
+          id: "slash-command-menu",
+          title: "Slash commands",
+          body:
+            'Typing "/" at the start of a line or after a space opens a quick menu of insert and AI commands. Type to filter, Enter to run, Escape to keep the plain slash. You can turn this off or back on in Settings → Editor.',
+        },
+        () => openCommandPaletteNow(scope),
+      );
+      return;
+    }
+
+    openCommandPaletteNow(scope);
+  }
+
+  function openCommandPaletteNow(scope: CommandPaletteScope) {
     if (scope === "flat") {
       const targetEditor = activeEditorRef.current;
       const coords = targetEditor
@@ -9345,12 +9428,14 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       newTabFileDraft={newTabFileDraft}
       normalizedCanvasDraft={normalizedCanvasDraft}
       normalizedVaultAppearanceDraft={normalizedVaultAppearanceDraft}
+      onboardingTipsEnabled={onboardingTipsEnabled}
       pluginCatalog={pluginCatalog}
       pluginDraft={pluginDraft}
       refreshAiModels={refreshAiModels}
       refreshCssSnippets={refreshCssSnippets}
       refreshPlugins={refreshPlugins}
       requestTidbitShortcutAccessibilityPermission={requestTidbitShortcutAccessibilityPermission}
+      resetOnboardingTips={resetOnboardingTips}
       resetThemeDraft={resetThemeDraft}
       revertSettingsDraft={revertSettingsDraft}
       saveVaultSettings={saveVaultSettings}
@@ -9363,6 +9448,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       setFileDisplayDraft={setFileDisplayDraft}
       setFrontmatterPillDraft={setFrontmatterPillDraft}
       setNewTabFileDraft={setNewTabFileDraft}
+      setOnboardingTipsEnabled={setOnboardingTipsEnabled}
       setPluginDraft={setPluginDraft}
       setSettingsDraft={setSettingsDraft}
       setSettingsTab={setSettingsTab}
@@ -10315,7 +10401,24 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                   : "Open source drawer"
               }
               title={drawerOpen && drawerItem === "source" ? "Close Source" : "Open Source"}
-              onClick={() => toggleDrawerItem("source")}
+              onClick={() => {
+                // Closing an already-open drawer is never a first use; only
+                // the opening click routes through the one-time tip.
+                if (drawerOpen && drawerItem === "source") {
+                  toggleDrawerItem("source");
+                  return;
+                }
+
+                withOnboardingTip(
+                  {
+                    id: "source-drawer",
+                    title: "Source view",
+                    body:
+                      "The top pane is this note's raw Markdown: edit it directly and press Apply to update the document. The bottom pane is a live export of exactly what will be saved, with word and character counts. Hints can be turned off in Settings.",
+                  },
+                  () => toggleDrawerItem("source"),
+                );
+              }}
             >
               <svg aria-hidden="true" viewBox="0 0 24 24">
                 <path d="m8.5 8-4 4 4 4" />
@@ -10980,6 +11083,21 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
             </div>
           </section>
         </div>
+      ) : null}
+      {onboardingTip ? (
+        <ModalDialog
+          className="onboarding-tip-screen"
+          aria-label={onboardingTip.title}
+          onRequestClose={dismissOnboardingTip}
+        >
+          <div className="onboarding-tip-card">
+            <h2>{onboardingTip.title}</h2>
+            <p>{onboardingTip.body}</p>
+            <button className="primary-action" type="button" onClick={dismissOnboardingTip}>
+              Got it
+            </button>
+          </div>
+        </ModalDialog>
       ) : null}
       <CommandPaletteDialog
         anchor={commandPaletteScope === "flat" ? commandPaletteAnchor : null}

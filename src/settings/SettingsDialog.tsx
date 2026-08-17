@@ -1,4 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { useState } from "react";
 import type {
   CSSProperties,
   Dispatch,
@@ -74,12 +75,14 @@ type SettingsDialogProps = {
   newTabFileDraft: string;
   normalizedCanvasDraft: CanvasSettings;
   normalizedVaultAppearanceDraft: VaultAppearanceSettings;
+  onboardingTipsEnabled: boolean;
   pluginCatalog: PluginCatalog;
   pluginDraft: PluginSettings;
   refreshAiModels: () => Promise<void>;
   refreshCssSnippets: (vaultRoot: string, settings: CssSnippetSettings) => Promise<void>;
   refreshPlugins: (vaultRoot: string, settings: PluginSettings) => Promise<void>;
   requestTidbitShortcutAccessibilityPermission: () => boolean | Promise<boolean>;
+  resetOnboardingTips: () => Promise<boolean>;
   resetThemeDraft: () => void;
   revertSettingsDraft: () => void;
   saveVaultSettings: () => void | Promise<void>;
@@ -92,6 +95,7 @@ type SettingsDialogProps = {
   setFileDisplayDraft: Dispatch<SetStateAction<FileDisplaySettings>>;
   setFrontmatterPillDraft: Dispatch<SetStateAction<FrontmatterPillSettings>>;
   setNewTabFileDraft: Dispatch<SetStateAction<string>>;
+  setOnboardingTipsEnabled: (enabled: boolean) => void;
   setPluginDraft: Dispatch<SetStateAction<PluginSettings>>;
   setSettingsDraft: Dispatch<SetStateAction<string>>;
   setSettingsTab: Dispatch<SetStateAction<SettingsTab>>;
@@ -226,12 +230,14 @@ export function SettingsDialog(props: SettingsDialogProps) {
     newTabFileDraft,
     normalizedCanvasDraft,
     normalizedVaultAppearanceDraft,
+    onboardingTipsEnabled,
     pluginCatalog,
     pluginDraft,
     refreshAiModels,
     refreshCssSnippets,
     refreshPlugins,
     requestTidbitShortcutAccessibilityPermission,
+    resetOnboardingTips,
     resetThemeDraft,
     revertSettingsDraft,
     saveVaultSettings,
@@ -244,6 +250,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     setFileDisplayDraft,
     setFrontmatterPillDraft,
     setNewTabFileDraft,
+    setOnboardingTipsEnabled,
     setPluginDraft,
     setSettingsDraft,
     setSettingsTab,
@@ -271,6 +278,10 @@ export function SettingsDialog(props: SettingsDialogProps) {
     updateThemeDraftToken,
     vaultRoot,
   } = props;
+
+  // In-dialog confirmation note for Reset Hints; the settings window has no
+  // status bar, so feedback must render next to the control itself.
+  const [hintsResetDone, setHintsResetDone] = useState(false);
 
   if (!settingsOpen) {
     return null;
@@ -705,6 +716,43 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     />
                     <span>Autosave current page once per minute</span>
                   </label>
+                </section>
+                <section className="settings-section" aria-label="Hint settings">
+                  <div className="settings-section-header">
+                    <div>
+                      <h3>Hints</h3>
+                      <p>
+                        First-use popups that explain features, like the "/" command
+                        menu. These apply immediately across all vaults.
+                      </p>
+                    </div>
+                  </div>
+                  <label className="settings-check-control">
+                    <input
+                      checked={onboardingTipsEnabled}
+                      type="checkbox"
+                      onChange={(event) => setOnboardingTipsEnabled(event.currentTarget.checked)}
+                    />
+                    <span>Show first-use hints</span>
+                  </label>
+                  <button
+                    className="inline-action"
+                    type="button"
+                    onClick={() => {
+                      void resetOnboardingTips().then((didReset) => {
+                        if (didReset) {
+                          setHintsResetDone(true);
+                        }
+                      });
+                    }}
+                  >
+                    Reset Hints
+                  </button>
+                  {hintsResetDone ? (
+                    <p className="settings-note">
+                      Hints reset. Each one will show again on its next use.
+                    </p>
+                  ) : null}
                 </section>
               </div>
             ) : null}

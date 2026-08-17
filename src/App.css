@@ -445,7 +445,8 @@ body {
   background: var(--glass-muted-overlay);
 }
 
-:root[data-window-glass="enabled"] .tidbit-capture-actions button.primary {
+:root[data-window-glass="enabled"] .tidbit-capture-actions button.primary,
+:root[data-window-glass="enabled"] .onboarding-tip-card .primary-action {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-text);
@@ -5950,6 +5951,48 @@ body.workspace-resizing * {
   background: color-mix(in srgb, var(--app-bg) 58%, transparent);
   padding: 12vh 20px 20px;
   animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
+}
+
+/* One-time onboarding tips: quiet centered card, dismiss resumes the action. */
+.onboarding-tip-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  background: color-mix(in srgb, var(--app-bg) 58%, transparent);
+  padding: 18vh 20px 20px;
+  animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
+}
+
+.onboarding-tip-card {
+  display: grid;
+  gap: 10px;
+  width: min(420px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 22px 60px var(--shadow-strong);
+  padding: 18px;
+  animation: glyphary-pop-in var(--motion-duration-base) var(--motion-ease);
+}
+
+.onboarding-tip-card h2 {
+  margin: 0;
+  color: var(--heading);
+  font-size: 0.95rem;
+}
+
+.onboarding-tip-card p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.onboarding-tip-card button {
+  justify-self: end;
 }
 
 /* Caret-anchored slash menu: no dimmed backdrop, card placed inline. */
