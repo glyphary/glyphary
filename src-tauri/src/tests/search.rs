@@ -23,6 +23,7 @@ fn searches_vault_file_names() {
         false,
         None,
         None,
+        None,
     )
     .expect("vault search should succeed");
 
@@ -46,6 +47,7 @@ fn searches_vault_file_content() {
         root.to_string_lossy().into_owned(),
         "needle".into(),
         true,
+        None,
         None,
         None,
     )
@@ -77,6 +79,7 @@ fn searches_vault_file_content_with_internal_regex() {
         true,
         None,
         None,
+        None,
     )
     .expect("vault search should succeed");
 
@@ -89,6 +92,64 @@ fn searches_vault_file_content_with_internal_regex() {
                 .as_deref()
                 .is_some_and(|line| line.contains("NEEDLE-123"))
     }));
+
+    fs::remove_dir_all(root).expect("test root should be removed");
+}
+
+#[test]
+fn split_terms_search_requires_every_word_in_the_same_file() {
+    let root = test_root();
+    fs::write(
+        root.join("both.md"),
+        "# Setup\nnetbird runs fine\nsee the github repo\n",
+    )
+    .expect("file should be created");
+    fs::write(root.join("one.md"), "# Other\nonly netbird here\n")
+        .expect("file should be created");
+
+    let results = search_vault(
+        root.to_string_lossy().into_owned(),
+        "netbird github".into(),
+        true,
+        None,
+        None,
+        Some(true),
+    )
+    .expect("vault search should succeed");
+    let paths = results
+        .iter()
+        .map(|result| result.relative_path.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(paths.contains(&"both.md"));
+    assert!(!paths.contains(&"one.md"));
+
+    fs::remove_dir_all(root).expect("test root should be removed");
+}
+
+#[test]
+fn search_results_are_sorted_newest_first() {
+    let root = test_root();
+    fs::write(root.join("older.md"), "needle\n").expect("file should be created");
+    // Coarse filesystem mtime resolution needs a real gap between writes.
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    fs::write(root.join("newer.md"), "needle\n").expect("file should be created");
+
+    let results = search_vault(
+        root.to_string_lossy().into_owned(),
+        "needle".into(),
+        true,
+        None,
+        None,
+        None,
+    )
+    .expect("vault search should succeed");
+    let paths = results
+        .iter()
+        .map(|result| result.relative_path.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(paths, vec!["newer.md", "older.md"]);
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }
@@ -116,6 +177,7 @@ fn filtered_search_ignores_dot_paths_and_non_markdown_files() {
         true,
         Some(true),
         Some(true),
+        None,
     )
     .expect("filtered vault search should succeed");
     let paths = results

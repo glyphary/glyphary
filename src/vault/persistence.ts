@@ -127,6 +127,7 @@ export function searchVaultFiles(
     includeContent?: boolean;
     markdownOnly?: boolean;
     excludeDotPaths?: boolean;
+    splitTerms?: boolean;
   } = {},
 ) {
   return invoke<SearchResult[]>("search_vault", {

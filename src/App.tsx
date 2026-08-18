@@ -9025,9 +9025,12 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     try {
       setSearching(true);
+      // Drawer queries are word filters: every whitespace-separated term must
+      // match, unlike task/AI searches whose regexes may contain spaces.
       const results = await searchVaultFiles(vaultRoot, query, {
         includeContent: searchMode === "content",
         markdownOnly: true,
+        splitTerms: true,
       });
 
       setSearchResults(results);
