@@ -18,6 +18,17 @@ import {
   themeTokenGroups,
 } from "./theme-options";
 
+// One row per VaultThemeOptions flag; adding an option means adding an entry
+// here (plus its CSS class) instead of another hand-rolled checkbox block.
+const themeOptionToggles: Array<{ key: keyof VaultThemeOptions; label: string }> = [
+  { key: "colorfulHeadings", label: "Use colorful heading levels" },
+  { key: "headingUnderlines", label: "Add heading underlines" },
+  { key: "headingAnchors", label: "Show heading anchor markers" },
+  { key: "richCallouts", label: "Use rich callout styling and icons" },
+  { key: "plainEditorFrame", label: "Hide the accent border around the active note" },
+  { key: "drawerShadow", label: "Cast a shadow from the file drawer" },
+];
+
 type ThemeBuilderPanelProps = {
   selectedThemePresetIdDraft: string | null;
   themeCalloutDraft: VaultThemeCalloutSettings;
@@ -101,70 +112,24 @@ export function ThemeBuilderPanel({
             <p>Apply optional editor treatments on top of the selected theme.</p>
           </div>
         </div>
-        <label className="settings-check-control">
-          <input
-            checked={themeOptionsDraft.colorfulHeadings}
-            disabled={!vaultRoot}
-            type="checkbox"
-            onChange={(event) => {
-              const colorfulHeadings = event.currentTarget.checked;
+        {themeOptionToggles.map(({ key, label }) => (
+          <label className="settings-check-control" key={key}>
+            <input
+              checked={themeOptionsDraft[key]}
+              disabled={!vaultRoot}
+              type="checkbox"
+              onChange={(event) => {
+                const checked = event.currentTarget.checked;
 
-              onSetThemeOptionsDraft((options) => ({
-                ...options,
-                colorfulHeadings,
-              }));
-            }}
-          />
-          <span>Use colorful heading levels</span>
-        </label>
-        <label className="settings-check-control">
-          <input
-            checked={themeOptionsDraft.headingUnderlines}
-            disabled={!vaultRoot}
-            type="checkbox"
-            onChange={(event) => {
-              const headingUnderlines = event.currentTarget.checked;
-
-              onSetThemeOptionsDraft((options) => ({
-                ...options,
-                headingUnderlines,
-              }));
-            }}
-          />
-          <span>Add heading underlines</span>
-        </label>
-        <label className="settings-check-control">
-          <input
-            checked={themeOptionsDraft.headingAnchors}
-            disabled={!vaultRoot}
-            type="checkbox"
-            onChange={(event) => {
-              const headingAnchors = event.currentTarget.checked;
-
-              onSetThemeOptionsDraft((options) => ({
-                ...options,
-                headingAnchors,
-              }));
-            }}
-          />
-          <span>Show heading anchor markers</span>
-        </label>
-        <label className="settings-check-control">
-          <input
-            checked={themeOptionsDraft.richCallouts}
-            disabled={!vaultRoot}
-            type="checkbox"
-            onChange={(event) => {
-              const richCallouts = event.currentTarget.checked;
-
-              onSetThemeOptionsDraft((options) => ({
-                ...options,
-                richCallouts,
-              }));
-            }}
-          />
-          <span>Use rich callout styling and icons</span>
-        </label>
+                onSetThemeOptionsDraft((options) => ({
+                  ...options,
+                  [key]: checked,
+                }));
+              }}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
       </section>
       <section className="settings-section" aria-label="Callout rendering">
         <div className="settings-section-header">

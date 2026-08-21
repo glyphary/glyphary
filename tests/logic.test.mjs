@@ -486,6 +486,35 @@ test("onboarding tips persist seen ids and survive corrupted storage", () => {
   assert.match(settingsDialog, /hintsResetDone/);
 });
 
+test("focus mode hides workspace chrome via palette and native menu", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+  const nativeMenu = readFileSync("src-tauri/src/native_menu.rs", "utf8");
+
+  assert.match(app, /id: "toggle-focus-mode"/);
+  assert.match(app, /commandId === "toggle-focus-mode"/);
+  assert.match(app, /focusMode \? "focus-mode" : ""/);
+  // CSS-only hiding preserves drawer state across enter/exit.
+  assert.match(css, /\.workspace\.focus-mode \{\s*grid-template-columns: 0 0 minmax\(0, 1fr\) 0 0/);
+  assert.match(css, /\.workspace\.focus-mode \.vault-pane/);
+  assert.match(css, /\.workspace\.focus-mode \.document-tabs,\s*\.workspace\.focus-mode \.toolbar,\s*\.workspace\.focus-mode \.frontmatter-header \{\s*display: none/);
+  // Titlebar chrome hides by exclusion so newly added buttons default to
+  // hidden in focus mode instead of silently leaking in.
+  assert.match(css, /\.app-shell\.focus-mode \.app-actions > \*:not\(\[aria-label="Save"\]\):not\(\.titlebar-command-palette\)/);
+  assert.match(css, /\.app-shell\.focus-mode \.titlebar-vault-actions,\s*\.app-shell\.focus-mode \.titlebar-native-actions/);
+  assert.match(app, /focusMode \? "focus-mode" : null/);
+  assert.match(nativeMenu, /"toggle_focus_mode" => Some\("toggle-focus-mode"\)/);
+  assert.match(nativeMenu, /focus_mode: bool/);
+});
+
+test("highlight mark expands ==text== while typing", () => {
+  const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
+  const markdownExtensions = readFileSync("src/editor/markdown-extensions.tsx", "utf8");
+
+  assert.match(editorOptions, /name: "highlight",[\s\S]{0,240}?inputPattern: /);
+  assert.match(markdownExtensions, /markInputRule\(\{\s*find: inputPattern/);
+});
+
 test("strike input rule expands ~~text~~ without requiring a leading boundary", () => {
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
 
@@ -727,6 +756,34 @@ test("markdown headings produce a table of contents and ignore fenced code", () 
       { id: "1:C#:1", level: 1, title: "C#", occurrence: 1 },
     ],
   );
+});
+
+test("everyday languages are registered for code block highlighting", () => {
+  const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
+  const app = readFileSync("src/App.tsx", "utf8");
+  const languageTable =
+    editorOptions.match(/export const codeBlockLanguages[\s\S]*?\n\];/)?.[0] ?? "";
+
+  for (const language of [
+    "go", "c", "cpp", "java", "csharp", "swift", "kotlin", "php", "ruby",
+    "yaml", "toml", "ini", "dockerfile", "diff", "makefile", "cmake", "lua",
+    "perl", "r", "scala", "haskell", "objectivec", "powershell", "graphql",
+    "latex", "nginx", "protobuf", "dart", "elixir",
+  ]) {
+    assert.match(languageTable, new RegExp(`value: "${language}", grammar: `));
+  }
+
+  for (const alias of [
+    "golang", "yml", "c\\+\\+", "cs", "kt", "rb", "patch", "objc", "ps1",
+    "gql", "tex", "proto", "docker", "make",
+  ]) {
+    assert.match(languageTable, new RegExp(`"${alias}"`));
+  }
+
+  // The registration table also feeds the picker datalist, so the suggestions
+  // can never drift from what actually highlights.
+  assert.match(editorOptions, /for \(const language of codeBlockLanguages\)/);
+  assert.match(app, /\.\.\.codeBlockLanguages/);
 });
 
 test("toc fenced code blocks have an inline renderer while staying markdown code blocks", () => {
@@ -2493,11 +2550,40 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(appTypes, /export type ThemePreset/);
   assert.match(themeOptions, /export const themePresets: ThemePreset\[\]/);
   const presetBlock = themeOptions.match(/export const themePresets: ThemePreset\[\] = \[([\s\S]*?)\];/)?.[1] ?? "";
-  assert.equal((presetBlock.match(/id: "[a-z-]+"/g) ?? []).length, 12);
+  assert.equal((presetBlock.match(/id: "[a-z-]+"/g) ?? []).length, 14);
   // Every preset declares its light/dark base so applying it can switch the
   // appearance mode to match the palette.
-  assert.equal((presetBlock.match(/base: "(?:light|dark)"/g) ?? []).length, 12);
+  assert.equal((presetBlock.match(/base: "(?:light|dark)"/g) ?? []).length, 14);
   assert.match(app, /setAppearance\(preset\.base\)/);
+  // Cupertino ships as a light/dark pair sharing one accent and typography.
+  assert.match(themeOptions, /id: "cupertino"/);
+  assert.match(themeOptions, /id: "cupertino-dark"/);
+  // Shadow, highlight, and list-marker tokens are theme-editable, so presets
+  // can actually restyle them instead of normalizeThemeTokens stripping them.
+  assert.match(themeOptions, /token: "--glyphary-shadow"/);
+  assert.match(themeOptions, /token: "--glyphary-shadow-strong"/);
+  assert.match(themeOptions, /token: "--glyphary-mark-bg"/);
+  assert.match(themeOptions, /token: "--glyphary-list-marker"/);
+  assert.match(css, /\.editor-surface mark \{[^}]*background: var\(--glyphary-mark-bg\)/);
+  assert.match(css, /\.editor-surface li::marker \{[^}]*color: var\(--glyphary-list-marker\)/);
+  // Every theme-builder token must be accepted by the backend allowlist, or
+  // saving a theme that uses it fails ("Unsupported theme token").
+  const rustDefaults = readFileSync("src-tauri/src/defaults.rs", "utf8");
+  const allowlistBlock =
+    rustDefaults.match(/THEME_TOKEN_ALLOWLIST: &\[&str\] = &\[([\s\S]*?)\];/)?.[1] ?? "";
+  const allowedTokens = new Set(allowlistBlock.match(/"(--[a-z-]+)"/g)?.map((token) => token.slice(1, -1)) ?? []);
+  const editableTokens = themeOptions.match(/token: "(--[a-z-]+)"/g)?.map((token) => token.slice(8, -1)) ?? [];
+  assert.ok(editableTokens.length > 40);
+  for (const token of editableTokens) {
+    assert.ok(allowedTokens.has(token), `backend allowlist missing ${token}`);
+  }
+  // Save failures render inside the dialog; the settings window has no status bar.
+  assert.match(app, /setSettingsSaveError\(message\)/);
+  assert.match(settingsDialog, /settings-save-error/);
+  // Successful saves dismiss the dialog directly — the closeSettings revert
+  // guard reads stale drafts in the same tick and would undo the saved theme.
+  assert.match(app, /setStatus\("Saved vault settings"\);[\s\S]{0,400}?dismissSettingsSurface\(\);/);
+  assert.match(app, /function dismissSettingsSurface/);
   assert.match(themeOptions, /for \(const preset of themePresets\)/);
   assert.match(themeBuilderPanel, /Theme Templates/);
   assert.match(themeBuilderPanel, /Theme Options/);
@@ -2534,10 +2620,22 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.doesNotMatch(app, /dataset\.glypharyHeadingUnderlines/);
   assert.doesNotMatch(app, /dataset\.glypharyHeadingAnchors/);
   assert.doesNotMatch(app, /dataset\.glypharyRichCallouts/);
-  assert.match(themeBuilderPanel, /const colorfulHeadings = event\.currentTarget\.checked/);
-  assert.match(themeBuilderPanel, /const headingUnderlines = event\.currentTarget\.checked/);
-  assert.match(themeBuilderPanel, /const headingAnchors = event\.currentTarget\.checked/);
-  assert.match(themeBuilderPanel, /const richCallouts = event\.currentTarget\.checked/);
+  // Option checkboxes render from one table, so every flag gets a toggle.
+  for (const optionKey of [
+    "colorfulHeadings", "headingUnderlines", "headingAnchors", "richCallouts",
+    "plainEditorFrame", "drawerShadow",
+  ]) {
+    assert.match(themeBuilderPanel, new RegExp(`key: "${optionKey}", label: "`));
+  }
+  assert.match(themeBuilderPanel, /themeOptionToggles\.map/);
+  assert.match(app, /theme-plain-editor-frame/);
+  assert.match(app, /theme-drawer-shadow/);
+  assert.match(css, /\.app-shell\.theme-plain-editor-frame \.editor-pane-shell\.active-group/);
+  assert.match(css, /\.app-shell\.theme-drawer-shadow \.vault-pane/);
+  assert.match(modelsBackend, /plain_editor_frame/);
+  assert.match(modelsBackend, /drawer_shadow/);
+  // The active file row is the accent pill from the reference design.
+  assert.match(css, /\.folder-tree-file\.active \{\s*background: var\(--accent\)/);
   assert.match(themeBuilderPanel, /Use colorful heading levels/);
   assert.match(themeBuilderPanel, /Add heading underlines/);
   assert.match(themeBuilderPanel, /Show heading anchor markers/);

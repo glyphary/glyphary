@@ -233,7 +233,7 @@ import {
   restoredExcalidrawScene,
   type ExcalidrawDialogState,
 } from "./excalidraw/editor";
-import { createGlypharyEditorOptions } from "./editor/editor-options";
+import { codeBlockLanguages, createGlypharyEditorOptions } from "./editor/editor-options";
 import {
   commandPalettePlaceholder,
   commandPaletteScopeTitle,
@@ -371,18 +371,14 @@ import {
 } from "./settings/theme-options";
 import "./App.css";
 
+// Derived from the editor's registration table so the picker can never
+// suggest a language that does not actually highlight. An unlabeled code
+// block stores no language, so plaintext maps to the empty value.
 const codeLanguages = [
   { label: "Plain text", value: "" },
-  { label: "Python", value: "python" },
-  { label: "Shell", value: "sh" },
-  { label: "JavaScript", value: "javascript" },
-  { label: "TypeScript", value: "typescript" },
-  { label: "JSON", value: "json" },
-  { label: "Rust", value: "rust" },
-  { label: "SQL", value: "sql" },
-  { label: "HTML", value: "html" },
-  { label: "CSS", value: "css" },
-  { label: "Markdown", value: "markdown" },
+  ...codeBlockLanguages
+    .filter((language) => language.value !== "plaintext")
+    .map(({ label, value }) => ({ label, value })),
 ];
 
 const currentAppVersion = packageJson.version;
@@ -651,6 +647,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     vaultAppearanceDraft,
     vaultSettings,
   } = useSettingsState();
+  // The settings window has no status bar, so save failures must surface
+  // inside the dialog instead of the invisible setStatus channel.
+  const [settingsSaveError, setSettingsSaveError] = useState<string | null>(null);
   const [aiSubmitting, setAiSubmitting] = useState(false);
   const [aiSubmittingTitle, setAiSubmittingTitle] = useState("");
   const [currentDir, setCurrentDir] = useState("");
@@ -660,6 +659,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     useState<Record<EditorGroupId, EditorGroupState>>(createEditorGroups);
   const [activeGroupId, setActiveGroupId] = useState<EditorGroupId>("primary");
   const [splitOpen, setSplitOpen] = useState(false);
+  // Focus mode hides workspace chrome via CSS only, so drawer open/closed
+  // state survives entering and leaving it untouched.
+  const [focusMode, setFocusMode] = useState(false);
   const [editorDropPreview, setEditorDropPreview] = useState<EditorDropPreview | null>(null);
   const [activeVaultFileDragPath, setActiveVaultFileDragPath] = useState<string | null>(null);
   const [editorDropAnimation, setEditorDropAnimation] =
@@ -1610,6 +1612,17 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setSettingsOpen(true);
   }
 
+  function dismissSettingsSurface() {
+    if (settingsWindowMode && isTauri()) {
+      void getCurrentWindow().close();
+      return;
+    }
+
+    setSettingsDragging(null);
+    setSettingsSaveError(null);
+    setSettingsOpen(false);
+  }
+
   function closeSettings() {
     // Closing without saving must not keep previewed settings applied. The
     // revert only uses synchronous state and localStorage writes, so closing
@@ -1618,13 +1631,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       revertSettingsDraft();
     }
 
-    if (settingsWindowMode && isTauri()) {
-      void getCurrentWindow().close();
-      return;
-    }
-
-    setSettingsDragging(null);
-    setSettingsOpen(false);
+    dismissSettingsSurface();
   }
 
   function showMainWindowAfterRestore() {
@@ -2715,6 +2722,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         vaultDrawerOpen,
         inspectorDrawerOpen: drawerOpen,
         splitOpen,
+        focusMode,
         recentFiles: recentFiles.slice(0, 10).map((file) => ({
           name: file.name,
           relativePath: file.relativePath,
@@ -2732,6 +2740,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     documentDisplayMode,
     drawerOpen,
     dirty,
+    focusMode,
     recentFiles,
     settingsWindowMode,
     splitOpen,
@@ -4551,6 +4560,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       return;
     }
 
+    setSettingsSaveError(null);
     try {
       const settings = await writeVaultSettings(vaultRoot, {
           assetDirectory: settingsDraft,
@@ -4662,8 +4672,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       appearanceBeforeThemePreviewRef.current = null;
       window.localStorage.removeItem(themePreviewStorageKey);
       setStatus("Saved vault settings");
+      // Close WITHOUT the closeSettings revert guard: draft state is still
+      // stale in this tick, so the guard would misread the saved changes as
+      // unsaved and revert the theme that was just persisted.
+      dismissSettingsSurface();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+
+      setSettingsSaveError(message);
+      setStatus(message);
     }
   }
 
@@ -8581,6 +8598,12 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       description: "Create a fast note from the vault tidbit path pattern",
       run: createTidbit,
     },
+    {
+      id: "toggle-focus-mode",
+      title: focusMode ? "Exit Focus Mode" : "Enter Focus Mode",
+      description: "Show only the note editing area",
+      run: toggleFocusMode,
+    },
     ...(aiCommandPaletteCommands.length > 0
       ? [
           {
@@ -8703,6 +8726,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     if (commandId === "toggle-split-editor") {
       toggleSplitEditor();
+      return;
+    }
+
+    if (commandId === "toggle-focus-mode") {
+      toggleFocusMode();
       return;
     }
 
@@ -9211,6 +9239,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     );
   }
 
+  function toggleFocusMode() {
+    const next = !focusMode;
+
+    setFocusMode(next);
+    setStatus(next ? "Focus mode" : "Focus mode off");
+  }
+
   function toggleSplitEditor() {
     if (splitOpen) {
       const secondaryDirty = splitHasDirtyTabs(editorGroupsRef.current.secondary.tabs);
@@ -9387,6 +9422,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     themeOptionsDraft.headingUnderlines ? "theme-heading-underlines" : null,
     themeOptionsDraft.headingAnchors ? "theme-heading-anchors" : null,
     themeOptionsDraft.richCallouts ? "theme-rich-callouts" : null,
+    themeOptionsDraft.plainEditorFrame ? "theme-plain-editor-frame" : null,
+    themeOptionsDraft.drawerShadow ? "theme-drawer-shadow" : null,
+    // Focus mode also trims titlebar chrome, which lives outside .workspace.
+    focusMode ? "focus-mode" : null,
     `callout-style-${themeCalloutDraft.style}`,
     `section-corners-${normalizedVaultAppearanceDraft.sectionCorners}`,
     `workspace-margin-${normalizedVaultAppearanceDraft.workspaceMargin}`,
@@ -9465,6 +9504,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       settingsDragging={settingsDragging}
       settingsHaveChanges={settingsHaveChanges}
       settingsOpen={settingsWindowMode || settingsOpen}
+      settingsSaveError={settingsSaveError}
       settingsWindowSurface={settingsWindowMode}
       settingsTab={settingsTab}
       shortcutFromKeyboardEvent={shortcutFromKeyboardEvent}
@@ -9742,6 +9782,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           "workspace with-vault",
           vaultDrawerOpen ? "vault-drawer-open" : "vault-drawer-closed",
           drawerOpen ? "drawer-open" : "drawer-closed",
+          focusMode ? "focus-mode" : "",
         ].join(" ")}
         aria-label="Editor workspace"
         style={workspaceStyle}

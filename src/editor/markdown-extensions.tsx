@@ -11,7 +11,7 @@
  */
 
 import { useState } from "react";
-import { Mark, mergeAttributes, Node } from "@tiptap/core";
+import { Mark, markInputRule, mergeAttributes, Node } from "@tiptap/core";
 import type { JSONContent, MarkdownToken, NodeViewProps } from "@tiptap/core";
 import {
   NodeViewContent,
@@ -491,12 +491,17 @@ export function createKeyboardKeyExtension() {
 
 export function createDelimitedMarkdownMarkExtension({
   delimiter,
+  inputPattern,
   name,
   start,
   tag,
   tokenPattern,
 }: {
   delimiter: string;
+  // Optional typing-time expansion. Only marks whose delimiter cannot appear
+  // in ordinary prose (like ==) should opt in; single-character delimiters
+  // (^, ~) would misfire constantly.
+  inputPattern?: RegExp;
   name: string;
   start: string | ((src: string) => number);
   tag: string;
@@ -507,6 +512,19 @@ export function createDelimitedMarkdownMarkExtension({
 
     parseHTML() {
       return [{ tag }];
+    },
+
+    addInputRules() {
+      if (!inputPattern) {
+        return [];
+      }
+
+      return [
+        markInputRule({
+          find: inputPattern,
+          type: this.type,
+        }),
+      ];
     },
 
     renderHTML({ HTMLAttributes }) {

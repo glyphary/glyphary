@@ -1,6 +1,7 @@
 import { markInputRule } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
+import type { LanguageFn } from "highlight.js";
 import { Markdown } from "@tiptap/markdown";
 import { Strike } from "@tiptap/extension-strike";
 import StarterKit from "@tiptap/starter-kit";
@@ -8,16 +9,44 @@ import { TableKit } from "@tiptap/extension-table";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { TaskList } from "@tiptap/extension-task-list";
 import bash from "highlight.js/lib/languages/bash";
+import c from "highlight.js/lib/languages/c";
+import cmake from "highlight.js/lib/languages/cmake";
+import cpp from "highlight.js/lib/languages/cpp";
+import csharp from "highlight.js/lib/languages/csharp";
 import css from "highlight.js/lib/languages/css";
+import dart from "highlight.js/lib/languages/dart";
+import diff from "highlight.js/lib/languages/diff";
+import dockerfile from "highlight.js/lib/languages/dockerfile";
+import elixir from "highlight.js/lib/languages/elixir";
+import go from "highlight.js/lib/languages/go";
+import graphql from "highlight.js/lib/languages/graphql";
+import haskell from "highlight.js/lib/languages/haskell";
+import ini from "highlight.js/lib/languages/ini";
+import java from "highlight.js/lib/languages/java";
 import javascript from "highlight.js/lib/languages/javascript";
 import json from "highlight.js/lib/languages/json";
+import kotlin from "highlight.js/lib/languages/kotlin";
+import latex from "highlight.js/lib/languages/latex";
+import lua from "highlight.js/lib/languages/lua";
+import makefile from "highlight.js/lib/languages/makefile";
 import markdownLanguage from "highlight.js/lib/languages/markdown";
+import nginx from "highlight.js/lib/languages/nginx";
+import objectivec from "highlight.js/lib/languages/objectivec";
+import perl from "highlight.js/lib/languages/perl";
+import php from "highlight.js/lib/languages/php";
 import plaintext from "highlight.js/lib/languages/plaintext";
+import powershell from "highlight.js/lib/languages/powershell";
+import protobuf from "highlight.js/lib/languages/protobuf";
 import python from "highlight.js/lib/languages/python";
+import r from "highlight.js/lib/languages/r";
+import ruby from "highlight.js/lib/languages/ruby";
 import rust from "highlight.js/lib/languages/rust";
+import scala from "highlight.js/lib/languages/scala";
 import sql from "highlight.js/lib/languages/sql";
+import swift from "highlight.js/lib/languages/swift";
 import typescript from "highlight.js/lib/languages/typescript";
 import xml from "highlight.js/lib/languages/xml";
+import yaml from "highlight.js/lib/languages/yaml";
 import { createLowlight } from "lowlight";
 import type { DocumentTab, EditorGroupId, EditorGroupState } from "../lib/app-types";
 import { initialMarkdown } from "../lib/defaults";
@@ -66,27 +95,69 @@ function droppedTextFile(transfer: DataTransfer | null | undefined) {
   );
 }
 
-// Keep lowlight registration explicit so Markdown language names can be
-// round-tripped through fenced code blocks and rendered with predictable aliases.
-lowlight.register("plaintext", plaintext);
-lowlight.register("python", python);
-lowlight.register("sh", bash);
-lowlight.register("shell", bash);
-lowlight.register("bash", bash);
-lowlight.register("javascript", javascript);
-lowlight.register("js", javascript);
-lowlight.register("typescript", typescript);
-lowlight.register("ts", typescript);
-lowlight.register("json", json);
-lowlight.register("rust", rust);
-lowlight.register("rs", rust);
-lowlight.register("sql", sql);
-lowlight.register("html", xml);
-lowlight.register("xml", xml);
-lowlight.register("css", css);
-lowlight.register("markdown", markdownLanguage);
-lowlight.register("md", markdownLanguage);
-// Pseudo-languages used by Glyphary-rendered Markdown widgets.
+// Single source of truth for fenced code languages: registers each grammar
+// with lowlight AND feeds the code block language picker in App, so the
+// suggestions can never drift from what actually highlights. Aliases keep
+// Markdown from other tools round-tripping (```golang, ```yml, ...).
+export const codeBlockLanguages: Array<{
+  label: string;
+  value: string;
+  grammar: LanguageFn;
+  aliases?: string[];
+}> = [
+  { label: "Plain text", value: "plaintext", grammar: plaintext },
+  { label: "Python", value: "python", grammar: python },
+  { label: "Shell", value: "sh", grammar: bash, aliases: ["shell", "bash"] },
+  { label: "JavaScript", value: "javascript", grammar: javascript, aliases: ["js"] },
+  { label: "TypeScript", value: "typescript", grammar: typescript, aliases: ["ts"] },
+  { label: "JSON", value: "json", grammar: json },
+  { label: "Rust", value: "rust", grammar: rust, aliases: ["rs"] },
+  { label: "SQL", value: "sql", grammar: sql },
+  { label: "HTML", value: "html", grammar: xml, aliases: ["xml"] },
+  { label: "CSS", value: "css", grammar: css },
+  { label: "Markdown", value: "markdown", grammar: markdownLanguage, aliases: ["md"] },
+  { label: "C", value: "c", grammar: c },
+  { label: "C++", value: "cpp", grammar: cpp, aliases: ["c++"] },
+  { label: "C#", value: "csharp", grammar: csharp, aliases: ["cs"] },
+  { label: "CMake", value: "cmake", grammar: cmake },
+  { label: "Dart", value: "dart", grammar: dart },
+  { label: "Diff", value: "diff", grammar: diff, aliases: ["patch"] },
+  { label: "Dockerfile", value: "dockerfile", grammar: dockerfile, aliases: ["docker"] },
+  { label: "Elixir", value: "elixir", grammar: elixir },
+  { label: "Go", value: "go", grammar: go, aliases: ["golang"] },
+  { label: "GraphQL", value: "graphql", grammar: graphql, aliases: ["gql"] },
+  { label: "Haskell", value: "haskell", grammar: haskell, aliases: ["hs"] },
+  { label: "INI", value: "ini", grammar: ini },
+  { label: "Java", value: "java", grammar: java },
+  { label: "Kotlin", value: "kotlin", grammar: kotlin, aliases: ["kt"] },
+  { label: "LaTeX", value: "latex", grammar: latex, aliases: ["tex"] },
+  { label: "Lua", value: "lua", grammar: lua },
+  { label: "Makefile", value: "makefile", grammar: makefile, aliases: ["make"] },
+  { label: "Nginx", value: "nginx", grammar: nginx },
+  { label: "Objective-C", value: "objectivec", grammar: objectivec, aliases: ["objc"] },
+  { label: "Perl", value: "perl", grammar: perl, aliases: ["pl"] },
+  { label: "PHP", value: "php", grammar: php },
+  { label: "PowerShell", value: "powershell", grammar: powershell, aliases: ["ps1"] },
+  { label: "Protobuf", value: "protobuf", grammar: protobuf, aliases: ["proto"] },
+  { label: "R", value: "r", grammar: r },
+  { label: "Ruby", value: "ruby", grammar: ruby, aliases: ["rb"] },
+  { label: "Scala", value: "scala", grammar: scala },
+  { label: "Swift", value: "swift", grammar: swift },
+  // highlight.js covers TOML with its ini grammar.
+  { label: "TOML", value: "toml", grammar: ini },
+  { label: "YAML", value: "yaml", grammar: yaml, aliases: ["yml"] },
+];
+
+for (const language of codeBlockLanguages) {
+  lowlight.register(language.value, language.grammar);
+
+  for (const alias of language.aliases ?? []) {
+    lowlight.register(alias, language.grammar);
+  }
+}
+
+// Pseudo-languages used by Glyphary-rendered Markdown widgets; deliberately
+// not in codeBlockLanguages so the picker never suggests them.
 lowlight.register("toc", plaintext);
 lowlight.register("mermaid", plaintext);
 
@@ -189,6 +260,7 @@ export function createGlypharyEditorOptions({
         delimiter: "==",
         start: "==",
         tokenPattern: /^==(?![=])([^=\n]+?)==(?!=)/,
+        inputPattern: /(?<!=)(==(?!\s+==)([^=\n]+?)==)$/,
       }),
       createDelimitedMarkdownMarkExtension({
         name: "superscript",

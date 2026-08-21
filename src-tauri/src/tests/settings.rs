@@ -483,6 +483,7 @@ fn writes_vault_theme_tokens() {
                     heading_underlines: true,
                     heading_anchors: false,
                     rich_callouts: true,
+                    ..VaultThemeOptions::default()
                 },
                 tokens,
             }),
@@ -564,6 +565,8 @@ fn writes_vault_theme_options_without_tokens() {
                     heading_underlines: false,
                     heading_anchors: true,
                     rich_callouts: true,
+                    plain_editor_frame: true,
+                    drawer_shadow: true,
                 },
                 tokens: HashMap::new(),
             }),
@@ -589,6 +592,8 @@ fn writes_vault_theme_options_without_tokens() {
     );
     assert!(saved_theme.options.heading_anchors);
     assert!(saved_theme.options.rich_callouts);
+    assert!(saved_theme.options.plain_editor_frame);
+    assert!(saved_theme.options.drawer_shadow);
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }

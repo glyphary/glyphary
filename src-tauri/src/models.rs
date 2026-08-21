@@ -224,6 +224,12 @@ pub(crate) struct VaultThemeOptions {
     pub(crate) heading_underlines: bool,
     pub(crate) heading_anchors: bool,
     pub(crate) rich_callouts: bool,
+    // Later additions need per-field defaults so settings saved before the
+    // field existed still deserialize.
+    #[serde(default)]
+    pub(crate) plain_editor_frame: bool,
+    #[serde(default)]
+    pub(crate) drawer_shadow: bool,
 }
 
 impl VaultThemeOptions {

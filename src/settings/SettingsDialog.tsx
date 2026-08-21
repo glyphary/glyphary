@@ -109,6 +109,7 @@ type SettingsDialogProps = {
   settingsDragging: SettingsDragState | null;
   settingsHaveChanges: () => boolean;
   settingsOpen: boolean;
+  settingsSaveError: string | null;
   settingsWindowSurface?: boolean;
   settingsTab: SettingsTab;
   shortcutFromKeyboardEvent: (event: KeyboardEvent<HTMLInputElement>) => string;
@@ -264,6 +265,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     settingsDragging,
     settingsHaveChanges,
     settingsOpen,
+    settingsSaveError,
     settingsWindowSurface = false,
     settingsTab,
     shortcutFromKeyboardEvent,
@@ -1374,6 +1376,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
               </div>
             ) : null}
             <div className="settings-actions">
+              {settingsSaveError ? (
+                <p className="settings-save-error" role="alert">
+                  {settingsSaveError}
+                </p>
+              ) : null}
               <button
                 className="inline-action"
                 disabled={!vaultRoot || !settingsHaveChanges()}

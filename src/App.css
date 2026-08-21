@@ -58,6 +58,10 @@
   --glyphary-selection: rgba(47, 104, 70, 0.16);
   --glyphary-shadow: rgba(45, 38, 27, 0.08);
   --glyphary-shadow-strong: rgba(45, 38, 27, 0.12);
+  --glyphary-mark-bg: color-mix(in srgb, #f6d85f 54%, transparent);
+  /* currentColor resolves at the marker itself, so bullets/numbers follow the
+     list text unless a theme pins an explicit marker color. */
+  --glyphary-list-marker: currentColor;
   --glyphary-surface: #fffdfa;
   --glyphary-surface-muted: #faf8f2;
   --syntax-blue: #8fd7ff;
@@ -895,6 +899,41 @@ h2 {
   /* Gaps are represented by resizer columns so pointer targets have stable width. */
   gap: 0;
   transition: grid-template-columns var(--sidebar-motion-duration) var(--sidebar-motion-ease);
+}
+
+/* Focus mode collapses the chrome tracks to zero instead of unmounting the
+   panes, so drawer state and scroll positions survive toggling. The panes are
+   hidden (not display:none) so grid auto-placement keeps the editor in the
+   middle track. */
+.workspace.focus-mode {
+  grid-template-columns: 0 0 minmax(0, 1fr) 0 0;
+}
+
+.workspace.focus-mode .vault-pane,
+.workspace.focus-mode .drawer-pane,
+.workspace.focus-mode .workspace-resizer {
+  visibility: hidden;
+  min-width: 0;
+  border-width: 0;
+}
+
+/* Writing only: no tab strip, no formatting toolbar, no frontmatter. Tab and
+   metadata state are untouched; everything reappears on exit. */
+.workspace.focus-mode .document-tabs,
+.workspace.focus-mode .toolbar,
+.workspace.focus-mode .frontmatter-header {
+  display: none;
+}
+
+/* Titlebar keeps only Save and the command palette while writing. */
+.app-shell.focus-mode .app-actions > *:not([aria-label="Save"]):not(.titlebar-command-palette) {
+  display: none;
+}
+
+/* The top-left clusters (files-drawer actions, drawer toggle) go too. */
+.app-shell.focus-mode .titlebar-vault-actions,
+.app-shell.focus-mode .titlebar-native-actions {
+  display: none;
 }
 
 .vault-onboarding {
@@ -2078,6 +2117,21 @@ body.workspace-resizing * {
   box-shadow:
     0 18px 45px var(--shadow),
     0 0 0 1px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.app-shell.theme-plain-editor-frame .editor-pane-shell.active-group .editor-pane {
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  box-shadow: 0 18px 45px var(--shadow);
+}
+
+/* The right-edge cast needs its own stacking context or the shadow paints
+   under the adjacent editor pane. */
+.app-shell.theme-drawer-shadow .vault-pane {
+  position: relative;
+  z-index: 1;
+  box-shadow:
+    0 18px 45px var(--shadow),
+    14px 0 34px -16px var(--shadow-strong);
 }
 
 .document-tabs {
@@ -4452,9 +4506,13 @@ body.workspace-resizing * {
 
 .editor-surface mark {
   border-radius: 3px;
-  background: color-mix(in srgb, #f6d85f 54%, transparent);
+  background: var(--glyphary-mark-bg);
   padding: 0 0.12em;
   color: inherit;
+}
+
+.editor-surface li::marker {
+  color: var(--glyphary-list-marker);
 }
 
 .editor-surface sup,
@@ -5672,8 +5730,17 @@ body.workspace-resizing * {
 
 .settings-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.settings-save-error {
+  margin: 0 auto 0 0;
+  color: var(--danger, #c94848);
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1.4;
 }
 
 .ai-review-screen,
@@ -6779,9 +6846,18 @@ body.workspace-resizing * {
   text-align: left;
 }
 
-.folder-tree-file:hover,
-.folder-tree-file.active {
+.folder-tree-file:hover {
   background: var(--hover);
+}
+
+.folder-tree-file.active {
+  background: var(--accent);
+}
+
+.folder-tree-file.active,
+.folder-tree-file.active strong,
+.folder-tree-file.active em {
+  color: var(--accent-text);
 }
 
 .folder-tree-file span {

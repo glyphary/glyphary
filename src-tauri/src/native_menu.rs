@@ -33,6 +33,9 @@ pub(crate) struct NativeMenuState {
     vault_drawer_open: bool,
     inspector_drawer_open: bool,
     split_open: bool,
+    // Added after the struct shipped; defaults keep older frontends valid.
+    #[serde(default)]
+    focus_mode: bool,
     recent_files: Vec<NativeMenuFile>,
 }
 
@@ -56,6 +59,7 @@ impl Default for NativeMenuState {
             vault_drawer_open: true,
             inspector_drawer_open: false,
             split_open: false,
+            focus_mode: false,
             recent_files: Vec::new(),
         }
     }
@@ -535,6 +539,14 @@ fn build_view_menu<R: Runtime>(
         state.split_open,
         None::<&str>,
     )?;
+    let toggle_focus = CheckMenuItem::with_id(
+        app,
+        "toggle_focus_mode",
+        "Focus Mode",
+        true,
+        state.focus_mode,
+        None::<&str>,
+    )?;
 
     Submenu::with_items(
         app,
@@ -547,6 +559,7 @@ fn build_view_menu<R: Runtime>(
             &toggle_vault_drawer,
             &toggle_inspector,
             &toggle_split,
+            &toggle_focus,
             &PredefinedMenuItem::separator(app)?,
             &appearance_auto,
             &appearance_light,
@@ -662,6 +675,7 @@ fn native_command_id(menu_id: &str) -> Option<&'static str> {
         "toggle_vault_drawer" => Some("toggle-vault-drawer"),
         "toggle_inspector" => Some("toggle-inspector"),
         "toggle_split_editor" => Some("toggle-split-editor"),
+        "toggle_focus_mode" => Some("toggle-focus-mode"),
         _ => None,
     }
 }

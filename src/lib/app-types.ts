@@ -196,6 +196,8 @@ export type VaultThemeOptions = {
   headingUnderlines: boolean;
   headingAnchors: boolean;
   richCallouts: boolean;
+  plainEditorFrame: boolean;
+  drawerShadow: boolean;
 };
 
 export type FrontmatterPillSettings = {

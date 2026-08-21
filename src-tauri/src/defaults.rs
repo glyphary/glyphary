@@ -84,6 +84,8 @@ pub(crate) const THEME_TOKEN_ALLOWLIST: &[&str] = &[
     "--glyphary-heading-h1-size",
     "--glyphary-heading-h2-size",
     "--glyphary-hover",
+    "--glyphary-list-marker",
+    "--glyphary-mark-bg",
     "--glyphary-mono-text",
     "--glyphary-muted",
     "--glyphary-muted-strong",

@@ -13,6 +13,8 @@ export const defaultThemeOptions: VaultThemeOptions = {
   headingUnderlines: false,
   headingAnchors: false,
   richCallouts: false,
+  plainEditorFrame: false,
+  drawerShadow: false,
 };
 export const calloutStyleOptions: Array<{ value: CalloutStyle; label: string }> = [
   { value: "plain", label: "Plain" },
@@ -90,6 +92,18 @@ export const themeTokenGroups: ThemeTokenGroup[] = [
       { label: "Muted surface", token: "--glyphary-surface-muted" },
       { label: "Hover", token: "--glyphary-hover" },
       { label: "Selection", token: "--glyphary-selection" },
+      {
+        label: "Shadow",
+        token: "--glyphary-shadow",
+        kind: "value",
+        placeholder: "rgba(45, 38, 27, 0.08)",
+      },
+      {
+        label: "Strong shadow",
+        token: "--glyphary-shadow-strong",
+        kind: "value",
+        placeholder: "rgba(45, 38, 27, 0.12)",
+      },
     ],
   },
   {
@@ -123,6 +137,18 @@ export const themeTokenGroups: ThemeTokenGroup[] = [
       { label: "Code text", token: "--glyphary-code-text" },
       { label: "Quote border", token: "--glyphary-quote-border" },
       { label: "Quote text", token: "--glyphary-quote-text" },
+      {
+        label: "Highlight background",
+        token: "--glyphary-mark-bg",
+        kind: "value",
+        placeholder: "color-mix(in srgb, #f6d85f 54%, transparent)",
+      },
+      {
+        label: "List marker",
+        token: "--glyphary-list-marker",
+        kind: "value",
+        placeholder: "currentColor",
+      },
     ],
   },
   {
@@ -304,6 +330,21 @@ const editableThemeTokens = new Set(
 // Presets are full token maps instead of partial overrides. Applying one should
 // erase dependency on any previous custom theme, then the Theme Builder can
 // refine individual values from that complete baseline.
+// The Cupertino pair shares one type system; the palettes diverge, the
+// typography must not.
+const cupertinoTypographyTokens: Record<string, string> = {
+  "--glyphary-font-ui":
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, sans-serif',
+  "--glyphary-font-editor":
+    '-apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, sans-serif',
+  "--glyphary-font-mono": 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace',
+  "--glyphary-editor-font-size": "1rem",
+  "--glyphary-editor-line-height": "1.65",
+  "--glyphary-heading-h1-size": "1.8rem",
+  "--glyphary-heading-h2-size": "1.35rem",
+  "--glyphary-code-font-size": "0.88em",
+};
+
 export const themePresets: ThemePreset[] = [
   {
     id: "field-notes",
@@ -713,6 +754,57 @@ export const themePresets: ThemePreset[] = [
     },
   },
   {
+    id: "cupertino",
+    base: "light",
+    name: "Cupertino",
+    description: "Apple-editorial white with a single vivid blue and soft shadows.",
+    tokens: {
+      "--glyphary-app-bg": "#f5f5f7",
+      "--glyphary-surface": "#ffffff",
+      "--glyphary-surface-muted": "#f7f7f8",
+      "--glyphary-hover": "#ededf0",
+      "--glyphary-selection": "rgba(47, 107, 255, 0.14)",
+      "--glyphary-text": "#1d1d1f",
+      "--glyphary-text-soft": "#3c3c41",
+      "--glyphary-editor-text": "#26262a",
+      "--glyphary-heading": "#111113",
+      "--glyphary-muted": "#86868b",
+      "--glyphary-muted-strong": "#6e6e73",
+      "--glyphary-mono-text": "#4b4b50",
+      "--glyphary-accent": "#2f6bff",
+      "--glyphary-accent-text": "#ffffff",
+      "--glyphary-focus": "#6b96ff",
+      "--glyphary-border": "#e3e3e6",
+      "--glyphary-border-soft": "#ededf0",
+      "--glyphary-border-strong": "#d2d2d7",
+      "--glyphary-table-border": "#dcdce0",
+      "--glyphary-code-bg": "#f0f0f2",
+      "--glyphary-code-text": "#38383d",
+      "--glyphary-quote-border": "#c9c9ce",
+      "--glyphary-quote-text": "#55555a",
+      "--glyphary-shadow": "rgba(15, 18, 26, 0.06)",
+      "--glyphary-shadow-strong": "rgba(15, 18, 26, 0.11)",
+      "--glyphary-mark-bg": "#d9f26e",
+      "--glyphary-list-marker": "#2f6bff",
+      "--glyphary-callout-background": "#f4f6fb",
+      "--glyphary-callout-note-color": "#5b6b8c",
+      "--glyphary-callout-info-color": "#2f6bff",
+      "--glyphary-callout-tip-color": "#2f9e5b",
+      "--glyphary-callout-warning-color": "#e08a3c",
+      "--glyphary-callout-title-transform": "none",
+      // Light code surface needs ink-dark syntax colors, unlike the pastel
+      // defaults every dark-code preset shares.
+      "--syntax-blue": "#0f66d0",
+      "--syntax-green": "#1e7d3c",
+      "--syntax-yellow": "#b07a00",
+      "--syntax-red": "#c4453d",
+      "--syntax-purple": "#7c4dbe",
+      "--syntax-orange": "#b25b17",
+      "--syntax-muted": "#86868b",
+      ...cupertinoTypographyTokens,
+    },
+  },
+  {
     id: "blueprint",
     base: "dark",
     name: "Blueprint",
@@ -747,6 +839,55 @@ export const themePresets: ThemePreset[] = [
       "--syntax-green": "#9edaa7",
       "--syntax-yellow": "#efd17e",
       "--syntax-muted": "#8ea2b1",
+    },
+  },
+  {
+    id: "cupertino-dark",
+    base: "dark",
+    name: "Cupertino Dark",
+    description: "The Cupertino look on graphite surfaces with the same blue.",
+    tokens: {
+      "--glyphary-app-bg": "#161618",
+      "--glyphary-surface": "#1e1e20",
+      "--glyphary-surface-muted": "#232327",
+      "--glyphary-hover": "#2b2b30",
+      "--glyphary-selection": "rgba(94, 141, 255, 0.3)",
+      "--glyphary-text": "#e8e8ea",
+      "--glyphary-text-soft": "#c6c6cb",
+      "--glyphary-editor-text": "#dcdce0",
+      "--glyphary-heading": "#f5f5f7",
+      "--glyphary-muted": "#8e8e93",
+      "--glyphary-muted-strong": "#a6a6ac",
+      "--glyphary-mono-text": "#cfcfd6",
+      "--glyphary-accent": "#4c7dff",
+      "--glyphary-accent-text": "#ffffff",
+      "--glyphary-focus": "#7ea1ff",
+      "--glyphary-border": "#333338",
+      "--glyphary-border-soft": "#2b2b30",
+      "--glyphary-border-strong": "#48484f",
+      "--glyphary-table-border": "#3b3b41",
+      "--glyphary-code-bg": "#2a2a2f",
+      "--glyphary-code-text": "#e6e6eb",
+      "--glyphary-quote-border": "#5a5a62",
+      "--glyphary-quote-text": "#b4b4bb",
+      "--glyphary-shadow": "rgba(0, 0, 0, 0.34)",
+      "--glyphary-shadow-strong": "rgba(0, 0, 0, 0.5)",
+      "--glyphary-mark-bg": "rgba(217, 242, 110, 0.28)",
+      "--glyphary-list-marker": "#4c7dff",
+      "--glyphary-callout-background": "#22242b",
+      "--glyphary-callout-note-color": "#8fa3cf",
+      "--glyphary-callout-info-color": "#7ea1ff",
+      "--glyphary-callout-tip-color": "#6fcf8f",
+      "--glyphary-callout-warning-color": "#e8a96c",
+      "--glyphary-callout-title-transform": "none",
+      "--syntax-blue": "#82b8ff",
+      "--syntax-green": "#8fd9a0",
+      "--syntax-yellow": "#e8cd82",
+      "--syntax-red": "#f09a92",
+      "--syntax-purple": "#c3a4f2",
+      "--syntax-orange": "#e6a75e",
+      "--syntax-muted": "#9a9aa2",
+      ...cupertinoTypographyTokens,
     },
   },
 ];
@@ -827,13 +968,20 @@ export function calloutIconGlyph(icon: CalloutIconName) {
   return calloutIconOptions.find((option) => option.value === icon)?.glyph ?? "";
 }
 
-export function normalizeThemeOptions(options: VaultThemeOptions | undefined | null) {
-  return {
-    colorfulHeadings: options?.colorfulHeadings ?? defaultThemeOptions.colorfulHeadings,
-    headingUnderlines: options?.headingUnderlines ?? defaultThemeOptions.headingUnderlines,
-    headingAnchors: options?.headingAnchors ?? defaultThemeOptions.headingAnchors,
-    richCallouts: options?.richCallouts ?? defaultThemeOptions.richCallouts,
-  };
+// Deriving from defaultThemeOptions keeps normalize/compare in lockstep with
+// the type: a new option only needs its default (plus UI/CSS), not edits here.
+const themeOptionKeys = Object.keys(defaultThemeOptions) as Array<keyof VaultThemeOptions>;
+
+export function normalizeThemeOptions(
+  options: VaultThemeOptions | undefined | null,
+): VaultThemeOptions {
+  const normalized = { ...defaultThemeOptions };
+
+  for (const key of themeOptionKeys) {
+    normalized[key] = options?.[key] ?? defaultThemeOptions[key];
+  }
+
+  return normalized;
 }
 
 export function sameThemeOptions(
@@ -843,12 +991,7 @@ export function sameThemeOptions(
   const normalizedLeft = normalizeThemeOptions(left);
   const normalizedRight = normalizeThemeOptions(right);
 
-  return (
-    normalizedLeft.colorfulHeadings === normalizedRight.colorfulHeadings &&
-    normalizedLeft.headingUnderlines === normalizedRight.headingUnderlines &&
-    normalizedLeft.headingAnchors === normalizedRight.headingAnchors &&
-    normalizedLeft.richCallouts === normalizedRight.richCallouts
-  );
+  return themeOptionKeys.every((key) => normalizedLeft[key] === normalizedRight[key]);
 }
 
 export function sameThemeTokens(
