@@ -226,8 +226,9 @@ test("command save shortcut is wrapped in the webview", () => {
   assert.match(app, /openCommandPaletteRootRef\.current\("flat"\)/);
   // The slash menu flattens only the AI and Insert groups. The typed "/"
   // stays in the document; running a command deletes it again.
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   assert.match(
-    app,
+    paletteDefinitions,
     /const flatCommandPaletteCommands = \[\s*\.\.\.aiCommandPaletteCommands,\s*\.\.\.activeInsertCommandPaletteCommands,\s*\]/,
   );
   const editorOptionsForSlash = readFileSync("src/editor/editor-options.ts", "utf8");

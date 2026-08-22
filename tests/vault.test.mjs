@@ -139,6 +139,7 @@ test("date templates expand centrally for tidbit paths", () => {
 
 test("vault documents open with one click by default and can require double-clicking", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const folderTree = readFileSync("src/vault/VaultFolderTree.tsx", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
 
@@ -169,6 +170,7 @@ test("vault documents open with one click by default and can require double-clic
 
 test("interface settings group optional Files header actions", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
   const toolbarIcons = readFileSync("src/toolbar-icons.tsx", "utf8");
   const vaultTitlebarActions = readFileSync("src/vault/VaultTitlebarActions.tsx", "utf8");
@@ -203,6 +205,7 @@ test("interface settings group optional Files header actions", () => {
 
 test("vault onboarding hides document and drawer chrome", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const titlebar = app.slice(
     app.indexOf('<header className="titlebar"'),
     app.indexOf("</header>", app.indexOf('<header className="titlebar"')),
@@ -305,6 +308,7 @@ test("dropped image names follow the pasted-image timestamp convention", () => {
 
 test("calendar filenames match the requested note naming scheme and dot marker keys", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
@@ -504,6 +508,7 @@ test("workspace sessions are persisted independently per vault", () => {
 
 test("vault drawer exposes files search recent and task views", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
   const commandPalette = readFileSync("src/command-palette/commands.ts", "utf8");
   const starredFiles = readFileSync("src/lib/starred-files.ts", "utf8");
@@ -560,9 +565,9 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(css, /\.vault-library-cover/);
   assert.match(app, /Starred files/);
   assert.match(app, /const activeFileBackedPath = activeDocumentTab\?\.activeFile\?\.relativePath \?\? ""/);
-  assert.match(app, /id: activeFileStarred \? "unstar-file" : "star-file"/);
+  assert.match(paletteDefinitions, /id: activeFileStarred \? "unstar-file" : "star-file"/);
   assert.match(app, /function toggleActiveFileStar/);
-  assert.match(app, /\.\.\.activeFileCommandPaletteCommands/);
+  assert.match(paletteDefinitions, /\.\.\.activeFileCommandPaletteCommands/);
   assert.match(commandPalette, /command\.id !== "star-file"/);
   assert.match(app, /const \[draggingStarredPath, setDraggingStarredPath\] = useState\(""\)/);
   assert.match(app, /const draggingStarredPathRef = useRef\(""\)/);
@@ -688,6 +693,7 @@ test("vault drawer exposes files search recent and task views", () => {
 
 test("vault rows expose context menu actions for folders and files", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const fileActions = readFileSync("src/vault/file-actions.ts", "utf8");
   const vaultContextMenu = readFileSync("src/vault/VaultContextMenu.tsx", "utf8");
   const vaultTree = readFileSync("src/vault/VaultFolderTree.tsx", "utf8");

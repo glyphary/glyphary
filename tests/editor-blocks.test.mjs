@@ -72,6 +72,7 @@ test("markdown headings produce a table of contents and ignore fenced code", () 
 
 test("toc fenced code blocks have an inline renderer while staying markdown code blocks", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const codeBlockLanguage = readFileSync("src/editor/code-block-language.tsx", "utf8");
   const codeBlockRenderers = readFileSync("src/editor/code-block-renderers.ts", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
@@ -116,6 +117,7 @@ test("table parsing keeps wikilink alias pipes inside the cell", () => {
 
 test("block-widget boundaries expose an editable insertion point", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const blockBoundary = readFileSync("src/editor/block-boundary-insertion.ts", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
@@ -209,6 +211,7 @@ test("block-widget boundaries expose an editable insertion point", () => {
 
 test("columns markdown containers are wired into the editor", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const markdownExtensions = readFileSync("src/editor/markdown-extensions.tsx", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
@@ -231,6 +234,7 @@ test("columns markdown containers are wired into the editor", () => {
 
 test("gallery markdown containers are wired into the editor", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const markdownExtensions = readFileSync("src/editor/markdown-extensions.tsx", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
   const vaultImages = readFileSync("src/editor/vault-images.ts", "utf8");
@@ -248,14 +252,15 @@ test("gallery markdown containers are wired into the editor", () => {
   assert.match(vaultImages, /export function imageNodeMarkdown/);
   assert.match(editorCommands, /export function selectedGalleryImages/);
   assert.match(app, /function wrapSelectedImagesInGallery\(\)/);
-  assert.match(app, /id: "gallery-layout"/);
-  assert.match(app, /title: "Gallery layout"/);
+  assert.match(paletteDefinitions, /id: "gallery-layout"/);
+  assert.match(paletteDefinitions, /title: "Gallery layout"/);
   assert.match(css, /\.markdown-gallery/);
   assert.match(manual, /Gallery layout/);
 });
 
 test("editor images can be opened in a full-size preview", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const appState = readFileSync("src/app-state/documents.ts", "utf8");
   const editorPane = readFileSync("src/editor/EditorPane.tsx", "utf8");
   const vaultImages = readFileSync("src/editor/vault-images.ts", "utf8");
@@ -289,6 +294,7 @@ test("editor images can be opened in a full-size preview", () => {
 
 test("callout markdown containers are wired into the editor", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const markdownExtensions = readFileSync("src/editor/markdown-extensions.tsx", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
@@ -309,6 +315,7 @@ test("callout markdown containers are wired into the editor", () => {
 
 test("collapse markdown containers render as expandable details blocks", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const markdownExtensions = readFileSync("src/editor/markdown-extensions.tsx", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
@@ -327,8 +334,8 @@ test("collapse markdown containers render as expandable details blocks", () => {
   assert.match(markdownExtensions, /setOpen\(\(value\) => !value\)/);
   assert.match(editorOptions, /createCollapseExtension\(\)/);
   assert.match(app, /insertCollapseBlock\(\)/);
-  assert.match(app, /id: "insert-collapse"/);
-  assert.match(app, /title: "Insert collapse"/);
+  assert.match(paletteDefinitions, /id: "insert-collapse"/);
+  assert.match(paletteDefinitions, /title: "Insert collapse"/);
   assert.match(app, /insertContent\(emptyCollapseMarkdown, \{ contentType: "markdown" \}\)/);
   assert.match(markdownExtensions, /const openPart = attrs\.defaultOpen === true \? " open" : ""/);
   assert.match(css, /\.markdown-collapse/);
@@ -339,6 +346,7 @@ test("collapse markdown containers render as expandable details blocks", () => {
 
 test("html blocks are preserved as sanitized editable source blocks", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const markdownExtensions = readFileSync("src/editor/markdown-extensions.tsx", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
@@ -386,6 +394,7 @@ test("html blocks are preserved as sanitized editable source blocks", () => {
 
 test("rich link markdown containers are wired into the editor", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const markdownExtensions = readFileSync("src/editor/markdown-extensions.tsx", "utf8");
   const css = readFileSync("src/App.css", "utf8");
 
@@ -409,7 +418,7 @@ siteName: Example Site
   assert.match(markdownExtensions, /markdownTokenName: "rich-link"/);
   assert.match(markdownExtensions, /data-glyphary-rich-link/);
   assert.match(app, /fetch_rich_link_metadata/);
-  assert.match(app, /id: "insert-rich-link"/);
+  assert.match(paletteDefinitions, /id: "insert-rich-link"/);
   assert.match(app, /openRichLinkDialog/);
   assert.match(app, /insertRichLinkFromUrl/);
   assert.match(app, /insertMarkdownAtCursor\(editor, richLinkMarkdown\(metadata\)\)/);
@@ -424,6 +433,7 @@ siteName: Example Site
 
 test("excalidraw drawings are embedded as vault files", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const excalidrawEditor = readFileSync("src/excalidraw/editor.tsx", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
   const vaultPersistence = readFileSync("src/vault/persistence.ts", "utf8");
@@ -462,9 +472,9 @@ test("excalidraw drawings are embedded as vault files", () => {
   assert.match(useExcalidraw, /api\?\.getFiles\(\)/);
   assert.match(excalidrawEditor, /excalidrawAPI=\{onApi\}/);
   assert.match(editorOptions, /createExcalidrawEmbedExtension\(\{/);
-  assert.match(app, /id: "insert-excalidraw"/);
-  assert.match(app, /title: "Insert Excalidraw drawing"/);
-  assert.match(app, /excalidraw\.openCreateDialog/);
+  assert.match(paletteDefinitions, /id: "insert-excalidraw"/);
+  assert.match(paletteDefinitions, /title: "Insert Excalidraw drawing"/);
+  assert.match(paletteDefinitions, /excalidraw\.openCreateDialog/);
   assert.match(useExcalidraw, /createDialogOpen/);
   assert.match(excalidrawEditor, /aria-label="Insert Excalidraw drawing"/);
   assert.match(vaultPersistence, /create_excalidraw_file/);
@@ -481,6 +491,7 @@ test("excalidraw drawings are embedded as vault files", () => {
 
 test("canvas files open as editable React Flow graph tabs", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
   const css = readFileSync("src/App.css", "utf8");
   const canvasView = readFileSync("src/CanvasView.tsx", "utf8");
@@ -493,7 +504,7 @@ test("canvas files open as editable React Flow graph tabs", () => {
   const settings = readFileSync("src/lib/settings.ts", "utf8");
 
   assert.match(appTypes, /kind: "markdown" \| "canvas" \| "base"/);
-  assert.match(app, /canvasTitle,[\s\S]*isCanvasPath,[\s\S]*type CanvasCommandAction,[\s\S]*type CanvasCommandRequest,[\s\S]*from "\.\/CanvasView"/);
+  assert.match(app, /canvasTitle,[\s\S]*isCanvasPath,[\s\S]*type CanvasCommandRequest,[\s\S]*from "\.\/CanvasView"/);
   assert.match(editorPane, /import \{ CanvasView, type CanvasCommandRequest \} from "\.\.\/CanvasView"/);
   assert.match(app, /if \(isCanvasPath\(file\.relativePath\)\) \{/);
   assert.match(app, /kind: "canvas"/);
@@ -670,6 +681,7 @@ test("canvas files open as editable React Flow graph tabs", () => {
 
 test("code block language picker renders inside the active code block", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const codeBlockLanguage = readFileSync("src/editor/code-block-language.tsx", "utf8");
   const codeBlockRenderers = readFileSync("src/editor/code-block-renderers.ts", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
@@ -710,6 +722,7 @@ test("code block language picker renders inside the active code block", () => {
 
 test("mermaid code blocks render diagrams while keeping fenced source editable", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
   const codeBlockRenderers = readFileSync("src/editor/code-block-renderers.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
@@ -737,6 +750,7 @@ test("mermaid code blocks render diagrams while keeping fenced source editable",
 
 test("base files query markdown properties and render dedicated views", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
   const appCss = readFileSync("src/App.css", "utf8");
   const appDocuments = readFileSync("src/app-state/documents.ts", "utf8");

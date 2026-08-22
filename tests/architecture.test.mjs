@@ -75,6 +75,7 @@ test("frontend pure logic is split into documented helper modules", () => {
     .filter((file) => file.endsWith(".ts"))
     .map((file) => `src/lib/${file}`);
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
 
   assert.ok(helperFiles.length >= 8);
 
@@ -267,6 +268,7 @@ test("documentation website introduces core Glyphary workflows", () => {
 
 test("vault plugins are settings-gated and run commands through safe host paths", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
   const settings = readFileSync("src/lib/settings.ts", "utf8");
@@ -299,8 +301,8 @@ test("vault plugins are settings-gated and run commands through safe host paths"
   assert.match(app, /new Worker\(new URL\("\.\/pluginWorker\.ts", import\.meta\.url\)/);
   assert.match(app, /setTimeout\(\(\) => \{/);
   assert.match(app, /runWasmPluginTransform/);
-  assert.match(app, /pluginCommandPaletteCommands/);
-  assert.match(app, /id: `plugin:\$\{plugin\.id\}:\$\{command\.id\}`/);
+  assert.match(paletteDefinitions, /pluginCommandPaletteCommands/);
+  assert.match(paletteDefinitions, /id: `plugin:\$\{plugin\.id\}:\$\{command\.id\}`/);
   assert.match(app, /Open a vault before running plugin commands/);
   assert.match(settingsDialog, /settingsTab === "plugins"/);
   assert.match(settingsDialog, /settingsTab === "ai"/);
@@ -333,6 +335,7 @@ test("vault plugins are settings-gated and run commands through safe host paths"
 
 test("wikilinks use the vault filename index for navigation and insertion", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const wikilinks = readFileSync("src/editor/wikilinks.ts", "utf8");
   const editorOptions = readFileSync("src/editor/editor-options.ts", "utf8");
   const tidbitCapture = readFileSync("src/TidbitCapture.tsx", "utf8");

@@ -48,6 +48,7 @@ test("onboarding tips persist seen ids and survive corrupted storage", () => {
   // The slash menu is the first consumer: opening the flat scope routes
   // through the one-time tip, and dismissal resumes the intercepted open.
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   assert.match(app, /function withOnboardingTip/);
   assert.match(app, /readOnboardingTipsEnabled\(\) \|\| hasSeenOnboardingTip/);
   assert.match(app, /withOnboardingTip\(\s*\{\s*id: "slash-command-menu"/);
@@ -67,6 +68,7 @@ test("onboarding tips persist seen ids and survive corrupted storage", () => {
 
 test("excalidraw dirty tracking, save feedback, and preview cache", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const excalidrawEditor = readFileSync("src/excalidraw/editor.tsx", "utf8");
 
   // Dirty means "element versions differ from the saved baseline", because
@@ -97,10 +99,11 @@ test("excalidraw dirty tracking, save feedback, and preview cache", () => {
 
 test("focus mode hides workspace chrome via palette and native menu", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
   const nativeMenu = readFileSync("src-tauri/src/native_menu.rs", "utf8");
 
-  assert.match(app, /id: "toggle-focus-mode"/);
+  assert.match(paletteDefinitions, /id: "toggle-focus-mode"/);
   assert.match(app, /commandId === "toggle-focus-mode"/);
   assert.match(app, /focusMode \? "focus-mode" : ""/);
   // CSS-only hiding preserves drawer state across enter/exit.
@@ -118,6 +121,7 @@ test("focus mode hides workspace chrome via palette and native menu", () => {
 
 test("desktop platform detection controls platform-specific window actions", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const vaultPersistence = readFileSync("src/vault/persistence.ts", "utf8");
   const vaultTree = readFileSync("src/vault/VaultFolderTree.tsx", "utf8");
   const vaultIcons = readFileSync("src/vault/VaultIcons.tsx", "utf8");
@@ -218,6 +222,7 @@ test("desktop platform detection controls platform-specific window actions", () 
 
 test("startup release checks compare the latest GitHub release tag", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const css = readFileSync("src/App.css", "utf8");
 
   assert.match(app, /import packageJson from "\.\.\/package\.json"/);
@@ -248,6 +253,7 @@ test("startup release checks compare the latest GitHub release tag", () => {
 
 test("global tidbit capture is vault-gated and opens a lightweight editor window", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
   const settings = readFileSync("src/lib/settings.ts", "utf8");
   const capture = readFileSync("src/TidbitCapture.tsx", "utf8");
@@ -438,6 +444,7 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
 
 test("native webview context menu is suppressed except for editor text services", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
 
   assert.match(app, /const suppressNativeContextMenu = \(event: MouseEvent\) => \{/);
   assert.match(app, /target\.closest\("\.ProseMirror\[contenteditable='true'\]"\)/);
@@ -456,6 +463,7 @@ test("tauri starts with the requested default window size", () => {
 
 test("interactive overlays use native modal and viewport-aware popover primitives", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const palette = readFileSync("src/command-palette/CommandPaletteDialog.tsx", "utf8");
   const canvasDialogs = readFileSync("src/canvas/CanvasDialogs.tsx", "utf8");
   const excalidraw = readFileSync("src/excalidraw/editor.tsx", "utf8");
