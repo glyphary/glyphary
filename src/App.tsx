@@ -215,6 +215,7 @@ import {
   type CommandPaletteScope,
 } from "./command-palette/commands";
 import { buildCommandPaletteCommands } from "./command-palette/command-definitions";
+import { createVaultFileOperations } from "./vault/file-operations";
 import { CommandPaletteDialog } from "./command-palette/CommandPaletteDialog";
 import { AnchoredPopover } from "./ui/AnchoredPopover";
 import { ModalDialog } from "./ui/ModalDialog";
@@ -234,7 +235,6 @@ import {
 import {
   folderActionDialogLabel,
   folderActionDialogTitle,
-  folderActionInitialValue,
   isMoveAction,
   vaultEntryPath,
 } from "./vault/file-actions";
@@ -245,25 +245,18 @@ import { VaultTitlebarActions } from "./vault/VaultTitlebarActions";
 import {
   allowVaultAssets,
   cloneGithubVault,
-  createCanvasInDirectory,
-  createDirectoryInDirectory,
-  createNoteInDirectory,
   createVaultMarkdownFile,
-  deleteVaultFile,
   getGithubToken,
   getGithubVaultToken,
   listVaultDir,
   listVaultMarkdownFiles,
-  moveVaultDirectory,
-  moveVaultFile,
   openCalendarDayFile,
   openDirectoryShadowFile,
   pullGithubVault,
   pushGithubVault,
   readVaultFile,
-  readVaultSettings,
-  renameVaultDirectory,
   renameVaultFile,
+  readVaultSettings,
   saveGithubToken,
   saveGithubVaultToken,
   searchVaultFiles,
@@ -290,7 +283,6 @@ import type {
   EditorGroupId,
   EditorGroupState,
   FolderActionDialogState,
-  FolderActionKind,
   FolderContextMenuState,
   GithubSyncProgress,
   OpenedFile,
@@ -2451,6 +2443,37 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setStatus,
     vaultRoot,
     vaultRootRef,
+  });
+
+  const {
+    confirmAndDeleteFileFromContextMenu,
+    openEntryFromContextMenu,
+    openFolderActionDialog,
+    revealEntryFromContextMenu,
+    submitFolderActionDialog,
+  } = createVaultFileOperations({
+    addFileToWikiLinkIndex,
+    addTabToGroup,
+    applyRenamedDirectoryToOpenState,
+    confirmDestructiveAction,
+    createDocumentTabFromFile,
+    currentDir,
+    folderActionDialog,
+    hydrateDocumentTab,
+    loadEntries,
+    moveAiBuilderHistoryKey,
+    persistActiveFile,
+    rebuildWikiLinkIndex,
+    removeDeletedFileFromOpenState,
+    removeFileFromWikiLinkIndex,
+    replaceFileInWikiLinkIndex,
+    replaceOpenFilePath,
+    setFolderActionDialog,
+    setFolderContextMenu,
+    setStatus,
+    snapshotActiveTab,
+    updateStarredFiles,
+    vaultRoot,
   });
   const activeDocumentTab =
     editorGroups[activeGroupId]?.tabs.find(
@@ -6074,309 +6097,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     event.preventDefault();
     event.stopPropagation();
     void showVaultNativeContextMenu(currentDirectoryEntry(), event, true);
-  }
-
-  function openFolderActionDialog(action: FolderActionKind, entry: VaultEntry) {
-    setFolderContextMenu(null);
-    if (action === "delete-file") {
-      void confirmAndDeleteFileFromContextMenu(entry);
-      return;
-    }
-
-    setFolderActionDialog({
-      action,
-      entry,
-      value: folderActionInitialValue(action, entry),
-    });
-  }
-
-  async function confirmAndDeleteFileFromContextMenu(entry: VaultEntry) {
-    setFolderContextMenu(null);
-    setFolderActionDialog(null);
-
-    const confirmed = await confirmDestructiveAction(
-      `Delete ${entry.relativePath} from the vault? This cannot be undone.`,
-      { okLabel: "Delete", title: "Delete File" },
-    );
-
-    if (confirmed) {
-      await deleteFileFromContextMenu(entry);
-    }
-  }
-
-  async function createNoteFromFolderMenu(entry: VaultEntry, noteName: string) {
-    if (!vaultRoot) {
-      return;
-    }
-
-    if (!noteName?.trim()) {
-      return;
-    }
-
-    try {
-      const file = await createNoteInDirectory(vaultRoot, entry.relativePath, noteName);
-      const tab = createDocumentTabFromFile(file);
-
-      snapshotActiveTab();
-      addTabToGroup(tab);
-      hydrateDocumentTab(tab);
-      persistActiveFile(tab.activeFile);
-      addFileToWikiLinkIndex(file);
-      await loadEntries(vaultRoot, currentDir);
-      setStatus(`Created note ${file.relativePath}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function createCanvasFromFolderMenu(entry: VaultEntry, canvasName: string) {
-    if (!vaultRoot) {
-      return;
-    }
-
-    if (!canvasName?.trim()) {
-      return;
-    }
-
-    try {
-      const file = await createCanvasInDirectory(vaultRoot, entry.relativePath, canvasName);
-      const tab = createDocumentTabFromFile(file);
-
-      snapshotActiveTab();
-      addTabToGroup(tab);
-      hydrateDocumentTab(tab);
-      persistActiveFile(tab.activeFile);
-      await loadEntries(vaultRoot, currentDir);
-      setStatus(`Created canvas ${file.relativePath}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function createFolderFromFolderMenu(entry: VaultEntry, directoryName: string) {
-    if (!vaultRoot) {
-      return;
-    }
-
-    if (!directoryName?.trim()) {
-      return;
-    }
-
-    try {
-      const directory = await createDirectoryInDirectory(
-        vaultRoot,
-        entry.relativePath,
-        directoryName,
-      );
-
-      await loadEntries(vaultRoot, currentDir);
-      setStatus(`Created folder ${directory.relativePath}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function renameFolderFromFolderMenu(entry: VaultEntry, nextName: string) {
-    if (!vaultRoot) {
-      return;
-    }
-
-    if (!nextName?.trim()) {
-      return;
-    }
-
-    try {
-      const renamed = await renameVaultDirectory(vaultRoot, entry.relativePath, nextName);
-
-      applyRenamedDirectoryToOpenState(entry, renamed);
-      await updateStarredFiles((path) =>
-        path === entry.relativePath || path.startsWith(`${entry.relativePath}/`)
-          ? `${renamed.relativePath}${path.slice(entry.relativePath.length)}`
-          : path,
-      );
-      await loadEntries(
-        vaultRoot,
-        rebasePathAfterDirectoryRename(currentDir, entry, renamed),
-      );
-      await rebuildWikiLinkIndex(vaultRoot);
-      setStatus(`Renamed folder ${entry.name} to ${renamed.name}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function renameFileFromContextMenu(entry: VaultEntry, nextName: string) {
-    if (!vaultRoot || entry.isDir) {
-      return;
-    }
-
-    if (!nextName?.trim()) {
-      return;
-    }
-
-    try {
-      snapshotActiveTab();
-      const renamed = await renameVaultFile(vaultRoot, entry.relativePath, nextName);
-      const renamedFile = {
-        name: renamed.name,
-        relativePath: renamed.relativePath,
-      };
-
-      replaceOpenFilePath(entry.relativePath, renamedFile);
-      replaceFileInWikiLinkIndex(entry.relativePath, renamedFile);
-      moveAiBuilderHistoryKey(entry.relativePath, renamedFile.relativePath);
-      await updateStarredFiles((path) =>
-        path === entry.relativePath ? renamedFile.relativePath : path,
-      );
-      await loadEntries(vaultRoot, currentDir);
-      setStatus(`Renamed ${entry.name} to ${renamed.name}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function moveFolderFromContextMenu(entry: VaultEntry, destinationDirectory: string) {
-    if (!vaultRoot || !entry.isDir) {
-      return;
-    }
-
-    if (!destinationDirectory?.trim()) {
-      return;
-    }
-
-    try {
-      snapshotActiveTab();
-      const moved = await moveVaultDirectory(
-        vaultRoot,
-        entry.relativePath,
-        destinationDirectory,
-      );
-      const nextCurrentDir = rebasePathAfterDirectoryRename(currentDir, entry, moved);
-
-      applyRenamedDirectoryToOpenState(entry, moved);
-      await updateStarredFiles((path) =>
-        path === entry.relativePath || path.startsWith(`${entry.relativePath}/`)
-          ? `${moved.relativePath}${path.slice(entry.relativePath.length)}`
-          : path,
-      );
-      await loadEntries(vaultRoot, nextCurrentDir);
-      await rebuildWikiLinkIndex(vaultRoot);
-      setStatus(`Moved folder ${entry.name} to ${moved.relativePath}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function moveFileFromContextMenu(entry: VaultEntry, destinationDirectory: string) {
-    if (!vaultRoot || entry.isDir) {
-      return;
-    }
-
-    try {
-      snapshotActiveTab();
-      const moved = await moveVaultFile(vaultRoot, entry.relativePath, destinationDirectory);
-      const movedFile = {
-        name: moved.name,
-        relativePath: moved.relativePath,
-      };
-
-      replaceOpenFilePath(entry.relativePath, movedFile);
-      replaceFileInWikiLinkIndex(entry.relativePath, movedFile);
-      await updateStarredFiles((path) =>
-        path === entry.relativePath ? movedFile.relativePath : path,
-      );
-      await loadEntries(vaultRoot, currentDir);
-      setStatus(`Moved ${entry.name} to ${moved.relativePath}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function deleteFileFromContextMenu(entry: VaultEntry) {
-    if (!vaultRoot || entry.isDir) {
-      return;
-    }
-
-    try {
-      snapshotActiveTab();
-      await deleteVaultFile(vaultRoot, entry.relativePath);
-
-      removeDeletedFileFromOpenState(entry.relativePath);
-      removeFileFromWikiLinkIndex(entry.relativePath);
-      await updateStarredFiles((path) => (path === entry.relativePath ? null : path));
-      await loadEntries(vaultRoot, currentDir);
-      setStatus(`Deleted ${entry.relativePath}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function revealEntryFromContextMenu(entry: VaultEntry) {
-    if (!vaultRoot) {
-      return;
-    }
-
-    setFolderContextMenu(null);
-
-    try {
-      await revealItemInDir(vaultEntryPath(vaultRoot, entry.relativePath));
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function openEntryFromContextMenu(entry: VaultEntry) {
-    if (!vaultRoot) {
-      return;
-    }
-
-    setFolderContextMenu(null);
-
-    try {
-      await openPath(vaultEntryPath(vaultRoot, entry.relativePath));
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function submitFolderActionDialog(event: ReactFormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!folderActionDialog) {
-      return;
-    }
-
-    const value = folderActionDialog.value.trim();
-
-    if (
-      folderActionDialog.action !== "delete-file" &&
-      !isMoveAction(folderActionDialog.action) &&
-      !value
-    ) {
-      return;
-    }
-
-    const { action, entry } = folderActionDialog;
-
-    setFolderActionDialog(null);
-
-    if (action === "create-note") {
-      await createNoteFromFolderMenu(entry, value);
-    } else if (action === "create-canvas") {
-      await createCanvasFromFolderMenu(entry, value);
-    } else if (action === "create-folder") {
-      await createFolderFromFolderMenu(entry, value);
-    } else if (action === "move-folder") {
-      await moveFolderFromContextMenu(entry, value);
-    } else if (action === "rename-file") {
-      await renameFileFromContextMenu(entry, value);
-    } else if (action === "move-file") {
-      await moveFileFromContextMenu(entry, value);
-    } else if (action === "delete-file") {
-      await deleteFileFromContextMenu(entry);
-    } else {
-      await renameFolderFromFolderMenu(entry, value);
-    }
   }
 
   async function enterDirectory(relativePath: string) {

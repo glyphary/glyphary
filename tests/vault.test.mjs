@@ -139,6 +139,7 @@ test("date templates expand centrally for tidbit paths", () => {
 
 test("vault documents open with one click by default and can require double-clicking", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const vaultFileOperations = readFileSync("src/vault/file-operations.ts", "utf8");
   const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const folderTree = readFileSync("src/vault/VaultFolderTree.tsx", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
@@ -170,6 +171,7 @@ test("vault documents open with one click by default and can require double-clic
 
 test("interface settings group optional Files header actions", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const vaultFileOperations = readFileSync("src/vault/file-operations.ts", "utf8");
   const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
   const toolbarIcons = readFileSync("src/toolbar-icons.tsx", "utf8");
@@ -205,6 +207,7 @@ test("interface settings group optional Files header actions", () => {
 
 test("vault onboarding hides document and drawer chrome", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const vaultFileOperations = readFileSync("src/vault/file-operations.ts", "utf8");
   const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const titlebar = app.slice(
     app.indexOf('<header className="titlebar"'),
@@ -308,6 +311,7 @@ test("dropped image names follow the pasted-image timestamp convention", () => {
 
 test("calendar filenames match the requested note naming scheme and dot marker keys", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const vaultFileOperations = readFileSync("src/vault/file-operations.ts", "utf8");
   const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
@@ -508,6 +512,7 @@ test("workspace sessions are persisted independently per vault", () => {
 
 test("vault drawer exposes files search recent and task views", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const vaultFileOperations = readFileSync("src/vault/file-operations.ts", "utf8");
   const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
   const commandPalette = readFileSync("src/command-palette/commands.ts", "utf8");
@@ -646,8 +651,8 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.doesNotMatch(app, /className="file-context"/);
   assert.match(app, /import \{ openPath, openUrl, revealItemInDir \} from "@tauri-apps\/plugin-opener"/);
   assert.match(fileActions, /export function vaultEntryPath/);
-  assert.match(app, /async function revealEntryFromContextMenu/);
-  assert.match(app, /async function openEntryFromContextMenu/);
+  assert.match(vaultFileOperations, /async function revealEntryFromContextMenu/);
+  assert.match(vaultFileOperations, /async function openEntryFromContextMenu/);
   assert.match(app, /displayVaultRelativePath\(activeFile\?\.relativePath \?\? currentDir, vaultRoot\)/);
   assert.match(editorPane, /frontmatterScalarValue\(paneMetaHeader, "banner"\)/);
   assert.match(editorPane, /frontmatterEntries\(paneMetaHeader, paneMetaDelimiter\)/);
@@ -693,6 +698,7 @@ test("vault drawer exposes files search recent and task views", () => {
 
 test("vault rows expose context menu actions for folders and files", () => {
   const app = readFileSync("src/App.tsx", "utf8");
+  const vaultFileOperations = readFileSync("src/vault/file-operations.ts", "utf8");
   const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
   const fileActions = readFileSync("src/vault/file-actions.ts", "utf8");
   const vaultContextMenu = readFileSync("src/vault/VaultContextMenu.tsx", "utf8");
@@ -718,14 +724,14 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(app, /window\.addEventListener\("pointerdown", closeMenuOnPrimaryPointerDown\)/);
   assert.match(app, /event\.button === 0/);
   assert.match(vaultContextMenu, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
-  assert.match(app, /createNoteFromFolderMenu/);
-  assert.match(app, /createCanvasFromFolderMenu/);
-  assert.match(app, /createFolderFromFolderMenu/);
-  assert.match(app, /renameFolderFromFolderMenu/);
-  assert.match(app, /renameFileFromContextMenu/);
-  assert.match(app, /moveFolderFromContextMenu/);
-  assert.match(app, /moveFileFromContextMenu/);
-  assert.match(app, /deleteFileFromContextMenu/);
+  assert.match(vaultFileOperations, /createNoteFromFolderMenu/);
+  assert.match(vaultFileOperations, /createCanvasFromFolderMenu/);
+  assert.match(vaultFileOperations, /createFolderFromFolderMenu/);
+  assert.match(vaultFileOperations, /renameFolderFromFolderMenu/);
+  assert.match(vaultFileOperations, /renameFileFromContextMenu/);
+  assert.match(vaultFileOperations, /moveFolderFromContextMenu/);
+  assert.match(vaultFileOperations, /moveFileFromContextMenu/);
+  assert.match(vaultFileOperations, /deleteFileFromContextMenu/);
   assert.match(vaultTree, /function VaultFolderTree/);
   assert.match(vaultTree, /isMoveFolderDestinationDisabled/);
   assert.match(vaultTree, /expandedFolderPathsForSelection/);
