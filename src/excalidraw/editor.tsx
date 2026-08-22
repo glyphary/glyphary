@@ -117,44 +117,84 @@ export function isExcalidrawTarget(target: string) {
   return target.toLowerCase().endsWith(".excalidraw");
 }
 
+// One cached outcome per target - either exported SVG markup or the failure
+// message. Node views remount on every tab rehydrate; the cache keeps
+// remounts from flashing "Loading drawing..." (and failures from alternating
+// with it, which is how the Windows missing-file bug presented).
+type ExcalidrawPreviewOutcome = { svg: string } | { failure: string };
+const excalidrawPreviewCache = new Map<string, ExcalidrawPreviewOutcome>();
+
+type ExcalidrawPreviewDisplay =
+  | { kind: "loading" }
+  | { kind: "ready"; svg: string }
+  | { kind: "empty" }
+  | { kind: "error"; message: string };
+
+function previewDisplay(
+  outcome: ExcalidrawPreviewOutcome | undefined,
+): ExcalidrawPreviewDisplay {
+  if (!outcome) {
+    return { kind: "loading" };
+  }
+
+  if ("failure" in outcome) {
+    return { kind: "error", message: outcome.failure };
+  }
+
+  return outcome.svg ? { kind: "ready", svg: outcome.svg } : { kind: "empty" };
+}
+
 function ExcalidrawEmbedView(props: NodeViewProps) {
   const target = String(props.node.attrs.target ?? "");
-  const [previewSvg, setPreviewSvg] = useState("");
-  const [previewState, setPreviewState] = useState<"loading" | "ready" | "empty" | "error">(
-    "loading",
+  const [preview, setPreview] = useState<ExcalidrawPreviewDisplay>(() =>
+    previewDisplay(excalidrawPreviewCache.get(target)),
   );
   const options = props.extension.options as ExcalidrawEmbedOptions;
 
   useEffect(() => {
     if (!isExcalidrawTarget(target)) {
-      setPreviewSvg("");
-      setPreviewState("error");
       return;
     }
 
     let cancelled = false;
     const loadPreview = () => {
-      setPreviewState("loading");
-      setPreviewSvg("");
+      // While an outcome is cached, refresh silently: the old preview stays
+      // visible until the new one is ready instead of flashing empty.
+      if (!excalidrawPreviewCache.has(target)) {
+        setPreview({ kind: "loading" });
+      }
       options
         .loadPreview(target)
         .then((markup) => {
-          if (cancelled) {
-            return;
-          }
+          excalidrawPreviewCache.set(target, { svg: markup });
 
-          setPreviewSvg(markup);
-          setPreviewState(markup ? "ready" : "empty");
-        })
-        .catch(() => {
           if (!cancelled) {
-            setPreviewState("error");
+            setPreview(previewDisplay({ svg: markup }));
+          }
+        })
+        .catch((error: unknown) => {
+          // Keep the real failure text; a generic label made the Windows
+          // missing-file bug undiagnosable.
+          const message = error instanceof Error ? error.message : String(error);
+
+          excalidrawPreviewCache.set(target, { failure: message });
+
+          if (!cancelled) {
+            setPreview({ kind: "error", message });
           }
         });
     };
     const refreshPreview = (event: Event) => {
       if (!(event instanceof CustomEvent) || event.detail?.target !== target) {
         return;
+      }
+
+      // A cached failure must not suppress the retry's loading state, while a
+      // cached success should keep rendering during the silent refresh.
+      const cached = excalidrawPreviewCache.get(target);
+
+      if (cached && "failure" in cached) {
+        excalidrawPreviewCache.delete(target);
       }
 
       loadPreview();
@@ -181,17 +221,17 @@ function ExcalidrawEmbedView(props: NodeViewProps) {
       onDoubleClick={() => options.openDrawing(target)}
     >
       <div className="excalidraw-embed-preview">
-        {previewState === "ready" ? (
+        {preview.kind === "ready" ? (
           <div
             className="excalidraw-embed-svg"
-            dangerouslySetInnerHTML={{ __html: previewSvg }}
+            dangerouslySetInnerHTML={{ __html: preview.svg }}
           />
         ) : (
           <div className="excalidraw-embed-empty">
-            {previewState === "loading"
+            {preview.kind === "loading"
               ? "Loading drawing..."
-              : previewState === "error"
-                ? "Drawing preview unavailable"
+              : preview.kind === "error"
+                ? `Drawing preview unavailable: ${preview.message || "unknown error"}`
                 : "No saved drawing elements"}
           </div>
         )}
@@ -302,12 +342,15 @@ export function createExcalidrawEmbedExtension(options: ExcalidrawEmbedOptions) 
 
 export function ExcalidrawDialog({
   dialog,
+  dirty,
   onApi,
   onChange,
   onClose,
   onSave,
+  savedNotice,
 }: {
   dialog: ExcalidrawDialogState | null;
+  dirty: boolean;
   onApi: (api: ExcalidrawImperativeAPI) => void;
   onChange: (
     elements: readonly ExcalidrawElement[],
@@ -316,6 +359,7 @@ export function ExcalidrawDialog({
   ) => void;
   onClose: () => void;
   onSave: () => void;
+  savedNotice: boolean;
 }) {
   if (!dialog) {
     return null;
@@ -336,7 +380,17 @@ export function ExcalidrawDialog({
             <p>{dialog.relativePath}</p>
           </div>
           <div className="excalidraw-dialog-actions">
-            <button className="inline-action" type="button" onClick={onSave}>
+            {savedNotice && !dirty ? (
+              <span className="excalidraw-save-note" role="status">
+                Saved
+              </span>
+            ) : null}
+            <button
+              className="inline-action"
+              disabled={!dirty}
+              type="button"
+              onClick={onSave}
+            >
               Save Drawing
             </button>
             <button className="inline-action" type="button" onClick={onClose}>

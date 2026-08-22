@@ -28,6 +28,9 @@ function loadMermaidRenderer() {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: "strict",
+      // On parse errors mermaid injects a full-width "bomb" SVG into
+      // document.body; the widget shows its own inline message instead.
+      suppressErrorRendering: true,
       theme: "default",
     });
 
@@ -206,6 +209,11 @@ function renderMermaidDiagram(render: HTMLElement, source: string, renderId: str
       bindFunctions?.(body);
     })
     .catch((error: unknown) => {
+      // A failed render can leave mermaid's temporary measuring element
+      // attached to document.body; drop it regardless of render staleness.
+      document.getElementById(`d${renderId}`)?.remove();
+      document.getElementById(renderId)?.remove();
+
       if (render.dataset.mermaidRenderId !== renderId) {
         return;
       }

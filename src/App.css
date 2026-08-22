@@ -6338,6 +6338,12 @@ body.workspace-resizing * {
   gap: 8px;
 }
 
+.excalidraw-save-note {
+  color: var(--muted-strong);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
 .excalidraw-editor-shell {
   min-width: 0;
   min-height: 0;

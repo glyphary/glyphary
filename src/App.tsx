@@ -789,6 +789,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   } = useWikiLinkState();
   const [excalidrawDialog, setExcalidrawDialog] = useState<ExcalidrawDialogState | null>(null);
   const [excalidrawDirty, setExcalidrawDirty] = useState(false);
+  const [excalidrawSavedNotice, setExcalidrawSavedNotice] = useState(false);
+  // Excalidraw's onChange fires for panning, pointer state, and post-save
+  // re-renders, so a boolean "changed" flag would mark saved drawings dirty
+  // again immediately. Dirty means "element versions differ from last save".
+  const excalidrawSavedSceneVersionRef = useRef(0);
   const [imagePreview, setImagePreview] = useState<ImagePreviewState | null>(null);
   const [folderContextMenu, setFolderContextMenu] = useState<FolderContextMenuState | null>(null);
   const [tableContextMenu, setTableContextMenu] = useState<TableContextMenuState | null>(null);
@@ -2339,6 +2344,27 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     return `${assetDirectory.replace(/\/+$/, "")}/drawings`;
   }
 
+  // Mirrors excalidraw's getSceneVersion; the package is lazy-loaded, so it
+  // must not be imported just for this sum.
+  function excalidrawSceneVersion(elements: readonly ExcalidrawElement[]) {
+    return elements.reduce((version, element) => version + element.version, 0);
+  }
+
+  function handleExcalidrawSceneChange(
+    elements: readonly ExcalidrawElement[],
+    appState: AppState,
+    files: BinaryFiles,
+  ) {
+    excalidrawSceneRef.current = { elements, appState, files };
+    const dirty =
+      excalidrawSceneVersion(elements) !== excalidrawSavedSceneVersionRef.current;
+
+    setExcalidrawDirty(dirty);
+    if (dirty) {
+      setExcalidrawSavedNotice(false);
+    }
+  }
+
   async function loadExcalidrawPreview(target: string) {
     const root = vaultRootRef.current;
 
@@ -2370,7 +2396,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         appState: restored.appState,
         files: restored.files,
       };
+      excalidrawSavedSceneVersionRef.current = excalidrawSceneVersion(restored.elements);
       setExcalidrawDirty(false);
+      setExcalidrawSavedNotice(false);
       setExcalidrawDialog({
         relativePath: file.relativePath,
         name: file.name,
@@ -2407,19 +2435,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           detail: { target: excalidrawDialog.relativePath },
         }),
       );
+      // Do not rewrite dialog initialData here: that re-render made Excalidraw
+      // fire onChange and mark the freshly saved drawing dirty again.
+      excalidrawSavedSceneVersionRef.current = excalidrawSceneVersion(elements);
       setExcalidrawDirty(false);
-      setExcalidrawDialog((dialog) =>
-        dialog
-          ? {
-              ...dialog,
-              initialData: {
-                elements,
-                appState,
-                files,
-              },
-            }
-          : dialog,
-      );
+      setExcalidrawSavedNotice(true);
       setStatus(
         `Saved drawing ${excalidrawDialog.relativePath} (${visibleElementCount} visible element${
           visibleElementCount === 1 ? "" : "s"
@@ -2445,6 +2465,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     excalidrawApiRef.current = null;
     setExcalidrawDialog(null);
     setExcalidrawDirty(false);
+    setExcalidrawSavedNotice(false);
   }
 
   function openExcalidrawCreateDialog() {
@@ -5088,9 +5109,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
   };
 
-  // Run `proceed` immediately, or show a one-time onboarding tip first and
-  // run it on dismissal. Reusable for any feature that deserves a first-use
-  // explanation: withOnboardingTip({id, title, body}, () => doTheThing()).
+  // Run `proceed` immediately, or intercept it once with a first-use tip
+  // whose dismissal resumes the action.
   function withOnboardingTip(tip: OnboardingTip, proceed: () => void) {
     // Read enablement fresh from localStorage so the settings window's toggle
     // applies to this window without any cross-window sync.
@@ -8377,6 +8397,19 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
             ),
         },
         {
+          id: "ai-diagram-selection",
+          title: "AI: Diagram from selection or note",
+          description: "Draw the selection or whole note as an inline Mermaid diagram",
+          run: () =>
+            runAiSelectionOrDocumentCommand(
+              "AI: Diagram from selection or note",
+              // Mermaid instead of an image model: the diagram stays editable,
+              // renders natively, and text labels never garble.
+              "Draw the structure of the selected Markdown as a Mermaid diagram. Pick the most fitting type: flowchart for processes and decisions, sequenceDiagram for interactions between parties, stateDiagram-v2 for states and transitions. Wrap every node label in double quotes so punctuation cannot break the syntax. Return only one fenced ```mermaid code block with valid Mermaid inside, and nothing else.",
+              "insert-below-selection",
+            ),
+        },
+        {
           id: "ai-generate-title",
           title: "AI: Generate title",
           description: "Suggest a concise title from the selection or current note",
@@ -10857,10 +10890,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         onApi={(api) => {
           excalidrawApiRef.current = api;
         }}
-        onChange={(elements, appState, files) => {
-          excalidrawSceneRef.current = { elements, appState, files };
-          setExcalidrawDirty(true);
-        }}
+        dirty={excalidrawDirty}
+        savedNotice={excalidrawSavedNotice}
+        onChange={handleExcalidrawSceneChange}
         onClose={closeExcalidrawDialog}
         onSave={saveExcalidrawDrawing}
       />

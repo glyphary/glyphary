@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Glyphary</title>
+    <script>
+      // Without this, excalidraw fetches fonts from the esm.sh CDN and every
+      // preview export fails offline. /fonts is populated by
+      // scripts/copy-excalidraw-fonts.mjs.
+      window.EXCALIDRAW_ASSET_PATH = "/";
+    </script>
     <style>
       html,
       body,

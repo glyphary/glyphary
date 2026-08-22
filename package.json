@@ -10,7 +10,9 @@
     "e2e:tauri": "node scripts/e2e-tauri-smoke.mjs",
     "e2e:tauri:self": "node scripts/e2e-tauri-smoke.mjs --self-test",
     "test:frontend": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test tests/*.test.mjs",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "predev": "node scripts/copy-excalidraw-fonts.mjs",
+    "prebuild": "node scripts/copy-excalidraw-fonts.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",

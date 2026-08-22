@@ -486,6 +486,35 @@ test("onboarding tips persist seen ids and survive corrupted storage", () => {
   assert.match(settingsDialog, /hintsResetDone/);
 });
 
+test("excalidraw dirty tracking, save feedback, and preview cache", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const excalidrawEditor = readFileSync("src/excalidraw/editor.tsx", "utf8");
+
+  // Dirty means "element versions differ from the saved baseline", because
+  // Excalidraw's onChange also fires for pan/zoom and post-save re-renders.
+  assert.match(app, /function excalidrawSceneVersion/);
+  assert.match(app, /excalidrawSceneVersion\(elements\) !== excalidrawSavedSceneVersionRef\.current/);
+  assert.match(app, /excalidrawSavedSceneVersionRef\.current = excalidrawSceneVersion\(restored\.elements\)/);
+  assert.match(app, /excalidrawSavedSceneVersionRef\.current = excalidrawSceneVersion\(elements\)/);
+  // Saving confirms inside the dialog and disables Save until the next edit.
+  assert.match(excalidrawEditor, /excalidraw-save-note/);
+  assert.match(excalidrawEditor, /disabled=\{!dirty\}/);
+  // Remounts render the cached preview instantly instead of flashing the
+  // loading state on every return to the note.
+  assert.match(excalidrawEditor, /const excalidrawPreviewCache = new Map/);
+  // One outcome cache: successes render instantly on remount, failures show a
+  // steady error instead of alternating with the loading state.
+  assert.match(excalidrawEditor, /excalidrawPreviewCache\.set\(target, \{ svg: markup \}\)/);
+  assert.match(excalidrawEditor, /excalidrawPreviewCache\.set\(target, \{ failure: message \}\)/);
+  // Fonts are self-hosted: without EXCALIDRAW_ASSET_PATH excalidraw fetches
+  // from esm.sh at runtime and offline machines fail every preview export.
+  const indexHtml = readFileSync("index.html", "utf8");
+  const packageJson = readFileSync("package.json", "utf8");
+  assert.match(indexHtml, /window\.EXCALIDRAW_ASSET_PATH = "\/"/);
+  assert.match(packageJson, /"prebuild": "node scripts\/copy-excalidraw-fonts\.mjs"/);
+  assert.match(packageJson, /"predev": "node scripts\/copy-excalidraw-fonts\.mjs"/);
+});
+
 test("focus mode hides workspace chrome via palette and native menu", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const css = readFileSync("src/App.css", "utf8");
@@ -3199,6 +3228,14 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(app, /id: "ai-summarize-selection"/);
   assert.match(app, /id: "ai-extract-tasks-selection"/);
   assert.match(app, /id: "ai-create-outline-selection"/);
+  // The diagram command emits an editable mermaid block below the source
+  // text (never replacing it) and works on the selection or the whole note.
+  assert.match(app, /id: "ai-diagram-selection"/);
+  assert.match(
+    app,
+    /id: "ai-diagram-selection",[\s\S]{0,900}?runAiSelectionOrDocumentCommand\([\s\S]{0,900}?"insert-below-selection",/,
+  );
+  assert.match(app, /Return only one fenced ```mermaid code block/);
   assert.match(app, /id: "ai-generate-title"/);
   assert.match(app, /id: "ai-continue-writing"/);
   assert.match(app, /id: "ai-explain-selection"/);
@@ -3526,6 +3563,10 @@ test("mermaid code blocks render diagrams while keeping fenced source editable",
   assert.match(codeBlockRenderers, /function loadMermaidRenderer/);
   assert.match(codeBlockRenderers, /import\("mermaid"\)\.then/);
   assert.match(codeBlockRenderers, /mermaid\.initialize\(\{/);
+  // Parse errors stay inside the widget; mermaid's body-level "bomb" SVG is
+  // suppressed and any leftover measuring element is removed.
+  assert.match(codeBlockRenderers, /suppressErrorRendering: true/);
+  assert.match(codeBlockRenderers, /getElementById\(`d\$\{renderId\}`\)\?\.remove\(\)/);
   assert.match(codeBlockRenderers, /function createMermaidCodeWidget/);
   assert.match(codeBlockRenderers, /function renderMermaidDiagram/);
   assert.match(codeBlockRenderers, /mermaid\.render\(renderId, source\)/);
