@@ -71,10 +71,11 @@ test("excalidraw dirty tracking, save feedback, and preview cache", () => {
 
   // Dirty means "element versions differ from the saved baseline", because
   // Excalidraw's onChange also fires for pan/zoom and post-save re-renders.
-  assert.match(app, /function excalidrawSceneVersion/);
-  assert.match(app, /excalidrawSceneVersion\(elements\) !== excalidrawSavedSceneVersionRef\.current/);
-  assert.match(app, /excalidrawSavedSceneVersionRef\.current = excalidrawSceneVersion\(restored\.elements\)/);
-  assert.match(app, /excalidrawSavedSceneVersionRef\.current = excalidrawSceneVersion\(elements\)/);
+  const useExcalidraw = readFileSync("src/excalidraw/use-excalidraw.ts", "utf8");
+  assert.match(useExcalidraw, /function excalidrawSceneVersion/);
+  assert.match(useExcalidraw, /excalidrawSceneVersion\(elements\) !== savedSceneVersionRef\.current/);
+  assert.match(useExcalidraw, /savedSceneVersionRef\.current = excalidrawSceneVersion\(restored\.elements\)/);
+  assert.match(useExcalidraw, /savedSceneVersionRef\.current = excalidrawSceneVersion\(elements\)/);
   // Saving confirms inside the dialog and disables Save until the next edit.
   assert.match(excalidrawEditor, /excalidraw-save-note/);
   assert.match(excalidrawEditor, /disabled=\{!dirty\}/);

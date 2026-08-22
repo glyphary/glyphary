@@ -25,12 +25,6 @@ import {
   checkAccessibilityPermission,
   requestAccessibilityPermission,
 } from "tauri-plugin-macos-permissions-api";
-import type {
-  AppState,
-  BinaryFiles,
-  ExcalidrawImperativeAPI,
-} from "@excalidraw/excalidraw/types";
-import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import "@excalidraw/excalidraw/index.css";
 import { useEditor } from "@tiptap/react";
 import { baseTitle, isBasePath } from "./base/base";
@@ -76,7 +70,6 @@ import {
   parentDirectory,
 } from "./lib/paths";
 import {
-  defaultExcalidrawDirectory,
   defaultDrawerOpen,
   defaultInspectorDrawerWidth,
   defaultVaultDrawerOpen,
@@ -102,7 +95,6 @@ import {
   type TocEntry,
 } from "./lib/markdown";
 import {
-  excalidrawFileNameForTitle,
   fileNameForDroppedImage,
   fileNameForDroppedPath,
   imageFilesFromDataTransfer,
@@ -184,6 +176,7 @@ import {
   selectedGalleryImages,
 } from "./editor/commands";
 import { EditorPane, type ToolbarAction } from "./editor/EditorPane";
+import { useExcalidraw } from "./excalidraw/use-excalidraw";
 import {
   findNativeDropTarget,
   focusNativeDropTarget,
@@ -222,17 +215,7 @@ import {
   type PageSearchMatch,
 } from "./search/page-search";
 import { visibleVaultSearchResults } from "./search/vault-search";
-import {
-  ExcalidrawCreateDialog,
-  ExcalidrawDialog,
-  emptyExcalidrawScene,
-  excalidrawPreviewRefreshEvent,
-  excalidrawSceneToSvgMarkup,
-  isExcalidrawTarget,
-  parseExcalidrawScene,
-  restoredExcalidrawScene,
-  type ExcalidrawDialogState,
-} from "./excalidraw/editor";
+import { ExcalidrawCreateDialog, ExcalidrawDialog } from "./excalidraw/editor";
 import { codeBlockLanguages, createGlypharyEditorOptions } from "./editor/editor-options";
 import {
   commandPalettePlaceholder,
@@ -276,7 +259,6 @@ import {
   cloneGithubVault,
   createCanvasInDirectory,
   createDirectoryInDirectory,
-  createExcalidrawFile,
   createNoteInDirectory,
   createVaultMarkdownFile,
   deleteVaultFile,
@@ -746,9 +728,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [aiBuilderHistory, setAiBuilderHistory] = useState<AiBuilderHistoryStore>({
     entries: {},
   });
-  const [excalidrawCreateDialogOpen, setExcalidrawCreateDialogOpen] = useState(false);
-  const [excalidrawCreateNameDraft, setExcalidrawCreateNameDraft] = useState("Drawing");
-  const [excalidrawCreateSubmitting, setExcalidrawCreateSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchMode, setSearchMode] = useState<SearchMode>("filename");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
@@ -787,13 +766,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     wikiLinkSearchOpen,
     wikiLinkSearchQuery,
   } = useWikiLinkState();
-  const [excalidrawDialog, setExcalidrawDialog] = useState<ExcalidrawDialogState | null>(null);
-  const [excalidrawDirty, setExcalidrawDirty] = useState(false);
-  const [excalidrawSavedNotice, setExcalidrawSavedNotice] = useState(false);
-  // Excalidraw's onChange fires for panning, pointer state, and post-save
-  // re-renders, so a boolean "changed" flag would mark saved drawings dirty
-  // again immediately. Dirty means "element versions differ from last save".
-  const excalidrawSavedSceneVersionRef = useRef(0);
   const [imagePreview, setImagePreview] = useState<ImagePreviewState | null>(null);
   const [folderContextMenu, setFolderContextMenu] = useState<FolderContextMenuState | null>(null);
   const [tableContextMenu, setTableContextMenu] = useState<TableContextMenuState | null>(null);
@@ -851,7 +823,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   // this ref lets the selected option be kept visible without stealing focus.
   const commandPaletteResultsRef = useRef<HTMLDivElement | null>(null);
   const richLinkInputRef = useRef<HTMLInputElement | null>(null);
-  const excalidrawCreateInputRef = useRef<HTMLInputElement | null>(null);
   const pageNameRef = useRef("Untitled note");
   const metaHeaderRef = useRef("");
   const metaDelimiterRef = useRef<MarkdownParts["metaDelimiter"]>(defaultMetaDelimiter);
@@ -877,18 +848,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   );
   const clearRecentFilesRef = useRef<() => void>(() => undefined);
   const openPageSearchRef = useRef<() => void>(() => undefined);
-  const openExcalidrawDrawingRef = useRef<(target: string) => void>(() => undefined);
-  const loadExcalidrawPreviewRef = useRef<(target: string) => Promise<string>>(async () => "");
-  const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null);
-  const excalidrawSceneRef = useRef<{
-    elements: readonly ExcalidrawElement[];
-    appState: AppState | Partial<AppState>;
-    files: BinaryFiles;
-  }>({
-    elements: [],
-    appState: {},
-    files: {},
-  });
   const vaultRootRef = useRef("");
   const vaultSettingsRef = useRef<VaultSettings>({
     assetDirectory: defaultVaultAssetDirectory,
@@ -906,6 +865,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     ai: defaultAiSettings,
     canvas: defaultCanvasSettings,
     theme: null,
+  });
+  const excalidraw = useExcalidraw({
+    confirmDestructiveAction,
+    getEditor: () => activeEditorRef.current,
+    refreshEntries: () => loadEntries(vaultRoot, currentDir),
+    setStatus,
+    vaultRoot,
+    vaultRootRef,
+    vaultSettingsRef,
   });
   // Track only properties we applied from the theme builder so switching vaults
   // or resetting a theme can remove stale inline CSS variables.
@@ -2333,182 +2301,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       .run();
   }
 
-  function excalidrawDrawingDirectory() {
-    const assetDirectory =
-      vaultSettingsRef.current.assetDirectory.trim() || defaultVaultAssetDirectory;
-
-    if (assetDirectory === defaultVaultAssetDirectory) {
-      return defaultExcalidrawDirectory;
-    }
-
-    return `${assetDirectory.replace(/\/+$/, "")}/drawings`;
-  }
-
-  // Mirrors excalidraw's getSceneVersion; the package is lazy-loaded, so it
-  // must not be imported just for this sum.
-  function excalidrawSceneVersion(elements: readonly ExcalidrawElement[]) {
-    return elements.reduce((version, element) => version + element.version, 0);
-  }
-
-  function handleExcalidrawSceneChange(
-    elements: readonly ExcalidrawElement[],
-    appState: AppState,
-    files: BinaryFiles,
-  ) {
-    excalidrawSceneRef.current = { elements, appState, files };
-    const dirty =
-      excalidrawSceneVersion(elements) !== excalidrawSavedSceneVersionRef.current;
-
-    setExcalidrawDirty(dirty);
-    if (dirty) {
-      setExcalidrawSavedNotice(false);
-    }
-  }
-
-  async function loadExcalidrawPreview(target: string) {
-    const root = vaultRootRef.current;
-
-    if (!root || !isExcalidrawTarget(target)) {
-      return "";
-    }
-
-    const file = await readVaultFile(root, target);
-
-    return excalidrawSceneToSvgMarkup(parseExcalidrawScene(file.content));
-  }
-
-  async function openExcalidrawDrawing(target: string) {
-    const root = vaultRootRef.current;
-
-    if (!root || !isExcalidrawTarget(target)) {
-      setStatus("Open a vault before editing drawings");
-      return;
-    }
-
-    try {
-      const file = await readVaultFile(root, target);
-      const scene = parseExcalidrawScene(file.content);
-      const restored = await restoredExcalidrawScene(scene);
-
-      excalidrawApiRef.current = null;
-      excalidrawSceneRef.current = {
-        elements: restored.elements,
-        appState: restored.appState,
-        files: restored.files,
-      };
-      excalidrawSavedSceneVersionRef.current = excalidrawSceneVersion(restored.elements);
-      setExcalidrawDirty(false);
-      setExcalidrawSavedNotice(false);
-      setExcalidrawDialog({
-        relativePath: file.relativePath,
-        name: file.name,
-        initialData: {
-          elements: restored.elements,
-          appState: restored.appState,
-          files: restored.files,
-        },
-      });
-      setStatus(`Editing drawing ${file.relativePath}`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function saveExcalidrawDrawing() {
-    if (!vaultRootRef.current || !excalidrawDialog) {
-      return;
-    }
-
-    try {
-      const { serializeAsJSON } = await import("@excalidraw/excalidraw");
-      const api = excalidrawApiRef.current;
-      const elements = api?.getSceneElementsIncludingDeleted() ?? excalidrawSceneRef.current.elements;
-      const visibleElementCount =
-        api?.getSceneElements().length ?? elements.filter((element) => !element.isDeleted).length;
-      const appState = api?.getAppState() ?? excalidrawSceneRef.current.appState;
-      const files = api?.getFiles() ?? excalidrawSceneRef.current.files;
-      const content = serializeAsJSON(elements, appState, files, "local");
-
-      await writeVaultFile(vaultRootRef.current, excalidrawDialog.relativePath, content);
-      window.dispatchEvent(
-        new CustomEvent(excalidrawPreviewRefreshEvent, {
-          detail: { target: excalidrawDialog.relativePath },
-        }),
-      );
-      // Do not rewrite dialog initialData here: that re-render made Excalidraw
-      // fire onChange and mark the freshly saved drawing dirty again.
-      excalidrawSavedSceneVersionRef.current = excalidrawSceneVersion(elements);
-      setExcalidrawDirty(false);
-      setExcalidrawSavedNotice(true);
-      setStatus(
-        `Saved drawing ${excalidrawDialog.relativePath} (${visibleElementCount} visible element${
-          visibleElementCount === 1 ? "" : "s"
-        })`,
-      );
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function closeExcalidrawDialog() {
-    if (excalidrawDirty) {
-      const confirmed = await confirmDestructiveAction(
-        "Close drawing without saving changes?",
-        { okLabel: "Close", title: "Close Drawing" },
-      );
-
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    excalidrawApiRef.current = null;
-    setExcalidrawDialog(null);
-    setExcalidrawDirty(false);
-    setExcalidrawSavedNotice(false);
-  }
-
-  function openExcalidrawCreateDialog() {
-    if (!vaultRoot || !editor) {
-      setStatus("Open a vault file before inserting a drawing");
-      return;
-    }
-
-    setExcalidrawCreateNameDraft("Drawing");
-    setExcalidrawCreateDialogOpen(true);
-  }
-
-  async function insertExcalidrawDrawing() {
-    if (!vaultRoot || !editor || excalidrawCreateSubmitting) {
-      return;
-    }
-
-    try {
-      setExcalidrawCreateSubmitting(true);
-      const relative = `${excalidrawDrawingDirectory()}/${excalidrawFileNameForTitle(
-        excalidrawCreateNameDraft,
-      )}`;
-      const file = await createExcalidrawFile(
-        vaultRoot,
-        relative,
-        JSON.stringify(emptyExcalidrawScene(), null, 2),
-      );
-
-      insertMarkdownAtCursor(editor, `![[${file.relativePath}]]`);
-      await loadEntries(vaultRoot, currentDir);
-      setExcalidrawCreateDialogOpen(false);
-      await openExcalidrawDrawing(file.relativePath);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setExcalidrawCreateSubmitting(false);
-    }
-  }
-
-  openExcalidrawDrawingRef.current = (target: string) => {
-    void openExcalidrawDrawing(target);
-  };
-  loadExcalidrawPreviewRef.current = loadExcalidrawPreview;
 
   async function importImageFiles(files: File[]) {
     if (!vaultRootRef.current || !activeFileRef.current) {
@@ -2563,9 +2355,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       getEditorGroup: () => editorGroupsRef.current[groupId],
       groupId,
       isHydrating: () => hydratingEditor.current[groupId],
-      loadExcalidrawPreview: (target) => loadExcalidrawPreviewRef.current(target),
+      loadExcalidrawPreview: excalidraw.stable.loadPreview,
       openCommandPalette: () => openCommandPaletteRootRef.current("flat"),
-      openExcalidrawDrawing: (target) => openExcalidrawDrawingRef.current(target),
+      openExcalidrawDrawing: excalidraw.stable.openDrawing,
       openWikiLinkSearch: () => openWikiLinkSearchRef.current(),
       queueImageImport,
       resolveVaultAssetSrc: (target) =>
@@ -5551,14 +5343,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     richLinkInputRef.current?.focus();
   }, [richLinkDialogOpen]);
 
-  useEffect(() => {
-    if (!excalidrawCreateDialogOpen) {
-      return;
-    }
-
-    excalidrawCreateInputRef.current?.focus();
-    excalidrawCreateInputRef.current?.select();
-  }, [excalidrawCreateDialogOpen]);
 
   useEffect(() => {
     if (!wikiLinkPicker) {
@@ -8493,7 +8277,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       id: "insert-excalidraw",
       title: "Insert Excalidraw drawing",
       description: "Create and embed an editable vault drawing",
-      run: openExcalidrawCreateDialog,
+      run: excalidraw.openCreateDialog,
     },
     {
       id: "insert-columns",
@@ -10886,15 +10670,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       ) : null}
       {settingsDialog}
       <ExcalidrawDialog
-        dialog={excalidrawDialog}
+        dialog={excalidraw.dialog}
         onApi={(api) => {
-          excalidrawApiRef.current = api;
+          excalidraw.apiRef.current = api;
         }}
-        dirty={excalidrawDirty}
-        savedNotice={excalidrawSavedNotice}
-        onChange={handleExcalidrawSceneChange}
-        onClose={closeExcalidrawDialog}
-        onSave={saveExcalidrawDrawing}
+        dirty={excalidraw.dirty}
+        savedNotice={excalidraw.savedNotice}
+        onChange={excalidraw.handleSceneChange}
+        onClose={excalidraw.closeDialog}
+        onSave={excalidraw.saveDrawing}
       />
       {imagePreview ? (
         <ModalDialog
@@ -11264,15 +11048,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         </ModalDialog>
       ) : null}
       <ExcalidrawCreateDialog
-        inputRef={excalidrawCreateInputRef}
-        name={excalidrawCreateNameDraft}
-        onCancel={() => setExcalidrawCreateDialogOpen(false)}
+        inputRef={excalidraw.createInputRef}
+        name={excalidraw.createNameDraft}
+        onCancel={() => excalidraw.setCreateDialogOpen(false)}
         onCreate={() => {
-          void insertExcalidrawDrawing();
+          void excalidraw.insertDrawing();
         }}
-        onNameChange={setExcalidrawCreateNameDraft}
-        open={excalidrawCreateDialogOpen}
-        submitting={excalidrawCreateSubmitting}
+        onNameChange={excalidraw.setCreateNameDraft}
+        open={excalidraw.createDialogOpen}
+        submitting={excalidraw.createSubmitting}
       />
       {richLinkDialogOpen ? (
         <ModalDialog
