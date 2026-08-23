@@ -3948,7 +3948,7 @@ dependencies = [
 
 [[package]]
 name = "tauri-app"
-version = "1.0.0-beta.7"
+version = "1.0.0-beta.8"
 dependencies = [
  "base64 0.22.1",
  "glyphary-folder-picker",
