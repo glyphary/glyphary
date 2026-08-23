@@ -269,6 +269,19 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
             ),
         },
         {
+          id: "ai-humanize-selection",
+          title: "AI: Humanize selection",
+          description: "Remove AI-sounding patterns while keeping every claim",
+          run: () =>
+            runAiSelectionCommand(
+              "AI: Humanize selection",
+              // Distilled from Wikipedia's "Signs of AI writing" (the
+              // humanizer ruleset): strip the tells, never touch the facts.
+              "Rewrite the selected Markdown so it reads like a person wrote it, without changing what it says. Keep every factual claim and do not invent any fact, name, number, or citation. Remove AI-writing patterns: inflated significance and promotional language; stock phrases like 'it's important to note', 'in today's fast-paced world', 'plays a vital role', 'stands as a testament'; vague attributions like 'experts say' or 'many believe'; formulaic rule-of-three lists and 'not only X but Y' constructions; essay-style intros and 'In conclusion' summaries; filler that restates the obvious; unnecessary passive voice; and chatbot artifacts. Reduce em dashes to at most one per paragraph. Vary sentence length naturally. Preserve the original tone, technical terms, Markdown structure, and links. Return only the rewritten Markdown.",
+              "replace-selection",
+            ),
+        },
+        {
           id: "ai-summarize-selection",
           title: "AI: Summarize selection",
           description: "Create a concise Markdown summary of the selected text",

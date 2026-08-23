@@ -228,6 +228,12 @@ test("AI commands use vault settings and review output before editing", () => {
   assert.match(paletteDefinitions, /id: "ai-tone-casual-selection"/);
   assert.match(paletteDefinitions, /id: "ai-tone-direct-selection"/);
   assert.match(paletteDefinitions, /id: "ai-tone-polished-selection"/);
+  // Humanize keeps every claim while stripping AI-writing tells.
+  assert.match(paletteDefinitions, /id: "ai-humanize-selection"/);
+  assert.match(
+    paletteDefinitions,
+    /id: "ai-humanize-selection",[\s\S]{0,1600}?do not invent any fact[\s\S]{0,1600}?"replace-selection",/,
+  );
   assert.match(paletteDefinitions, /id: "ai-summarize-selection"/);
   assert.match(paletteDefinitions, /id: "ai-extract-tasks-selection"/);
   assert.match(paletteDefinitions, /id: "ai-create-outline-selection"/);

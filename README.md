@@ -33,7 +33,7 @@ hides document-specific controls.
 - **Obsidian compatibility where it matters**: open local vaults, resolve wikilinks and aliases, edit frontmatter as structured properties, render banner images, support compatible daily notes, load approved CSS snippets, and fully open/edit Obsidian `.canvas` files.
 - **Vault library and favorites**: switch between remembered vaults with independent workspaces and optional covers, star any note, canvas, or Base, and drag starred files into your preferred order.
 - **Fast local search**: built-in vault search is extremely fast and does not require an external `rg` install.
-- **Command palette**: use quick commands for inserts, table actions, rich links, Excalidraw drawings, tidbits, canvas actions, and more.
+- **Command palette and slash menu**: use quick commands for inserts, table actions, rich links, Excalidraw drawings, tidbits, canvas actions, and more, or type `/` in a note for a caret-anchored menu of Insert and AI commands.
 - **Canvas support**: create, open, rename, edit, move, color, connect, and save Obsidian-compatible canvas nodes and edges.
 - **Base views**: open `.base` files to browse vault notes through table or gallery views backed by local frontmatter.
 - **Native desktop workflows**: use macOS menus and context menus, a separate Settings window, Finder/Open With integration, and file actions for opening, revealing, copying paths, creating, renaming, moving, or deleting.
@@ -41,7 +41,7 @@ hides document-specific controls.
 - **Daily notes and tidbits**: preview calendar notes on hover, open or create daily pages, create quick notes, and capture tidbits from anywhere when the app is running.
 - **AI assistance**: connect an OpenAI-compatible backend for writing help, summaries, outlines, title generation, and page building.
 - **Optional Vim mode**: use a practical Normal/Insert mode editing layer for keyboard-driven note work.
-- **Focused reading and editing**: switch between View and Edit chrome, close every tab when you want a blank workspace, and configure `Cmd+T` to reopen a chosen vault note.
+- **Focused reading and editing**: switch between View and Edit chrome, enter Focus Mode to hide everything but the note, close every tab when you want a blank workspace, and configure `Cmd+T` to reopen a chosen vault note.
 - **Themes and appearance**: choose light, dark, auto, glass, theme templates, CSS snippets, page banners, and editor treatments.
 - **Plugin system**: enable vault-local plugins that run fast inside a WASM sandbox.
 
@@ -113,6 +113,7 @@ canvas commands. Open it with `Cmd+P` or the command button beside Save.
 
 Content search groups matches by file, shows the match count for each result,
 and sorts the list from the most recently modified page down to older notes.
+Multi-word queries match notes that contain every word, in any order.
 
 On macOS, the native menu bar exposes File, Edit, Insert, Format, View, and
 Window commands with current enabled and checked states. Native context menus
@@ -136,8 +137,9 @@ page; clicking the thumbnail opens the original video URL.
 
 Glyphary supports AI through bring-your-own-key OpenAI-compatible backends. The
 regular AI commands can improve writing, fix grammar, change tone, summarize,
-expand, shorten, create outlines, generate titles, continue from the cursor, and
-explain selected text.
+expand, shorten, create outlines, generate titles, continue from the cursor,
+explain selected text, draw a selection or note as an editable Mermaid diagram,
+and humanize AI-sounding prose without changing its claims.
 
 The AI Builder is more ambitious: describe the page or section you want, and it
 can generate rich Markdown content that uses Glyphary-native blocks. It can also
@@ -151,10 +153,11 @@ through follow-up prompts.
 
 ## Appearance
 
-Glyphary supports light, dark, and auto modes, theme templates, approved CSS
-snippets, a theme builder, basic Obsidian-style theme compatibility, optional
-native glass, and a title-bar document proxy with Reveal, Open in Default App,
-and Copy Path actions.
+Glyphary supports light, dark, and auto modes, theme templates (including the
+Cupertino light and dark pair), approved CSS snippets, a theme builder, basic
+Obsidian-style theme compatibility, optional native glass, first-use hints that
+can be disabled or reset in Settings, and a title-bar document proxy with
+Reveal, Open in Default App, and Copy Path actions.
 
 ## Learn More
 
