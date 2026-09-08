@@ -48,6 +48,8 @@ export type CommandPaletteContext = {
   insertHtmlBlock: () => void;
   insertMermaidDiagram: () => void;
   openAiPageBuilder: () => void;
+  openGraphView: () => void;
+  openLocalGraphView: () => void;
   openRichLinkDialog: () => void;
   pluginCatalog: PluginCatalog;
   pluginDraft: PluginSettings;
@@ -93,6 +95,8 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
     insertHtmlBlock,
     insertMermaidDiagram,
     openAiPageBuilder,
+    openGraphView,
+    openLocalGraphView,
     openRichLinkDialog,
     pluginCatalog,
     pluginDraft,
@@ -525,6 +529,22 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
         },
       ]
     : [];
+  // Both graph scopes are offered together whatever document is active; the
+  // local one reports through status when no note is open.
+  const graphCommandPaletteCommands: CommandPaletteCommand[] = [
+    {
+      id: "open-graph-view",
+      title: "Open Global Graph",
+      description: "See how every note in this vault links to the others",
+      run: openGraphView,
+    },
+    {
+      id: "open-local-graph",
+      title: "Open Local Graph",
+      description: "See the notes linked around the current note",
+      run: openLocalGraphView,
+    },
+  ];
   const editorCommandPaletteCommands: CommandPaletteCommand[] = [
     // Table editing is contextual enough that the palette keeps it close to
     // the cursor state instead of permanently crowding the formatting toolbar.
@@ -592,6 +612,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
             ? editorCommandPaletteCommands
             : []),
         ...activeFileCommandPaletteCommands,
+        ...graphCommandPaletteCommands,
       ]
     : [];
   // The slash menu shows one filterable list of the writing-insertion groups

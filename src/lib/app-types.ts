@@ -322,6 +322,28 @@ export type SearchResult = {
   modifiedMs?: number;
 };
 
+export type LinkGraphNode = {
+  relativePath: string;
+  name: string;
+  tags: string[];
+  cluster: number;
+};
+
+export type VaultTag = {
+  tag: string;
+  files: string[];
+};
+
+export type LinkGraphEdge = {
+  source: number;
+  target: number;
+};
+
+export type LinkGraph = {
+  nodes: LinkGraphNode[];
+  edges: LinkGraphEdge[];
+};
+
 export type BaseViewType = "cards" | "table";
 
 export type BaseRow = {
@@ -358,7 +380,7 @@ export type TaskSort = "name" | "date";
 export type AppearanceMode = "auto" | "light" | "dark";
 export type SettingsTab = "main" | "appearance" | "canvas" | "plugins" | "ai" | "debug";
 export type DrawerItem = "source" | "toc" | "calendar";
-export type VaultDrawerItem = "vaults" | "files" | "search" | "starred" | "recent" | "tasks";
+export type VaultDrawerItem = "vaults" | "files" | "search" | "starred" | "recent" | "tasks" | "tags";
 export type ResizeSide = "vault" | "drawer";
 
 export type FolderContextMenuState = {

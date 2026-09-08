@@ -219,6 +219,7 @@ import { createVaultFileOperations } from "./vault/file-operations";
 import { CommandPaletteDialog } from "./command-palette/CommandPaletteDialog";
 import { AnchoredPopover } from "./ui/AnchoredPopover";
 import { ModalDialog } from "./ui/ModalDialog";
+import { GraphView, type GraphMode } from "./graph/GraphView";
 import {
   hasSeenOnboardingTip,
   markOnboardingTipSeen,
@@ -259,6 +260,7 @@ import {
   readVaultSettings,
   saveGithubToken,
   saveGithubVaultToken,
+  readVaultTags,
   searchVaultFiles,
   writeVaultFile,
   writeVaultSettings,
@@ -298,6 +300,7 @@ import type {
   SearchMode,
   SearchResult,
   TaskFilter,
+  VaultTag,
   TaskSort,
   ThemePreset,
   VaultDrawerItem,
@@ -620,6 +623,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [vaultDrawerItem, setVaultDrawerItem] = useState<VaultDrawerItem>("files");
   const [vaultLibrary, setVaultLibrary] = useState<VaultLibraryEntry[]>(readPersistedVaultLibrary);
   const [vaultLibraryOverlayOpen, setVaultLibraryOverlayOpen] = useState(false);
+  const [graphViewOpen, setGraphViewOpen] = useState(false);
+  const [graphViewMode, setGraphViewMode] = useState<GraphMode>("vault");
   const [drawerOpen, setDrawerOpen] = useState(defaultDrawerOpen);
   const [inspectorDrawerWidth, setInspectorDrawerWidth] = useState(
     defaultInspectorDrawerWidth,
@@ -677,6 +682,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [tasksSearching, setTasksSearching] = useState(false);
   const [taskListQuery, setTaskListQuery] = useState("");
   const [taskSort, setTaskSort] = useState<TaskSort>("name");
+  const [vaultTags, setVaultTags] = useState<VaultTag[]>([]);
+  const [tagsLoading, setTagsLoading] = useState(false);
+  const [tagListQuery, setTagListQuery] = useState("");
+  const [expandedTag, setExpandedTag] = useState<string | null>(null);
   const [recentFiles, setRecentFiles] = useState<ActiveFile[]>([]);
   const [draggingStarredPath, setDraggingStarredPath] = useState("");
   const [starredDragOrder, setStarredDragOrder] = useState<string[] | null>(null);
@@ -4336,6 +4345,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       await saveCurrentFile();
       await applyVaultWorkspace(root, readPersistedWorkspaceForVault(root), "Opened", progress);
       setVaultLibraryOverlayOpen(false);
+      setGraphViewOpen(false);
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -6814,6 +6824,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     insertHtmlBlock,
     insertMermaidDiagram,
     openAiPageBuilder,
+    openGraphView,
+    openLocalGraphView,
     openRichLinkDialog,
     pluginCatalog,
     pluginDraft,
@@ -6914,6 +6926,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     if (commandId === "toggle-focus-mode") {
       toggleFocusMode();
+      return;
+    }
+
+    if (commandId === "open-graph-view") {
+      openGraphView();
+      return;
+    }
+
+    if (commandId === "open-local-graph") {
+      openLocalGraphView();
       return;
     }
 
@@ -7106,6 +7128,25 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setVaultLibraryOverlayOpen(true);
   }
 
+  function openGraphView(mode: GraphMode = "vault") {
+    if (!vaultRoot) {
+      setStatus("Open a vault to see its graph");
+      return;
+    }
+
+    if (mode === "local" && !activeFileBackedPath) {
+      setStatus("Open a note to see its local graph");
+      return;
+    }
+
+    setGraphViewMode(mode);
+    setGraphViewOpen(true);
+  }
+
+  function openLocalGraphView() {
+    openGraphView("local");
+  }
+
   function toggleVaultLibraryOverlay() {
     if (vaultLibraryOverlayOpen) {
       setVaultLibraryOverlayOpen(false);
@@ -7151,6 +7192,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       return "Tasks";
     }
 
+    if (vaultDrawerItem === "tags") {
+      return "Tags";
+    }
+
     return "Search";
   }
 
@@ -7177,6 +7222,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       return vaultRoot ? "Markdown task list items" : "Open a vault";
     }
 
+    if (vaultDrawerItem === "tags") {
+      return vaultRoot ? "Inline and frontmatter tags" : "Open a vault";
+    }
+
     return "Find in vault";
   }
 
@@ -7192,6 +7241,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     () => visibleVaultTaskResults(taskResults, taskListQuery, taskSort),
     [taskListQuery, taskResults, taskSort],
   );
+
+  const visibleVaultTags = useMemo(() => {
+    const query = tagListQuery.trim().toLowerCase();
+    return query ? vaultTags.filter((entry) => entry.tag.includes(query)) : vaultTags;
+  }, [tagListQuery, vaultTags]);
 
   const visibleSearchResults = useMemo(
     () => visibleVaultSearchResults(searchResults),
@@ -7264,6 +7318,30 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     void refreshTasks(taskFilter);
   }, [vaultDrawerItem, vaultRoot, taskFilter]);
+
+  async function refreshTags() {
+    if (!vaultRoot) {
+      setVaultTags([]);
+      return;
+    }
+
+    try {
+      setTagsLoading(true);
+      setVaultTags(await readVaultTags(vaultRoot));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setTagsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (vaultDrawerItem !== "tags") {
+      return;
+    }
+
+    void refreshTags();
+  }, [vaultDrawerItem, vaultRoot]);
 
   function openImagePreviewFromEditor(event: ReactMouseEvent<HTMLDivElement>) {
     const target = event.target;
@@ -8073,6 +8151,22 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                 <rect x="3.3" y="16.7" width="3.4" height="3.4" rx="0.7" />
               </svg>
             </button>
+            <button
+              className={vaultDrawerItem === "tags" && vaultDrawerOpen ? "vault-tab active" : "vault-tab"}
+              type="button"
+              aria-label={
+                vaultDrawerOpen && vaultDrawerItem === "tags"
+                  ? "Close tags drawer"
+                  : "Open tags drawer"
+              }
+              title={vaultDrawerOpen && vaultDrawerItem === "tags" ? "Close Tags" : "Open Tags"}
+              onClick={() => toggleVaultDrawerItem("tags")}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="M3.5 4.5h7.2l9 9-7.2 7.2-9-9z" />
+                <circle cx="7.6" cy="8.6" r="1.2" />
+              </svg>
+            </button>
           </div>
           {vaultDrawerOpen ? (
             <div className="vault-content">
@@ -8441,6 +8535,75 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                     </p>
                   ) : (
                     <p className="empty-vault">Open a vault to list Markdown tasks.</p>
+                  )}
+                </div>
+              ) : vaultDrawerItem === "tags" ? (
+                <div className="vault-tags" role="region" aria-label="Vault tags">
+                  <div className="task-list-tools tag-list-tools">
+                    <label>
+                      <span>Find</span>
+                      <input
+                        disabled={!vaultRoot}
+                        value={tagListQuery}
+                        onChange={(event) => setTagListQuery(event.currentTarget.value)}
+                        placeholder="Filter tags"
+                      />
+                    </label>
+                    <button
+                      className="task-refresh-button"
+                      disabled={!vaultRoot || tagsLoading}
+                      type="button"
+                      title="Refresh tags"
+                      aria-label="Refresh tags"
+                      onClick={() => refreshTags()}
+                    >
+                      {tagsLoading ? "..." : renderToolbarIcon("refresh")}
+                    </button>
+                  </div>
+                  {visibleVaultTags.length > 0 ? (
+                    <div className="task-results tag-results" role="list" aria-label="Tags">
+                      {visibleVaultTags.map((entry) => (
+                        <div key={entry.tag} className="tag-group" role="listitem">
+                          <button
+                            type="button"
+                            className={expandedTag === entry.tag ? "tag-row active" : "tag-row"}
+                            aria-expanded={expandedTag === entry.tag}
+                            onClick={() =>
+                              setExpandedTag(expandedTag === entry.tag ? null : entry.tag)
+                            }
+                          >
+                            <strong>#{entry.tag}</strong>
+                            <span className="tag-count">{entry.files.length}</span>
+                          </button>
+                          {expandedTag === entry.tag
+                            ? entry.files.map((relativePath) => (
+                                <button
+                                  key={relativePath}
+                                  type="button"
+                                  className="tag-file"
+                                  onClick={(event) =>
+                                    handleDocumentClick(event, () =>
+                                      openFile(relativePath, { revealInVaultDrawer: false }),
+                                    )
+                                  }
+                                >
+                                  {relativePath}
+                                </button>
+                              ))
+                            : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : vaultRoot ? (
+                    <p className="empty-vault">
+                      {tagsLoading
+                        ? "Scanning tags..."
+                        : vaultTags.length > 0
+                          ? "No tags match this filter."
+                          : "No tags found in this vault."}
+                    </p>
+                  ) : (
+                    <p className="empty-vault">Open a vault to list tags.</p>
                   )}
                 </div>
               ) : (
@@ -8944,6 +9107,22 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           <span>{calendarDayPreview.relativePath}</span>
           <CanvasMarkdownPreview markdown={calendarDayPreview.markdown} />
         </aside>
+      ) : null}
+      {graphViewOpen && vaultRoot ? (
+        <GraphView
+          root={vaultRoot}
+          activeRelativePath={activeFileBackedPath || null}
+          initialMode={graphViewMode}
+          onOpenFile={(relativePath, { keepOpen }) => {
+            // A local graph stays open to follow the note; revealing in the
+            // drawer would only shuffle the tree behind the overlay.
+            if (!keepOpen) {
+              setGraphViewOpen(false);
+            }
+            void openFile(relativePath, { revealInVaultDrawer: !keepOpen });
+          }}
+          onRequestClose={() => setGraphViewOpen(false)}
+        />
       ) : null}
       {vaultLibraryOverlayOpen ? (
         <ModalDialog

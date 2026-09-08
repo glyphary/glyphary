@@ -42,6 +42,7 @@ mod defaults;
 mod calendar;
 #[macro_use]
 mod github;
+mod graph;
 mod models;
 #[cfg(desktop)]
 #[macro_use]
@@ -72,6 +73,7 @@ use base::*;
 use calendar::*;
 use defaults::*;
 use github::*;
+use graph::*;
 use models::*;
 #[cfg(desktop)]
 use native_menu::*;
@@ -323,6 +325,8 @@ pub fn run() {
             github_save_vault_token,
             query_base,
             search_vault,
+            read_link_graph,
+            read_vault_tags,
             fetch_rich_link_metadata,
             list_ai_models,
             test_ai_connection,

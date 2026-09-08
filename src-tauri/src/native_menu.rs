@@ -548,6 +548,15 @@ fn build_view_menu<R: Runtime>(
         None::<&str>,
     )?;
 
+    let open_graph = menu_item(app, "open_graph_view", "Global Graph", true, Some("CmdOrCtrl+G"))?;
+    let open_local_graph = menu_item(
+        app,
+        "open_local_graph",
+        "Local Graph",
+        state.has_active_file,
+        Some("CmdOrCtrl+Shift+G"),
+    )?;
+
     Submenu::with_items(
         app,
         "View",
@@ -560,6 +569,8 @@ fn build_view_menu<R: Runtime>(
             &toggle_inspector,
             &toggle_split,
             &toggle_focus,
+            &open_graph,
+            &open_local_graph,
             &PredefinedMenuItem::separator(app)?,
             &appearance_auto,
             &appearance_light,
@@ -676,6 +687,8 @@ fn native_command_id(menu_id: &str) -> Option<&'static str> {
         "toggle_inspector" => Some("toggle-inspector"),
         "toggle_split_editor" => Some("toggle-split-editor"),
         "toggle_focus_mode" => Some("toggle-focus-mode"),
+        "open_graph_view" => Some("open-graph-view"),
+        "open_local_graph" => Some("open-local-graph"),
         _ => None,
     }
 }

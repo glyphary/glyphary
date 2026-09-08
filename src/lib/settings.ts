@@ -163,7 +163,8 @@ function normalizePersistedWorkspace(
     workspace.vaultDrawerItem === "vaults" ||
     workspace.vaultDrawerItem === "starred" ||
     workspace.vaultDrawerItem === "recent" ||
-    workspace.vaultDrawerItem === "tasks"
+    workspace.vaultDrawerItem === "tasks" ||
+    workspace.vaultDrawerItem === "tags"
       ? workspace.vaultDrawerItem
       : "files";
   const drawerItem: PersistedWorkspace["drawerItem"] =

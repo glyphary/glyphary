@@ -119,6 +119,50 @@ test("focus mode hides workspace chrome via palette and native menu", () => {
   assert.match(nativeMenu, /focus_mode: bool/);
 });
 
+test("graph view opens from the palette and native menu without raw invoke calls", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");
+  const nativeMenu = readFileSync("src-tauri/src/native_menu.rs", "utf8");
+  const vaultPersistence = readFileSync("src/vault/persistence.ts", "utf8");
+  const graphFiles = readdirSync("src/graph").map((file) => `src/graph/${file}`);
+  const graphSources = Object.fromEntries(
+    graphFiles.map((file) => [file, readFileSync(file, "utf8")]),
+  );
+  const allGraphSource = Object.values(graphSources).join("\n");
+
+  assert.match(paletteDefinitions, /id: "open-graph-view"/);
+  assert.match(app, /commandId === "open-graph-view"/);
+  assert.match(app, /<GraphView/);
+  assert.match(nativeMenu, /"open_graph_view" => Some\("open-graph-view"\)/);
+  assert.match(vaultPersistence, /invoke<LinkGraph>\("read_link_graph"/);
+  assert.doesNotMatch(allGraphSource, /invoke\(/);
+  // Responsibilities are split: UI, loading, engine, interaction, rendering, theme.
+  for (const file of graphFiles) {
+    assert.match(graphSources[file], /Responsibilities:/, `${file} should document responsibilities`);
+    assert.match(graphSources[file], /Contracts:/, `${file} should document contracts`);
+  }
+  assert.match(graphSources["src/graph/use-graph-canvas.ts"], /from "d3-force"/);
+  assert.match(graphSources["src/graph/use-graph-canvas.ts"], /prefers-reduced-motion/);
+  assert.match(graphSources["src/graph/graph-interaction.ts"], /from "d3-zoom"/);
+  assert.doesNotMatch(graphSources["src/graph/GraphView.tsx"], /from "d3-/);
+  assert.doesNotMatch(graphSources["src/graph/GraphView.tsx"], /getContext\("2d"\)/);
+  assert.doesNotMatch(graphSources["src/graph/graph-renderer.ts"], /from "react"/);
+  // The Tags drawer shares the scan with the graph and only goes through persistence.
+  assert.match(vaultPersistence, /invoke<VaultTag\[\]>\("read_vault_tags"/);
+  assert.match(app, /vaultDrawerItem === "tags"/);
+  assert.match(app, /readVaultTags\(vaultRoot\)/);
+  // Local graph follows the active note and needs one to open.
+  assert.match(paletteDefinitions, /id: "open-local-graph"/);
+  assert.match(paletteDefinitions, /\.\.\.activeFileCommandPaletteCommands,\s*\.\.\.graphCommandPaletteCommands,/);
+  assert.match(app, /commandId === "open-local-graph"/);
+  assert.match(nativeMenu, /"open_local_graph" => Some\("open-local-graph"\)/);
+  assert.match(graphSources["src/graph/GraphView.tsx"], /keepOpen: mode === "local"/);
+  // Globe is an orthogonal toggle over both scopes, with no 3D dependency.
+  assert.match(graphSources["src/graph/GraphView.tsx"], /const \[globe, setGlobe\] = useState\(false\)/);
+  assert.match(graphSources["src/graph/use-graph-canvas.ts"], /projectOntoGlobe/);
+  assert.doesNotMatch(allGraphSource, /from "three"/);
+});
+
 test("desktop platform detection controls platform-specific window actions", () => {
   const app = readFileSync("src/App.tsx", "utf8");
   const paletteDefinitions = readFileSync("src/command-palette/command-definitions.ts", "utf8");

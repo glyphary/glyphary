@@ -18,6 +18,7 @@ mod ai_history;
 mod assets;
 mod base;
 mod calendar;
+mod graph;
 mod plugins;
 mod rich_links;
 mod search;

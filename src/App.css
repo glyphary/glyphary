@@ -1438,7 +1438,8 @@ body.workspace-resizing * {
   background: var(--surface);
 }
 
-.vault-tasks {
+.vault-tasks,
+.vault-tags {
   display: flex;
   min-height: 0;
   flex: 1;
@@ -7536,4 +7537,276 @@ body.workspace-resizing * {
   .vault-onboarding
 ) :where(h1, h2, h3, strong, .active) {
   font-weight: var(--glyphary-ui-font-weight-strong) !important;
+}
+
+.graph-view-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 72;
+  display: grid;
+  background: color-mix(in srgb, var(--app-bg) 36%, transparent);
+  padding: max(66px, calc(var(--glyphary-shell-padding-top) + 52px)) 20px 20px 20px;
+  animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
+}
+
+.graph-view-card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 22px 60px var(--shadow-strong);
+  animation: glyphary-pop-in var(--motion-duration-base) var(--motion-ease);
+}
+
+.graph-view-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-muted);
+  padding: 12px 14px;
+}
+
+.graph-view-header h2,
+.graph-view-header p {
+  margin: 0;
+}
+
+.graph-view-header h2 {
+  color: var(--heading);
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.graph-view-header p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.graph-view-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.graph-view-filter {
+  width: 200px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--app-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.graph-view-segment {
+  display: inline-flex;
+  height: 30px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.graph-view-segment button {
+  padding: 0 10px;
+  border: 0;
+  background: var(--app-bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.graph-view-segment button + button {
+  border-left: 1px solid var(--border);
+}
+
+.graph-view-segment button.active {
+  background: var(--surface);
+  color: var(--heading);
+}
+
+.graph-view-segment button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.graph-view-toggle {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--app-bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.graph-view-toggle.active {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--heading);
+}
+
+.graph-view-depth {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--app-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.graph-view-segment button:focus-visible,
+.graph-view-toggle:focus-visible,
+.graph-view-depth:focus-visible,
+.graph-view-filter:focus-visible {
+  outline: 2px solid var(--glyphary-focus);
+  outline-offset: 1px;
+}
+
+.graph-view-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: var(--app-bg);
+}
+
+.graph-view-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.graph-view-canvas:active {
+  cursor: grabbing;
+}
+
+.graph-view-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.graph-view-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--surface-muted);
+  padding: 8px 14px;
+}
+
+.graph-view-legend {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.graph-view-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px 0 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.76rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--motion-duration-fast) var(--motion-ease);
+}
+
+.graph-view-chip:hover {
+  background: var(--glyphary-hover);
+}
+
+.graph-view-chip.active {
+  border-color: var(--border);
+  background: var(--app-bg);
+}
+
+.graph-view-chip:focus-visible {
+  outline: 2px solid var(--glyphary-focus);
+  outline-offset: 1px;
+}
+
+.graph-view-chip-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.graph-view-hint {
+  flex-shrink: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+@media (max-width: 900px) {
+  .graph-view-hint {
+    display: none;
+  }
+}
+
+.tag-list-tools {
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: end;
+}
+
+.tag-results {
+  gap: 2px;
+}
+
+.tag-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.tag-results .tag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tag-results .tag-row.active {
+  background: var(--surface-muted);
+}
+
+.tag-count {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tag-results .tag-file {
+  display: block;
+  padding: 5px 7px 5px 18px;
+  color: var(--text);
+  font-size: 0.74rem;
 }

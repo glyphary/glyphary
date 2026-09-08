@@ -2,12 +2,14 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   BaseQueryResult,
   GithubVaultResult,
+  LinkGraph,
   OpenedFile,
   RenamedDirectory,
   SearchResult,
   VaultEntry,
   VaultIndexedFile,
   VaultSettings,
+  VaultTag,
 } from "../lib/app-types";
 
 // Responsibilities:
@@ -135,6 +137,14 @@ export function searchVaultFiles(
     query,
     ...options,
   });
+}
+
+export function readLinkGraph(root: string) {
+  return invoke<LinkGraph>("read_link_graph", { root });
+}
+
+export function readVaultTags(root: string) {
+  return invoke<VaultTag[]>("read_vault_tags", { root });
 }
 
 export function queryBase(root: string, relative: string) {

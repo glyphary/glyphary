@@ -240,6 +240,36 @@ impl VaultThemeOptions {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct LinkGraphNode {
+    pub(crate) relative_path: String,
+    pub(crate) name: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) cluster: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VaultTag {
+    pub(crate) tag: String,
+    pub(crate) files: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LinkGraphEdge {
+    pub(crate) source: usize,
+    pub(crate) target: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LinkGraph {
+    pub(crate) nodes: Vec<LinkGraphNode>,
+    pub(crate) edges: Vec<LinkGraphEdge>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct SearchResult {
     pub(crate) relative_path: String,
     pub(crate) line_number: Option<usize>,

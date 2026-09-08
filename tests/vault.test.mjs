@@ -528,7 +528,7 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(appTypes, /export type TaskSort = "name" \| "date"/);
   assert.match(appTypes, /modifiedMs\?: number/);
   assert.match(appTypes, /starredFiles\?: string\[\] \| null/);
-  assert.match(appTypes, /export type VaultDrawerItem = "vaults" \| "files" \| "search" \| "starred" \| "recent" \| "tasks"/);
+  assert.match(appTypes, /export type VaultDrawerItem = "vaults" \| "files" \| "search" \| "starred" \| "recent" \| "tasks" \| "tags"/);
   assert.match(appTypes, /export type VaultLibraryEntry/);
   assert.match(appTypes, /coverImage\?: string \| null/);
   assert.match(settings, /export const defaultStarredFiles: string\[\] = \[\]/);
@@ -562,6 +562,7 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(app, /toggleVaultDrawerItem\("recent"\)/);
   assert.match(app, /toggleVaultDrawerItem\("starred"\)/);
   assert.match(app, /toggleVaultDrawerItem\("tasks"\)/);
+  assert.match(app, /toggleVaultDrawerItem\("tags"\)/);
   assert.match(css, /\.vault-library-screen/);
   assert.match(css, /\.vault-library-card/);
   assert.match(css, /\.vault-library-shelf/);
