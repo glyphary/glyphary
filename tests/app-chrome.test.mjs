@@ -55,7 +55,6 @@ test("onboarding tips persist seen ids and survive corrupted storage", () => {
   assert.match(app, /withOnboardingTip\(\s*\{\s*id: "source-drawer"/);
   assert.match(app, /markOnboardingTipSeen\(onboardingTip\.id\)/);
 
-  // Settings exposes a dedicated Hints section with a toggle and reset.
   const settingsDialog = readFileSync("src/settings/SettingsDialog.tsx", "utf8");
   assert.match(settingsDialog, /aria-label="Hint settings"/);
   assert.match(settingsDialog, /setOnboardingTipsEnabled\(event\.currentTarget\.checked\)/);
@@ -136,7 +135,6 @@ test("graph view opens from the palette and native menu without raw invoke calls
   assert.match(nativeMenu, /"open_graph_view" => Some\("open-graph-view"\)/);
   assert.match(vaultPersistence, /invoke<LinkGraph>\("read_link_graph"/);
   assert.doesNotMatch(allGraphSource, /invoke\(/);
-  // Responsibilities are split: UI, loading, engine, interaction, rendering, theme.
   for (const file of graphFiles) {
     assert.match(graphSources[file], /Responsibilities:/, `${file} should document responsibilities`);
     assert.match(graphSources[file], /Contracts:/, `${file} should document contracts`);
@@ -150,7 +148,8 @@ test("graph view opens from the palette and native menu without raw invoke calls
   // The Tags drawer shares the scan with the graph and only goes through persistence.
   assert.match(vaultPersistence, /invoke<VaultTag\[\]>\("read_vault_tags"/);
   assert.match(app, /vaultDrawerItem === "tags"/);
-  assert.match(app, /readVaultTags\(vaultRoot\)/);
+  assert.match(app, /load: readVaultTags,/);
+  assert.match(app, /<VaultTagsPanel/);
   // Local graph follows the active note and needs one to open.
   assert.match(paletteDefinitions, /id: "open-local-graph"/);
   assert.match(paletteDefinitions, /\.\.\.activeFileCommandPaletteCommands,\s*\.\.\.graphCommandPaletteCommands,/);
@@ -161,6 +160,29 @@ test("graph view opens from the palette and native menu without raw invoke calls
   assert.match(graphSources["src/graph/GraphView.tsx"], /const \[globe, setGlobe\] = useState\(false\)/);
   assert.match(graphSources["src/graph/use-graph-canvas.ts"], /projectOntoGlobe/);
   assert.doesNotMatch(allGraphSource, /from "three"/);
+});
+
+test("right drawer can be unpinned to float and reveal on rail hover", () => {
+  const app = readFileSync("src/App.tsx", "utf8");
+  const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
+  const settings = readFileSync("src/lib/settings.ts", "utf8");
+  const css = readFileSync("src/App.css", "utf8");
+
+  assert.match(appTypes, /drawerPinned: boolean;/);
+  // Older saved workspaces have no flag and must keep docking.
+  assert.match(settings, /drawerPinned: workspace\.drawerPinned !== false/);
+  assert.match(app, /onPointerEnter=\{revealDrawerPeek\}/);
+  assert.match(app, /onPointerLeave=\{scheduleDrawerPeekHide\}/);
+  assert.match(app, /drawerPeek && !drawerOpen \? "drawer-floating" : ""/);
+  assert.match(app, /\{drawerOpen \|\| drawerPeek \? \(/);
+  assert.match(app, /aria-label=\{drawerPinned \? "Unpin drawer" : "Pin drawer"\}/);
+  // The pane grows leftward over the note by the panel width so the rail stays
+  // at the panel's left edge and the grid column never widens.
+  assert.match(css, /\.workspace\.drawer-floating \.drawer-pane \{[^}]*width: var\(--drawer-floating-width, 360px\);\s*margin-left: calc\(var\(--drawer-width, 48px\) - var\(--drawer-floating-width, 360px\)\);/);
+  // Floating keeps the docked surface styling so both modes look the same.
+  assert.doesNotMatch(css, /\.workspace\.drawer-floating \.drawer-(pane|content) \{[^}]*background:/);
+  // Peek state is hover-only and never written to the persisted workspace.
+  assert.doesNotMatch(app, /drawerPeek: /);
 });
 
 test("desktop platform detection controls platform-specific window actions", () => {

@@ -37,6 +37,10 @@ export function folderActionDialogTitle(action: FolderActionKind, isCanvasFile =
     return "Create Canvas";
   }
 
+  if (action === "create-base") {
+    return "Create Base";
+  }
+
   if (action === "create-folder") {
     return "Create Folder";
   }
@@ -67,6 +71,10 @@ export function folderActionDialogLabel(action: FolderActionKind, isCanvasFile =
 
   if (action === "create-canvas") {
     return "Canvas name";
+  }
+
+  if (action === "create-base") {
+    return "Base name";
   }
 
   if (action === "rename-file") {

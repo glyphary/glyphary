@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import type { MouseEvent as ReactMouseEvent } from "react";
-import type { BaseQueryResult, BaseRow, BaseViewResult } from "../lib/app-types";
+import { useEffect, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactElement } from "react";
+import type { BaseRow, BaseViewResult } from "../lib/app-types";
 import { vaultImagePathCandidates } from "../app-state/documents";
 import { isUrlLike } from "../lib/paths";
 import {
@@ -8,210 +8,190 @@ import {
   popupNativeMenu,
   type NativeMenuEntry,
 } from "../native/native-menus";
-import { queryBase } from "../vault/persistence";
-import {
-  baseAvailableFields,
-  baseFieldLabel,
-  baseFieldValue,
-  baseRowsMatchingTitle,
-  baseSortedRows,
-} from "./base";
+import { type BaseSortKey, baseFieldLabel, baseFieldValue } from "../lib/base";
+import { updateBaseView } from "../lib/base-definition";
+import { BaseEditor } from "./BaseEditor";
+import { useBaseDocument } from "./use-base-document";
+import { type BaseControlKind, useBaseViewSession } from "./use-base-view-session";
 
 // Responsibilities:
-// - Render supported `.base` query results as cards or tables.
-// - Keep base loading/error state local to the pane.
+// - Render a `.base` query result as cards or a table with its toolbar.
 // Contracts:
+// - Loading, the draft, and save wiring live in `useBaseDocument`; search,
+//   sort, and displayed fields live in `useBaseViewSession`. This file only
+//   renders.
 // - Base rows are read-only navigation surfaces; opening a row delegates to App.
 // - Images use the same vault-relative resolver as Markdown banners/previews.
 
 export function BaseView({
+  assetDirectory,
+  content,
+  dirty,
+  imageLayout,
+  onChange,
   onOpenFile,
   relativePath,
-  assetDirectory,
-  imageLayout,
   vaultRoot,
 }: {
   assetDirectory: string;
+  content: string;
+  dirty: boolean;
   imageLayout: "side" | "top";
+  onChange: (nextContent: string, dirty: boolean) => void;
   onOpenFile: (relativePath: string) => void;
   relativePath: string;
   vaultRoot: string;
 }) {
-  const [result, setResult] = useState<BaseQueryResult | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [activeViewIndex, setActiveViewIndex] = useState(0);
-  const [selectedFields, setSelectedFields] = useState<string[]>([]);
-  const [titleQuery, setTitleQuery] = useState("");
-  const [sortField, setSortField] = useState("file.name");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [openControl, setOpenControl] = useState<"search" | "sort" | "fields" | null>(null);
+  const document = useBaseDocument({ content, dirty, onChange, relativePath, vaultRoot });
+  const { activeViewIndex, draft, editing, result } = document;
+  const activeView = result?.views[activeViewIndex] ?? null;
+  const savedView = result?.definition.views[activeViewIndex];
+  const session = useBaseViewSession(activeView, savedView);
 
-  useEffect(() => {
-    let cancelled = false;
+  function changeSelectedFields(fields: string[]) {
+    session.setSelectedFields(fields);
 
-    if (!vaultRoot || !relativePath) {
-      setResult(null);
-      return;
+    if (editing && draft) {
+      document.applyDraft(updateBaseView(draft, activeViewIndex, { order: fields }));
     }
+  }
 
-    setLoading(true);
-    setError("");
-    queryBase(vaultRoot, relativePath)
-      .then((nextResult) => {
-        if (cancelled) {
-          return;
-        }
-
-        setResult(nextResult);
-        setActiveViewIndex(0);
-      })
-      .catch((nextError) => {
-        if (cancelled) {
-          return;
-        }
-
-        setError(nextError instanceof Error ? nextError.message : String(nextError));
-        setResult(null);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [relativePath, vaultRoot]);
-
-  useEffect(() => {
-    if (!openControl) {
-      return;
-    }
-
-    function closeBaseControl(event: KeyboardEvent) {
-      if (event.key !== "Escape" || event.defaultPrevented) {
-        return;
-      }
-
-      event.preventDefault();
-      setOpenControl(null);
-    }
-
-    window.addEventListener("keydown", closeBaseControl, { capture: true });
-
-    return () => {
-      window.removeEventListener("keydown", closeBaseControl, { capture: true });
-    };
-  }, [openControl]);
-
-  const activeView = result?.views[activeViewIndex] ?? result?.views[0] ?? null;
-  const fieldOptions = useMemo(
-    () => (activeView ? baseAvailableFields(activeView) : ["file.name"]),
-    [activeView],
-  );
-  const visibleFields = useMemo(() => {
-    const selected = selectedFields.filter((field) => fieldOptions.includes(field));
-
-    return selected.length ? selected : ["file.name"];
-  }, [fieldOptions, selectedFields]);
-  const visibleRows = useMemo(() => {
-    if (!activeView) {
-      return [];
-    }
-
-    return baseSortedRows(
-      baseRowsMatchingTitle(activeView.rows, titleQuery),
-      sortField,
-      sortDirection,
-    );
-  }, [activeView, sortDirection, sortField, titleQuery]);
-  const visibleView = useMemo(
-    () => (activeView ? { ...activeView, rows: visibleRows } : null),
-    [activeView, visibleRows],
-  );
-
-  useEffect(() => {
-    if (!activeView) {
-      return;
-    }
-
-    const nextFields = activeView.order.length ? activeView.order : ["file.name"];
-    setSelectedFields(nextFields.filter((field) => fieldOptions.includes(field)));
-    setSortField("file.name");
-    setSortDirection("asc");
-    setTitleQuery("");
-  }, [activeView, fieldOptions]);
-
-  if (loading) {
+  if (document.loading && !result) {
     return <div className="base-view base-view-state">Loading base...</div>;
   }
 
-  if (error) {
-    return <div className="base-view base-view-state">{error}</div>;
+  if (document.error) {
+    return <div className="base-view base-view-state">{document.error}</div>;
   }
 
-  if (!result || !activeView) {
+  if (!result || !draft) {
     return <div className="base-view base-view-state">No base view.</div>;
   }
-
-  const renderedView = visibleView ?? activeView;
 
   return (
     <div className="base-view">
       <div className="base-view-header">
         <h1>{result.name}</h1>
         <div className="base-view-tabs" role="tablist" aria-label="Base views">
-          {result.views.map((view, index) => (
+          {draft.views.map((view, index) => (
             <button
               className={index === activeViewIndex ? "active" : ""}
               key={`${view.name}:${index}`}
               type="button"
               role="tab"
               aria-selected={index === activeViewIndex}
-              onClick={() => setActiveViewIndex(index)}
+              onClick={() => document.setActiveViewIndex(index)}
             >
-              {view.name}
+              {view.name || view.type}
             </button>
           ))}
         </div>
       </div>
       <BaseControls
-        fieldOptions={fieldOptions}
-        resultCount={visibleRows.length}
-        selectedFields={visibleFields}
-        sortDirection={sortDirection}
-        sortField={sortField}
-        titleQuery={titleQuery}
-        totalCount={activeView.rows.length}
-        openControl={openControl}
-        onOpenControlChange={setOpenControl}
-        onSelectedFieldsChange={setSelectedFields}
-        onSortDirectionChange={setSortDirection}
-        onSortFieldChange={setSortField}
-        onTitleQueryChange={setTitleQuery}
+        defaultSortKey={session.defaultSortKey}
+        displayNames={result.displayNames}
+        fieldOptions={session.fieldOptions}
+        resultCount={session.visibleRows.length}
+        selectedFields={session.visibleFields}
+        sortDirection={session.sortDirection}
+        sortField={session.sortField}
+        titleQuery={session.titleQuery}
+        totalCount={activeView?.rows.length ?? 0}
+        openControl={session.openControl}
+        editing={editing}
+        onEditingChange={(next) => {
+          document.setEditing(next);
+          session.setOpenControl(null);
+        }}
+        onOpenControlChange={session.setOpenControl}
+        onSelectedFieldsChange={changeSelectedFields}
+        onSortDirectionChange={session.setSortDirection}
+        onSortFieldChange={session.setSortField}
+        onTitleQueryChange={session.setTitleQuery}
       />
-      {renderedView.rows.length === 0 ? (
-        <div className="base-view-empty">No matching notes.</div>
-      ) : activeView.type === "table" ? (
-        <BaseTable fields={visibleFields} onOpenFile={onOpenFile} view={renderedView} />
-      ) : (
-        <BaseCards
-          fields={visibleFields}
-          assetDirectory={assetDirectory}
-          imageLayout={imageLayout}
-          onOpenFile={onOpenFile}
-          vaultRoot={vaultRoot}
-          view={renderedView}
+      {editing ? (
+        <BaseEditor
+          activeViewIndex={activeViewIndex}
+          definition={draft}
+          dirty={dirty}
+          displayNames={result.displayNames}
+          error={document.editError}
+          errors={result.errors}
+          fieldOptions={session.fieldOptions}
+          onChange={document.applyDraft}
+          onDiscard={document.discardDraft}
         />
-      )}
+      ) : null}
+      <BaseRows
+        assetDirectory={assetDirectory}
+        displayNames={result.displayNames}
+        fields={session.visibleFields}
+        imageLayout={imageLayout}
+        rows={session.visibleRows}
+        vaultRoot={vaultRoot}
+        view={activeView}
+        onOpenFile={onOpenFile}
+      />
+    </div>
+  );
+}
+
+function BaseRows({
+  assetDirectory,
+  displayNames,
+  fields,
+  imageLayout,
+  onOpenFile,
+  rows,
+  vaultRoot,
+  view,
+}: {
+  assetDirectory: string;
+  displayNames: Record<string, string>;
+  fields: string[];
+  imageLayout: "side" | "top";
+  onOpenFile: (relativePath: string) => void;
+  rows: BaseRow[];
+  vaultRoot: string;
+  view: BaseViewResult | null;
+}) {
+  if (!view) {
+    return <div className="base-view-empty">Save the base to load this view.</div>;
+  }
+
+  if (rows.length === 0) {
+    return <div className="base-view-empty">No matching notes.</div>;
+  }
+
+  if (view.type === "table") {
+    return <BaseTable displayNames={displayNames} fields={fields} onOpenFile={onOpenFile} rows={rows} />;
+  }
+
+  return (
+    <div className="base-card-grid">
+      {rows.map((row) => (
+        <BaseCard
+          assetDirectory={assetDirectory}
+          displayNames={displayNames}
+          fields={fields}
+          imageField={view.image ?? null}
+          imageLayout={imageLayout}
+          key={row.relativePath}
+          onOpenFile={onOpenFile}
+          row={row}
+          vaultRoot={vaultRoot}
+        />
+      ))}
     </div>
   );
 }
 
 function BaseControls({
+  defaultSortKey,
+  displayNames,
+  editing,
   fieldOptions,
+  onEditingChange,
   onOpenControlChange,
   onSelectedFieldsChange,
   onSortDirectionChange,
@@ -225,9 +205,13 @@ function BaseControls({
   titleQuery,
   totalCount,
 }: {
+  defaultSortKey: BaseSortKey;
+  displayNames: Record<string, string>;
+  editing: boolean;
   fieldOptions: string[];
-  openControl: "search" | "sort" | "fields" | null;
-  onOpenControlChange: (control: "search" | "sort" | "fields" | null) => void;
+  onEditingChange: (editing: boolean) => void;
+  openControl: BaseControlKind | null;
+  onOpenControlChange: (control: BaseControlKind | null) => void;
   onSelectedFieldsChange: (fields: string[]) => void;
   onSortDirectionChange: (direction: "asc" | "desc") => void;
   onSortFieldChange: (field: string) => void;
@@ -252,73 +236,56 @@ function BaseControls({
     onSelectedFieldsChange([...selectedFields, field]);
   }
 
-  function toggleControl(control: "search" | "sort" | "fields") {
+  function toggleControl(control: BaseControlKind) {
     onOpenControlChange(openControl === control ? null : control);
   }
 
-  async function openSortMenu(event: ReactMouseEvent<HTMLButtonElement>) {
-    const menuItems: NativeMenuEntry[] = [
-      ...fieldOptions.map((field) => ({
-        kind: "check" as const,
-        id: `base-sort-field-${field}`,
-        text: baseFieldLabel(field),
-        checked: sortField === field,
-        action: () => onSortFieldChange(field),
-      })),
-      nativeMenuSeparator,
-      {
-        kind: "check" as const,
-        id: "base-sort-asc",
-        text: "Ascending",
-        checked: sortDirection === "asc",
-        action: () => onSortDirectionChange("asc"),
-      },
-      {
-        kind: "check" as const,
-        id: "base-sort-desc",
-        text: "Descending",
-        checked: sortDirection === "desc",
-        action: () => onSortDirectionChange("desc"),
-      },
-    ];
-    const opened = await popupNativeMenu(menuItems, {
-      x: event.clientX,
-      y: event.clientY,
-    });
+  // The native popup is preferred; the in-pane menu is the fallback when the
+  // platform cannot show one.
+  async function openMenu(
+    control: BaseControlKind,
+    entries: NativeMenuEntry[],
+    event: ReactMouseEvent<HTMLButtonElement>,
+  ) {
+    const opened = await popupNativeMenu(entries, { x: event.clientX, y: event.clientY });
 
     if (opened) {
       onOpenControlChange(null);
       return;
     }
 
-    toggleControl("sort");
+    toggleControl(control);
   }
 
-  async function openFieldsMenu(event: ReactMouseEvent<HTMLButtonElement>) {
-    const menuItems: NativeMenuEntry[] = fieldOptions.map((field) => {
-      const checked = selectedFields.includes(field);
+  const sortEntries: NativeMenuEntry[] = [
+    ...fieldOptions.map((field) => ({
+      kind: "check" as const,
+      id: `base-sort-field-${field}`,
+      text: baseFieldLabel(field, displayNames),
+      checked: sortField === field,
+      action: () => onSortFieldChange(field),
+    })),
+    nativeMenuSeparator,
+    ...(["asc", "desc"] as const).map((direction) => ({
+      kind: "check" as const,
+      id: `base-sort-${direction}`,
+      text: direction === "asc" ? "Ascending" : "Descending",
+      checked: sortDirection === direction,
+      action: () => onSortDirectionChange(direction),
+    })),
+  ];
+  const fieldEntries: NativeMenuEntry[] = fieldOptions.map((field) => {
+    const checked = selectedFields.includes(field);
 
-      return {
-        kind: "check" as const,
-        id: `base-field-${field}`,
-        text: baseFieldLabel(field),
-        checked,
-        enabled: !checked || selectedFields.length > 1,
-        action: () => toggleField(field),
-      };
-    });
-    const opened = await popupNativeMenu(menuItems, {
-      x: event.clientX,
-      y: event.clientY,
-    });
-
-    if (opened) {
-      onOpenControlChange(null);
-      return;
-    }
-
-    toggleControl("fields");
-  }
+    return {
+      kind: "check" as const,
+      id: `base-field-${field}`,
+      text: baseFieldLabel(field, displayNames),
+      checked,
+      enabled: !checked || selectedFields.length > 1,
+      action: () => toggleField(field),
+    };
+  });
 
   return (
     <div className="base-controls" aria-label="Base view controls">
@@ -359,13 +326,15 @@ function BaseControls({
             aria-expanded={openControl === "sort"}
             aria-label="Sort"
             className={
-              openControl === "sort" || sortField !== "file.name" || sortDirection !== "asc"
+              openControl === "sort" ||
+              sortField !== defaultSortKey.field ||
+              sortDirection !== defaultSortKey.direction
                 ? "active"
                 : ""
             }
             title="Sort"
             type="button"
-            onClick={(event) => void openSortMenu(event)}
+            onClick={(event) => void openMenu("sort", sortEntries, event)}
           >
             {baseControlIcon("sort")}
           </button>
@@ -379,7 +348,7 @@ function BaseControls({
                 >
                   {fieldOptions.map((field) => (
                     <option key={field} value={field}>
-                      {baseFieldLabel(field)}
+                      {baseFieldLabel(field, displayNames)}
                     </option>
                   ))}
                 </select>
@@ -410,7 +379,7 @@ function BaseControls({
             className={openControl === "fields" ? "active" : ""}
             title="Displayed properties"
             type="button"
-            onClick={(event) => void openFieldsMenu(event)}
+            onClick={(event) => void openMenu("fields", fieldEntries, event)}
           >
             {baseControlIcon("fields")}
           </button>
@@ -423,99 +392,82 @@ function BaseControls({
                     checked={selectedFields.includes(field)}
                     onChange={() => toggleField(field)}
                   />
-                  <span>{baseFieldLabel(field)}</span>
+                  <span>{baseFieldLabel(field, displayNames)}</span>
                 </label>
               ))}
             </div>
           ) : null}
+        </div>
+        <div className="base-control">
+          <button
+            aria-pressed={editing}
+            aria-label="Edit base"
+            className={editing ? "active" : ""}
+            title="Edit base"
+            type="button"
+            onClick={() => onEditingChange(!editing)}
+          >
+            {baseControlIcon("edit")}
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-function baseControlIcon(icon: "search" | "sort" | "fields") {
-  if (icon === "search") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24">
-        <circle cx="10.5" cy="10.5" r="5.2" />
-        <path d="m15 15 4.5 4.5" />
-      </svg>
-    );
-  }
-
-  if (icon === "sort") {
-    return (
-      <svg aria-hidden="true" viewBox="0 0 24 24">
-        <path d="M7 5v14" />
-        <path d="m4.5 16.5 2.5 2.5 2.5-2.5" />
-        <path d="M12 7h7" />
-        <path d="M12 12h5" />
-        <path d="M12 17h3" />
-      </svg>
-    );
-  }
-
-  return (
+const controlIcons: Record<BaseControlKind | "edit", ReactElement> = {
+  edit: (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-4-4L4 16v4z" />
+      <path d="m13 7 4 4" />
+    </svg>
+  ),
+  search: (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <circle cx="10.5" cy="10.5" r="5.2" />
+      <path d="m15 15 4.5 4.5" />
+    </svg>
+  ),
+  sort: (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <path d="M7 5v14" />
+      <path d="m4.5 16.5 2.5 2.5 2.5-2.5" />
+      <path d="M12 7h7" />
+      <path d="M12 12h5" />
+      <path d="M12 17h3" />
+    </svg>
+  ),
+  fields: (
     <svg aria-hidden="true" viewBox="0 0 24 24">
       <rect x="4.5" y="5.5" width="15" height="13" rx="1.8" />
       <path d="M9.5 5.5v13" />
       <path d="M14.5 5.5v13" />
     </svg>
-  );
-}
+  ),
+};
 
-function BaseCards({
-  assetDirectory,
-  fields,
-  imageLayout,
-  onOpenFile,
-  vaultRoot,
-  view,
-}: {
-  assetDirectory: string;
-  fields: string[];
-  imageLayout: "side" | "top";
-  onOpenFile: (relativePath: string) => void;
-  vaultRoot: string;
-  view: BaseViewResult;
-}) {
-  return (
-    <div className="base-card-grid">
-      {view.rows.map((row) => {
-        return (
-          <BaseCard
-            assetDirectory={assetDirectory}
-            fields={fields}
-            imageLayout={imageLayout}
-            key={row.relativePath}
-            onOpenFile={onOpenFile}
-            row={row}
-            vaultRoot={vaultRoot}
-            view={view}
-          />
-        );
-      })}
-    </div>
-  );
+function baseControlIcon(icon: BaseControlKind | "edit") {
+  return controlIcons[icon];
 }
 
 function BaseCard({
   assetDirectory,
+  displayNames,
   fields,
+  imageField,
   imageLayout,
   onOpenFile,
   row,
   vaultRoot,
-  view,
 }: {
   assetDirectory: string;
+  displayNames: Record<string, string>;
   fields: string[];
+  imageField: string | null;
   imageLayout: "side" | "top";
   onOpenFile: (relativePath: string) => void;
   row: BaseRow;
   vaultRoot: string;
-  view: BaseViewResult;
 }) {
   const imageSources = baseImageSources(vaultRoot, row, assetDirectory);
   const [imageIndex, setImageIndex] = useState(0);
@@ -539,10 +491,10 @@ function BaseCard({
         <h2>{row.name}</h2>
         <dl>
           {fields
-            .filter((field) => field !== "file.name" && field !== view.image)
+            .filter((field) => field !== "file.name" && field !== imageField)
             .map((field) => (
               <div key={field}>
-                <dt>{baseFieldLabel(field)}</dt>
+                <dt>{baseFieldLabel(field, displayNames)}</dt>
                 <dd>{baseFieldValue(row, field) || "-"}</dd>
               </div>
             ))}
@@ -585,13 +537,15 @@ function baseImageSources(root: string, row: BaseRow, assetDirectory: string) {
 }
 
 function BaseTable({
+  displayNames,
   fields,
   onOpenFile,
-  view,
+  rows,
 }: {
+  displayNames: Record<string, string>;
   fields: string[];
   onOpenFile: (relativePath: string) => void;
-  view: BaseViewResult;
+  rows: BaseRow[];
 }) {
   return (
     <div className="base-table-wrap">
@@ -599,12 +553,12 @@ function BaseTable({
         <thead>
           <tr>
             {fields.map((field) => (
-              <th key={field}>{baseFieldLabel(field)}</th>
+              <th key={field}>{baseFieldLabel(field, displayNames)}</th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {view.rows.map((row) => (
+          {rows.map((row) => (
             <tr key={row.relativePath} onClick={() => onOpenFile(row.relativePath)}>
               {fields.map((field) => (
                 <td key={field}>{baseFieldValue(row, field) || "-"}</td>

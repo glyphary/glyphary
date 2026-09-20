@@ -27,7 +27,7 @@ import {
 } from "tauri-plugin-macos-permissions-api";
 import "@excalidraw/excalidraw/index.css";
 import { useEditor } from "@tiptap/react";
-import { baseTitle, isBasePath } from "./base/base";
+import { baseTitle, isBasePath } from "./lib/base";
 import {
   canvasTitle,
   isCanvasPath,
@@ -220,6 +220,13 @@ import { CommandPaletteDialog } from "./command-palette/CommandPaletteDialog";
 import { AnchoredPopover } from "./ui/AnchoredPopover";
 import { ModalDialog } from "./ui/ModalDialog";
 import { GraphView, type GraphMode } from "./graph/GraphView";
+import { VaultActivityPanel } from "./vault/VaultActivityPanel";
+import { VaultFileEntry } from "./vault/VaultFileEntry";
+import { VaultTagsPanel } from "./vault/VaultTagsPanel";
+import { useVaultDrawerData } from "./vault/use-vault-drawer-data";
+import { useDrawerPeek } from "./app-state/use-drawer-peek";
+import { slashMenuPassthrough } from "./command-palette/commands";
+import { applySlashMenuPassthrough } from "./editor/commands";
 import {
   hasSeenOnboardingTip,
   markOnboardingTipSeen,
@@ -260,6 +267,7 @@ import {
   readVaultSettings,
   saveGithubToken,
   saveGithubVaultToken,
+  readVaultActivity,
   readVaultTags,
   searchVaultFiles,
   writeVaultFile,
@@ -300,6 +308,7 @@ import type {
   SearchMode,
   SearchResult,
   TaskFilter,
+  VaultFileActivity,
   VaultTag,
   TaskSort,
   ThemePreset,
@@ -509,6 +518,10 @@ type AppProps = {
 
 const settingsRevisionStorageKey = "glyphary.settingsRevision";
 
+// Stable empty datasets for the drawer loaders so no-vault resets never churn.
+const noVaultTags: VaultTag[] = [];
+const noVaultActivity: VaultFileActivity[] = [];
+
 function App({ settingsWindowMode = false }: AppProps = {}) {
   // The active editor group is mirrored into these top-level document fields
   // because drawers, toolbar state, save commands, and native menu events all
@@ -630,6 +643,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     defaultInspectorDrawerWidth,
   );
   const [drawerItem, setDrawerItem] = useState<DrawerItem>("source");
+  const [drawerPinned, setDrawerPinned] = useState(true);
+  const {
+    drawerPeek,
+    setDrawerPeek,
+    drawerPaneRef,
+    cancelDrawerPeekHide,
+    revealDrawerPeek,
+    scheduleDrawerPeekHide,
+    hideDrawerPeekOnBlur,
+  } = useDrawerPeek(drawerPinned);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const now = new Date();
 
@@ -682,10 +705,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const [tasksSearching, setTasksSearching] = useState(false);
   const [taskListQuery, setTaskListQuery] = useState("");
   const [taskSort, setTaskSort] = useState<TaskSort>("name");
-  const [vaultTags, setVaultTags] = useState<VaultTag[]>([]);
-  const [tagsLoading, setTagsLoading] = useState(false);
-  const [tagListQuery, setTagListQuery] = useState("");
-  const [expandedTag, setExpandedTag] = useState<string | null>(null);
   const [recentFiles, setRecentFiles] = useState<ActiveFile[]>([]);
   const [draggingStarredPath, setDraggingStarredPath] = useState("");
   const [starredDragOrder, setStarredDragOrder] = useState<string[] | null>(null);
@@ -1557,6 +1576,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
 
     mainWindowShownRef.current = true;
+    // The window starts hidden; showing it a frame after the restored workspace
+    // has painted avoids flashing the empty shell.
     requestAnimationFrame(() => {
       void getCurrentWindow()
         .show()
@@ -1647,6 +1668,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     let cancelled = false;
 
+    // Created hidden; the first frame callback runs before this mount's paint
+    // and the second after it, so the window never shows an unstyled flash.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (cancelled) {
@@ -1924,6 +1947,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       if (groupEditor && tab.kind === "markdown") {
         setEditorMarkdownContent(groupEditor, tab.markdown);
       }
+      // Update callbacks Tiptap emits after setContent returns must still count
+      // as hydration rather than user edits, so the flag drops a macrotask later.
       window.setTimeout(() => {
         hydratingEditor.current[groupId] = false;
       }, 0);
@@ -2788,6 +2813,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         vaultDrawerOpen: nextVaultDrawerOpen,
         vaultDrawerItem: nextVaultDrawerItem,
         drawerOpen: nextDrawerOpen,
+        drawerPinned: workspace?.drawerPinned ?? true,
+        taskSort: workspace?.taskSort ?? "name",
         drawerItem: nextDrawerItem,
         splitOpen: false,
       });
@@ -2814,6 +2841,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setVaultDrawerOpen(nextVaultDrawerOpen);
     setVaultDrawerItem(nextVaultDrawerItem);
     setDrawerOpen(nextDrawerOpen);
+    setDrawerPinned(workspace?.drawerPinned ?? true);
+    setTaskSort(workspace?.taskSort ?? "name");
+    setDrawerPeek(false);
     setDrawerItem(nextDrawerItem);
     recentFilesRef.current = recentFiles;
     setRecentFiles(recentFiles);
@@ -2929,6 +2959,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     const start = new Date(firstDay);
     start.setDate(firstDay.getDate() - firstDay.getDay());
 
+    // Six 7-day rows cover any month; the fixed count keeps the grid height
+    // stable when paging between months.
     return Array.from({ length: 42 }, (_, index) => {
       const date = new Date(start);
       date.setDate(start.getDate() + index);
@@ -3268,6 +3300,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     if (clean) {
       setActiveDocumentDirty(false);
+      // Same macrotask delay as hydrateDocumentTab: late Tiptap update
+      // callbacks must not mark the freshly loaded body dirty.
       window.setTimeout(() => {
         hydratingEditor.current[activeGroupIdRef.current] = false;
       }, 0);
@@ -3297,6 +3331,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       vaultDrawerOpen: next.vaultDrawerOpen ?? vaultDrawerOpen,
       vaultDrawerItem: next.vaultDrawerItem ?? vaultDrawerItem,
       drawerOpen: next.drawerOpen ?? drawerOpen,
+      drawerPinned: next.drawerPinned ?? drawerPinned,
+      taskSort: next.taskSort ?? taskSort,
       drawerItem: next.drawerItem ?? drawerItem,
       splitOpen: next.splitOpen ?? splitOpen,
     });
@@ -3489,10 +3525,12 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       vaultDrawerOpen,
       vaultDrawerItem,
       drawerOpen,
+      drawerPinned,
       drawerItem,
       splitOpen,
+      taskSort,
     });
-  }, [drawerItem, drawerOpen, splitOpen, vaultDrawerItem, vaultDrawerOpen]);
+  }, [drawerItem, drawerOpen, drawerPinned, splitOpen, taskSort, vaultDrawerItem, vaultDrawerOpen]);
 
   function activeFileHostPath() {
     const vaultRoot = vaultRootRef.current;
@@ -5513,6 +5551,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
         updateEditorDropPreview(null);
         setEditorDropAnimation(animation);
+        // Slightly longer than the 220ms vault-file-drop-expand animation so the
+        // overlay is removed only after it completes.
         setTimeout(() => {
           setEditorDropAnimation((current) =>
             current === animation ? null : current,
@@ -5978,6 +6018,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           action: () => openFolderActionDialog("create-canvas", entry),
         },
         {
+          id: "vault-create-base",
+          text: "Create Base",
+          action: () => openFolderActionDialog("create-base", entry),
+        },
+        {
           id: "vault-create-folder",
           text: "Create Folder",
           action: () => openFolderActionDialog("create-folder", entry),
@@ -6155,6 +6200,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
 
     cancelPendingDirectoryClick();
+    // Wait out the double-click window so a double-click (shadow open) does not
+    // also navigate into the directory.
     clickTimer.current = setTimeout(() => {
       enterDirectory(entry.relativePath);
     }, 180);
@@ -6330,27 +6377,31 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setEditorBody(parts.body, false);
   }
 
-  function updateCanvasDocument(groupId: EditorGroupId, nextContent: string) {
+  // Canvas and base panes own their editing UI and hand back the full file
+  // text; `nextDirty` is false when a pane discards its draft.
+  function updateRawDocument(groupId: EditorGroupId, nextContent: string, nextDirty = true) {
     const group = editorGroupsRef.current[groupId];
     const tab = group.tabs.find((documentTab) => documentTab.id === group.activeTabId);
 
-    if (tab?.kind !== "canvas") {
+    if (tab?.kind !== "canvas" && tab?.kind !== "base") {
       return;
     }
 
     updateGroupTab(groupId, tab.id, {
       markdown: nextContent,
       markdownDraft: nextContent,
-      dirty: true,
+      dirty: nextDirty,
     });
 
     if (groupId === activeGroupIdRef.current) {
       setMarkdown(nextContent);
       setMarkdownDraft(nextContent);
-      setDirty(true);
+      setDirty(nextDirty);
     }
 
-    setStatus(`Unsaved canvas changes in ${tab.activeFile?.name ?? "canvas"}`);
+    if (nextDirty) {
+      setStatus(`Unsaved ${tab.kind} changes in ${tab.activeFile?.name ?? tab.kind}`);
+    }
   }
 
   function appendTable() {
@@ -7032,6 +7083,18 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       return;
     }
 
+    const slashTrigger = commandPaletteScope === "flat" ? slashTriggerRef.current : null;
+    const passthrough =
+      slashTrigger && isEditorReady(slashTrigger.editor)
+        ? slashMenuPassthrough(event, commandPaletteQuery)
+        : null;
+    if (slashTrigger && passthrough) {
+      event.preventDefault();
+      closeCommandPalette();
+      applySlashMenuPassthrough(slashTrigger.editor, slashTrigger.from, passthrough);
+      return;
+    }
+
     if (
       event.key === "Backspace" &&
       commandPaletteScope !== "root" &&
@@ -7101,6 +7164,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   }
 
   function toggleDrawerItem(item: DrawerItem) {
+    if (!drawerPinned) {
+      // An unpinned drawer never docks, so a toggle from the rail, menu, or
+      // shortcut is a keyboard-driven peek that the pointer can dismiss.
+      const hide = drawerPeek && drawerItem === item;
+      setDrawerItem(item);
+      setDrawerPeek(!hide);
+      return;
+    }
+
     if (drawerItem === item) {
       setDrawerOpen((open) => !open);
       return;
@@ -7108,6 +7180,14 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     setDrawerItem(item);
     setDrawerOpen(true);
+  }
+
+  function setDrawerPinnedMode(pinned: boolean) {
+    setDrawerPinned(pinned);
+    // Pinning docks the panel open; unpinning collapses the grid column and
+    // leaves the panel floating until the pointer leaves it.
+    setDrawerOpen(pinned);
+    setDrawerPeek(!pinned);
   }
 
   function toggleVaultDrawerItem(item: VaultDrawerItem) {
@@ -7242,11 +7322,6 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     [taskListQuery, taskResults, taskSort],
   );
 
-  const visibleVaultTags = useMemo(() => {
-    const query = tagListQuery.trim().toLowerCase();
-    return query ? vaultTags.filter((entry) => entry.tag.includes(query)) : vaultTags;
-  }, [tagListQuery, vaultTags]);
-
   const visibleSearchResults = useMemo(
     () => visibleVaultSearchResults(searchResults),
     [searchResults],
@@ -7319,29 +7394,20 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     void refreshTasks(taskFilter);
   }, [vaultDrawerItem, vaultRoot, taskFilter]);
 
-  async function refreshTags() {
-    if (!vaultRoot) {
-      setVaultTags([]);
-      return;
-    }
-
-    try {
-      setTagsLoading(true);
-      setVaultTags(await readVaultTags(vaultRoot));
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setTagsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (vaultDrawerItem !== "tags") {
-      return;
-    }
-
-    void refreshTags();
-  }, [vaultDrawerItem, vaultRoot]);
+  const vaultTags = useVaultDrawerData({
+    active: vaultDrawerItem === "tags",
+    vaultRoot,
+    empty: noVaultTags,
+    load: readVaultTags,
+    onError: setStatus,
+  });
+  const vaultActivity = useVaultDrawerData({
+    active: vaultDrawerItem === "recent",
+    vaultRoot,
+    empty: noVaultActivity,
+    load: readVaultActivity,
+    onError: setStatus,
+  });
 
   function openImagePreviewFromEditor(event: ReactMouseEvent<HTMLDivElement>) {
     const target = event.target;
@@ -7584,7 +7650,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         metaHeader={metaHeader}
         metadataOpen={metadataOpen}
         onActivateGroup={activateEditorGroup}
-        onCanvasChange={updateCanvasDocument}
+        onRawDocumentChange={updateRawDocument}
         onCloseTab={closeDocumentTab}
         onEditorContextMenu={handleEditorContextMenu}
         onTabContextMenu={showDocumentTabMenu}
@@ -7672,6 +7738,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     "--drawer-width": `${drawerOpen ? inspectorDrawerWidth : closedDrawerWidth}px`,
     "--vault-resizer-width": vaultDrawerOpen ? `${workspaceResizeHandleWidth}px` : "0px",
     "--drawer-resizer-width": drawerOpen ? `${workspaceResizeHandleWidth}px` : "0px",
+    "--drawer-floating-width": `${inspectorDrawerWidth}px`,
   } as CSSProperties;
   const normalizedVaultAppearanceDraft =
     normalizeVaultAppearanceSettings(vaultAppearanceDraft);
@@ -7705,6 +7772,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     "--drawer-width": `${drawerOpen ? inspectorDrawerWidth : closedDrawerWidth}px`,
     "--vault-resizer-width": vaultDrawerOpen ? `${workspaceResizeHandleWidth}px` : "0px",
     "--drawer-resizer-width": drawerOpen ? `${workspaceResizeHandleWidth}px` : "0px",
+    "--drawer-floating-width": `${inspectorDrawerWidth}px`,
   } as CSSProperties;
   const settingsCardStyle = {
     transform: `translate(${settingsOffset.x}px, ${settingsOffset.y}px)`,
@@ -8043,6 +8111,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           "workspace with-vault",
           vaultDrawerOpen ? "vault-drawer-open" : "vault-drawer-closed",
           drawerOpen ? "drawer-open" : "drawer-closed",
+          drawerPeek && !drawerOpen ? "drawer-floating" : "",
           focusMode ? "focus-mode" : "",
         ].join(" ")}
         aria-label="Editor workspace"
@@ -8330,25 +8399,24 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                 </>
               ) : vaultDrawerItem === "recent" ? (
                 <div className="vault-list recent-list" role="list" aria-label="Recently opened files">
-                  {recentFiles.map((file) => (
-                    <button
-                      className={
-                        activeFile?.relativePath === file.relativePath
-                          ? "vault-entry recent-entry active"
-                          : "vault-entry recent-entry"
+                  {vaultRoot ? (
+                    <VaultActivityPanel
+                      files={vaultActivity.data}
+                      onOpenFile={(relativePath, event) =>
+                        handleDocumentClick(event, () => openFile(relativePath))
                       }
+                    />
+                  ) : null}
+                  {recentFiles.map((file) => (
+                    <VaultFileEntry
                       key={file.relativePath}
-                      type="button"
+                      relativePath={file.relativePath}
+                      name={file.name}
+                      active={activeFile?.relativePath === file.relativePath}
                       onClick={(event) =>
                         handleDocumentClick(event, () => openFile(file.relativePath))
                       }
-                    >
-                      <VaultFileIcon relativePath={file.relativePath} />
-                      <span className="recent-entry-text">
-                        <strong>{file.name}</strong>
-                        <em>{file.relativePath}</em>
-                      </span>
-                    </button>
+                    />
                   ))}
                   {vaultRoot && recentFiles.length === 0 ? (
                     <p className="empty-vault">No recently opened files yet.</p>
@@ -8538,74 +8606,17 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                   )}
                 </div>
               ) : vaultDrawerItem === "tags" ? (
-                <div className="vault-tags" role="region" aria-label="Vault tags">
-                  <div className="task-list-tools tag-list-tools">
-                    <label>
-                      <span>Find</span>
-                      <input
-                        disabled={!vaultRoot}
-                        value={tagListQuery}
-                        onChange={(event) => setTagListQuery(event.currentTarget.value)}
-                        placeholder="Filter tags"
-                      />
-                    </label>
-                    <button
-                      className="task-refresh-button"
-                      disabled={!vaultRoot || tagsLoading}
-                      type="button"
-                      title="Refresh tags"
-                      aria-label="Refresh tags"
-                      onClick={() => refreshTags()}
-                    >
-                      {tagsLoading ? "..." : renderToolbarIcon("refresh")}
-                    </button>
-                  </div>
-                  {visibleVaultTags.length > 0 ? (
-                    <div className="task-results tag-results" role="list" aria-label="Tags">
-                      {visibleVaultTags.map((entry) => (
-                        <div key={entry.tag} className="tag-group" role="listitem">
-                          <button
-                            type="button"
-                            className={expandedTag === entry.tag ? "tag-row active" : "tag-row"}
-                            aria-expanded={expandedTag === entry.tag}
-                            onClick={() =>
-                              setExpandedTag(expandedTag === entry.tag ? null : entry.tag)
-                            }
-                          >
-                            <strong>#{entry.tag}</strong>
-                            <span className="tag-count">{entry.files.length}</span>
-                          </button>
-                          {expandedTag === entry.tag
-                            ? entry.files.map((relativePath) => (
-                                <button
-                                  key={relativePath}
-                                  type="button"
-                                  className="tag-file"
-                                  onClick={(event) =>
-                                    handleDocumentClick(event, () =>
-                                      openFile(relativePath, { revealInVaultDrawer: false }),
-                                    )
-                                  }
-                                >
-                                  {relativePath}
-                                </button>
-                              ))
-                            : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : vaultRoot ? (
-                    <p className="empty-vault">
-                      {tagsLoading
-                        ? "Scanning tags..."
-                        : vaultTags.length > 0
-                          ? "No tags match this filter."
-                          : "No tags found in this vault."}
-                    </p>
-                  ) : (
-                    <p className="empty-vault">Open a vault to list tags.</p>
-                  )}
-                </div>
+                <VaultTagsPanel
+                  hasVault={Boolean(vaultRoot)}
+                  tags={vaultTags.data}
+                  loading={vaultTags.loading}
+                  onRefresh={() => void vaultTags.refresh()}
+                  onOpenFile={(relativePath, event) =>
+                    handleDocumentClick(event, () =>
+                      openFile(relativePath, { revealInVaultDrawer: false }),
+                    )
+                  }
+                />
               ) : (
                 <div className="vault-search" role="search">
                   <label>
@@ -8780,8 +8791,15 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           onPointerDown={(event) => beginWorkspaceResize("drawer", event)}
         />
 
-        <aside className="drawer-pane" aria-label="Inspector drawer">
-          <div className="drawer-rail" aria-label="Drawer items">
+        <aside
+          ref={drawerPaneRef}
+          className="drawer-pane"
+          aria-label="Inspector drawer"
+          onPointerEnter={cancelDrawerPeekHide}
+          onPointerLeave={scheduleDrawerPeekHide}
+          onBlur={hideDrawerPeekOnBlur}
+        >
+          <div className="drawer-rail" aria-label="Drawer items" onPointerEnter={revealDrawerPeek}>
             <button
               className={drawerItem === "source" && drawerOpen ? "drawer-tab active" : "drawer-tab"}
               type="button"
@@ -8860,7 +8878,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
               </svg>
             </button>
           </div>
-          {drawerOpen ? (
+          {drawerOpen || drawerPeek ? (
             <div className="drawer-content">
               <div className="drawer-header">
                 <div>
@@ -8883,14 +8901,33 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                         : "Monthly calendar notes"}
                   </span>
                 </div>
-                <button
-                  className="inline-action"
-                  type="button"
-                  aria-label="Close drawer"
-                  onClick={() => setDrawerOpen(false)}
-                >
-                  Close
-                </button>
+                <div className="drawer-header-actions">
+                  <button
+                    className={drawerPinned ? "quiet-icon-action drawer-pin active" : "quiet-icon-action drawer-pin"}
+                    type="button"
+                    aria-pressed={drawerPinned}
+                    aria-label={drawerPinned ? "Unpin drawer" : "Pin drawer"}
+                    title={
+                      drawerPinned
+                        ? "Unpin: float over the note and reveal on hover"
+                        : "Pin: dock beside the note"
+                    }
+                    onClick={() => setDrawerPinnedMode(!drawerPinned)}
+                  >
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <path d="M9 4h6l-1 5 3 3v2H7v-2l3-3z" />
+                      <path d="M12 14v6" />
+                    </svg>
+                  </button>
+                  <button
+                    className="inline-action"
+                    type="button"
+                    aria-label="Close drawer"
+                    onClick={() => (drawerPinned ? setDrawerOpen(false) : setDrawerPeek(false))}
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
               {drawerItem === "source" ? (
                 <div className="drawer-panel source-panel">

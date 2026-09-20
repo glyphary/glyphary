@@ -329,6 +329,11 @@ export type LinkGraphNode = {
   cluster: number;
 };
 
+export type VaultFileActivity = {
+  relativePath: string;
+  modifiedMs: number;
+};
+
 export type VaultTag = {
   tag: string;
   files: string[];
@@ -361,9 +366,46 @@ export type BaseViewResult = {
   rows: BaseRow[];
 };
 
+export type BaseFilterGroupKind = "and" | "or" | "not";
+
+export type BaseFilter =
+  | { kind: BaseFilterGroupKind; filters: BaseFilter[] }
+  | { kind: "expression"; source: string };
+
+export type BaseFormula = {
+  name: string;
+  expression: string;
+};
+
+export type BaseSort = {
+  property: string;
+  direction: string;
+};
+
+export type BaseViewDefinition = {
+  name: string;
+  type: string;
+  order: string[];
+  sort: BaseSort[];
+  limit?: number | null;
+  image?: string | null;
+  filters: BaseFilter | null;
+  extra: string[];
+};
+
+export type BaseDefinition = {
+  filters: BaseFilter | null;
+  formulas: BaseFormula[];
+  views: BaseViewDefinition[];
+  extra: string[];
+};
+
 export type BaseQueryResult = {
   relativePath: string;
   name: string;
+  definition: BaseDefinition;
+  displayNames: Record<string, string>;
+  errors: string[];
   views: BaseViewResult[];
 };
 
@@ -393,6 +435,7 @@ export type FolderContextMenuState = {
 export type FolderActionKind =
   | "create-note"
   | "create-canvas"
+  | "create-base"
   | "create-folder"
   | "rename"
   | "rename-file"
@@ -422,7 +465,9 @@ export type PersistedWorkspace = {
   vaultDrawerOpen: boolean;
   vaultDrawerItem: VaultDrawerItem;
   drawerOpen: boolean;
+  drawerPinned: boolean;
   drawerItem: DrawerItem;
+  taskSort: TaskSort;
   splitOpen: boolean;
 };
 

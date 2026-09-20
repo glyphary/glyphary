@@ -46,6 +46,10 @@ export function fileNameWithoutMarkdownExtension(fileName: string) {
   return fileName.replace(/\.(md|markdown)$/i, "");
 }
 
+export function baseName(relativePath: string) {
+  return relativePath.slice(relativePath.lastIndexOf("/") + 1);
+}
+
 export function isUrlLike(value: string) {
   return /^[a-z][a-z\d+.-]*:/i.test(value) || value.startsWith("//");
 }

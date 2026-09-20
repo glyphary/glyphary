@@ -107,6 +107,8 @@ export function createWikiLinkExtension(options: WikiLinkExtensionOptions) {
                 return false;
               }
 
+              // Returning false lets the second "[" land in the document first;
+              // the search opens on the next tick, after that insertion.
               window.setTimeout(options.openSearch, 0);
               return false;
             },

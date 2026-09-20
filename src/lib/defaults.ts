@@ -49,6 +49,8 @@ export const defaultVaultAssetDirectory = "_assets_";
 export const defaultVaultImageDirectory = "_assets_/images";
 export const defaultExcalidrawDirectory = "_assets_/drawings";
 export const defaultFrontmatterPillHeader = "tags";
+// Lowercase `mm` in the date slot predates the MM/mm split; expandDateFormat
+// still maps this exact shape to the month so saved tidbit paths do not move.
 export const defaultTidbitPathPattern =
   "__transit__/Objects/tidbit-{{date:YYYY-mm-DD-hh-mm-ss}}.md";
 export const defaultTidbitGlobalShortcut = "CommandOrControl+Shift+Space";

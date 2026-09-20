@@ -590,6 +590,7 @@ function CollapseNodeView({ node }: NodeViewProps) {
           event.stopPropagation();
           setOpen((value) => !value);
         }}
+        // Keeps ProseMirror from moving the selection into the summary on toggle.
         onMouseDown={(event) => {
           event.preventDefault();
           event.stopPropagation();

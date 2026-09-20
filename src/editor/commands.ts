@@ -161,3 +161,17 @@ export function currentCursorContext(editor: Editor | null) {
     after || "(empty)",
   ].join("\n");
 }
+
+/** Inserts the typed text after the slash that opened the menu, or removes that slash. */
+export function applySlashMenuPassthrough(
+  editor: Editor,
+  slashEnd: number,
+  passthrough: { kind: "insert"; text: string } | { kind: "erase" },
+) {
+  const transaction =
+    passthrough.kind === "insert"
+      ? editor.state.tr.insertText(passthrough.text, slashEnd)
+      : editor.state.tr.delete(slashEnd - 1, slashEnd);
+  editor.view.dispatch(transaction);
+  editor.view.focus();
+}

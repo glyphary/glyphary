@@ -930,7 +930,6 @@ h2 {
   display: none;
 }
 
-/* The top-left clusters (files-drawer actions, drawer toggle) go too. */
 .app-shell.focus-mode .titlebar-vault-actions,
 .app-shell.focus-mode .titlebar-native-actions {
   display: none;
@@ -2960,6 +2959,216 @@ body.workspace-resizing * {
   color: var(--text);
   background: var(--hover);
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border-soft));
+}
+
+.base-editor {
+  display: grid;
+  gap: 0;
+  margin: 0 0 18px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 0 8px;
+  font-size: 0.8rem;
+}
+
+.base-editor-section {
+  display: grid;
+  gap: 2px;
+  padding: 8px 0;
+}
+
+.base-editor-section + .base-editor-section {
+  border-top: 1px solid var(--border);
+}
+
+.base-editor-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 24px;
+}
+
+.base-editor-section h2 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.base-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 0;
+}
+
+.base-editor-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.base-editor-row label + label {
+  margin-left: 6px;
+}
+
+.base-editor-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.base-editor input,
+.base-editor select {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface-muted);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0 7px;
+}
+
+.base-editor input[type="text"] {
+  flex: 1 1 140px;
+  max-width: 260px;
+}
+
+.base-editor input[type="number"] {
+  width: 64px;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.base-editor select {
+  flex: 0 0 auto;
+  padding-right: 22px;
+}
+
+.base-editor input:focus-visible,
+.base-editor select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: -1px;
+  border-color: var(--accent);
+}
+
+.base-editor input.base-editor-wide {
+  flex: 1 1 320px;
+  max-width: none;
+  font-family: var(--mono-text, ui-monospace, monospace);
+  font-size: 0.76rem;
+}
+
+.base-editor-add,
+.base-editor-remove,
+.base-editor-link {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.base-editor-add {
+  justify-self: start;
+  padding: 3px 2px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.base-editor-add span {
+  display: inline-block;
+  width: 14px;
+  font-size: 0.95rem;
+  line-height: 0;
+}
+
+.base-editor-add:hover,
+.base-editor-link:hover {
+  color: var(--accent);
+}
+
+.base-editor-remove {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.base-editor-remove:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger, #c94848) 12%, transparent);
+  color: var(--danger, #c94848);
+}
+
+.base-editor-link {
+  padding: 2px 4px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 2px;
+}
+
+.base-editor-add:disabled,
+.base-editor-remove:disabled,
+.base-editor .settings-inline-action:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.base-filter-group {
+  display: grid;
+  gap: 2px;
+  padding: 2px 0 2px 10px;
+  border-left: 1px solid var(--border);
+}
+
+.base-filter-group .base-filter-group {
+  margin-top: 2px;
+  border-left-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.base-editor-footer {
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.base-editor-note {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.base-editor-errors {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--danger, #c94848);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.base-editor-errors li {
+  font-family: var(--mono-text, ui-monospace, monospace);
+}
+
+.base-editor-error {
+  margin: 4px 0 0;
+  color: var(--danger, #c94848);
+  font-size: 0.78rem;
+  font-weight: 650;
 }
 
 .base-card-grid {
@@ -6021,7 +6230,6 @@ body.workspace-resizing * {
   animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
 }
 
-/* One-time onboarding tips: quiet centered card, dismiss resumes the action. */
 .onboarding-tip-screen {
   position: fixed;
   inset: 0;
@@ -6063,7 +6271,7 @@ body.workspace-resizing * {
   justify-self: end;
 }
 
-/* Caret-anchored slash menu: no dimmed backdrop, card placed inline. */
+/* Anchored at the caret, a dimmed backdrop would obscure the text being edited. */
 .command-palette-screen.anchored {
   background: transparent;
   animation: none;
@@ -7809,4 +8017,150 @@ body.workspace-resizing * {
   padding: 5px 7px 5px 18px;
   color: var(--text);
   font-size: 0.74rem;
+}
+
+.activity-heatmap {
+  flex: 0 0 auto;
+  overflow-x: auto;
+  padding: 4px 2px 8px;
+  scrollbar-width: none;
+}
+
+.activity-heatmap::-webkit-scrollbar {
+  display: none;
+}
+
+.activity-heatmap-months {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 11px;
+  height: 12px;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 12px;
+  white-space: nowrap;
+}
+
+.activity-heatmap-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 9px);
+  grid-auto-columns: 9px;
+  gap: 2px;
+}
+
+.activity-cell {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  cursor: pointer;
+}
+
+.activity-cell.future {
+  background: transparent;
+  cursor: default;
+}
+
+.activity-cell[data-level="1"] {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.activity-cell[data-level="2"] {
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.activity-cell[data-level="3"] {
+  background: color-mix(in srgb, var(--accent) 80%, transparent);
+}
+
+.activity-cell[data-level="4"] {
+  background: var(--accent);
+}
+
+.activity-cell.selected {
+  outline: 2px solid var(--heading);
+  outline-offset: 1px;
+}
+
+.activity-cell:focus-visible {
+  outline: 2px solid var(--glyphary-focus);
+  outline-offset: 1px;
+}
+
+.activity-day {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.activity-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 4px;
+  color: var(--heading);
+  font-size: 0.78rem;
+}
+
+/* Floating mode: the pane keeps its 48px grid track but grows leftward over
+   the note by the panel width, so the rail stays on the panel's left edge and
+   the pane's own overflow clipping and corners keep working. */
+.workspace.drawer-floating .drawer-pane {
+  position: relative;
+  z-index: 40;
+  /* The docked width already includes the rail, so the floating pane takes
+     that same width and only the excess over the rail track hangs leftward. */
+  width: var(--drawer-floating-width, 360px);
+  margin-left: calc(var(--drawer-width, 48px) - var(--drawer-floating-width, 360px));
+  animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
+}
+
+/* No background overrides here: the pane and panel keep the docked styling,
+   including the glass overlay and backdrop blur, so pinned and floating look
+   identical rather than the floating panel reading as a darker slab. */
+.workspace.drawer-floating .drawer-content {
+  opacity: 1;
+  transform: none;
+}
+
+.drawer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.drawer-pin {
+  width: 30px;
+  height: 30px;
+}
+
+.drawer-pin svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.drawer-pin.active {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace.drawer-floating .drawer-pane {
+    animation: none;
+  }
+}
+
+@media (max-width: 840px) {
+  .workspace.drawer-floating .drawer-pane {
+    width: auto;
+    margin-left: 0;
+  }
 }

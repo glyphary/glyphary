@@ -110,3 +110,23 @@ export function shouldReportCommandPaletteStatus(command: CommandPaletteCommand)
     !command.id.startsWith("ai-")
   );
 }
+
+export type SlashMenuPassthrough = { kind: "insert"; text: string } | { kind: "erase" } | null;
+
+type SlashKeystroke = { key: string; metaKey: boolean; ctrlKey: boolean; altKey: boolean };
+
+/**
+ * Typing straight through the slash menu means the "/" was meant as text.
+ * A printable key hands the character back to the note; Backspace on an
+ * empty query erases the slash itself. Anything else stays with the menu.
+ */
+export function slashMenuPassthrough(keystroke: SlashKeystroke, query: string): SlashMenuPassthrough {
+  const { key, metaKey, ctrlKey, altKey } = keystroke;
+  if (key.length === 1 && !metaKey && !ctrlKey && !altKey) {
+    return { kind: "insert", text: key };
+  }
+  if (key === "Backspace" && query.length === 0) {
+    return { kind: "erase" };
+  }
+  return null;
+}

@@ -249,6 +249,13 @@ pub(crate) struct LinkGraphNode {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(crate) struct VaultFileActivity {
+    pub(crate) relative_path: String,
+    pub(crate) modified_ms: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct VaultTag {
     pub(crate) tag: String,
     pub(crate) files: Vec<String>,
@@ -283,7 +290,73 @@ pub(crate) struct SearchResult {
 pub(crate) struct BaseQueryResult {
     pub(crate) relative_path: String,
     pub(crate) name: String,
+    pub(crate) definition: BaseDefinition,
+    /// Column labels from the `properties:` block, keyed by field name.
+    pub(crate) display_names: HashMap<String, String>,
+    /// Parse and evaluation problems, one line each, for the base editor.
+    pub(crate) errors: Vec<String>,
     pub(crate) views: Vec<BaseViewResult>,
+}
+
+/// A `filters:` node. Groups nest to any depth; leaves keep the expression
+/// text exactly as written so unsupported syntax survives a round trip.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub(crate) enum BaseFilter {
+    And { filters: Vec<BaseFilter> },
+    Or { filters: Vec<BaseFilter> },
+    Not { filters: Vec<BaseFilter> },
+    Expression { source: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BaseFormula {
+    pub(crate) name: String,
+    pub(crate) expression: String,
+}
+
+/// One `sort:` entry of a view; `direction` is `ASC` or `DESC`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BaseSort {
+    pub(crate) property: String,
+    pub(crate) direction: String,
+}
+
+/// Parsed `.base` definition. `extra` holds lines the parser does not model
+/// (`properties:`, `summaries:`, per-view `groupBy:`) so they survive a
+/// round trip.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BaseDefinition {
+    #[serde(default)]
+    pub(crate) filters: Option<BaseFilter>,
+    #[serde(default)]
+    pub(crate) formulas: Vec<BaseFormula>,
+    pub(crate) views: Vec<BaseViewDefinition>,
+    #[serde(default)]
+    pub(crate) extra: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BaseViewDefinition {
+    pub(crate) name: String,
+    #[serde(rename = "type")]
+    pub(crate) view_type: String,
+    #[serde(default)]
+    pub(crate) order: Vec<String>,
+    #[serde(default)]
+    pub(crate) sort: Vec<BaseSort>,
+    #[serde(default)]
+    pub(crate) limit: Option<u64>,
+    #[serde(default)]
+    pub(crate) image: Option<String>,
+    #[serde(default)]
+    pub(crate) filters: Option<BaseFilter>,
+    #[serde(default)]
+    pub(crate) extra: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]

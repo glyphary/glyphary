@@ -185,6 +185,8 @@ pub(crate) fn find_first_page_image(html: &str, base_url: &str) -> Option<String
     // Page-image fallback is intentionally shallow: early content is likely to
     // contain the article/card image, while scanning an entire page increases
     // latency and the chance of picking navigation or tracking images.
+    // Walk char indices so the cap lands on a char boundary; slicing inside a
+    // multibyte character would panic.
     let scan_end = html
         .char_indices()
         .map(|(index, _)| index)

@@ -109,8 +109,8 @@ impl NodeIndex {
 }
 
 struct Matchers {
-    // Selects every line the sink needs to see: wikilinks, inline tags, and
-    // the frontmatter delimiter/key/list lines that drive the tag parser.
+    // The searcher only hands the sink matching lines, so this union must
+    // cover every line the wikilink, tag, and frontmatter state machine need.
     lines: RegexMatcher,
     wikilink: RegexMatcher,
     tag: RegexMatcher,
@@ -158,7 +158,6 @@ fn inline_tag_values(value: &str) -> impl Iterator<Item = &str> {
         .split(|c| c == ',' || c == ' ')
 }
 
-/// Byte ranges of every match of `matcher` in `line`.
 fn match_ranges(matcher: &RegexMatcher, line: &[u8]) -> Result<Vec<(usize, usize)>, io::Error> {
     let mut ranges = Vec::new();
     matcher

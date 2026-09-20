@@ -205,6 +205,8 @@ export default function TidbitCapture() {
 
     let cancelled = false;
 
+    // Two frames let the theme classes and glass tokens paint before the
+    // hidden window is shown, so it does not flash unstyled.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (cancelled) {

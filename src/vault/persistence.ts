@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  BaseDefinition,
   BaseQueryResult,
   GithubVaultResult,
   LinkGraph,
@@ -8,6 +9,7 @@ import type {
   SearchResult,
   VaultEntry,
   VaultIndexedFile,
+  VaultFileActivity,
   VaultSettings,
   VaultTag,
 } from "../lib/app-types";
@@ -147,8 +149,24 @@ export function readVaultTags(root: string) {
   return invoke<VaultTag[]>("read_vault_tags", { root });
 }
 
+export function readVaultActivity(root: string) {
+  return invoke<VaultFileActivity[]>("list_vault_activity", { root });
+}
+
 export function queryBase(root: string, relative: string) {
-  return invoke<BaseQueryResult>("query_base", { root, relative });
+  // Rust has no timezone database; it needs local minus UTC to read and show
+  // wall-clock dates in formulas.
+  const tzOffsetMinutes = -new Date().getTimezoneOffset();
+
+  return invoke<BaseQueryResult>("query_base", { root, relative, tzOffsetMinutes });
+}
+
+export function renderBaseDefinition(definition: BaseDefinition) {
+  return invoke<string>("render_base_definition", { definition });
+}
+
+export function createBaseInDirectory(root: string, relative: string, baseName: string) {
+  return invoke<OpenedFile>("create_base_in_directory", { root, relative, baseName });
 }
 
 export function cloneGithubVault(repoUrl: string, branch: string, token: string) {

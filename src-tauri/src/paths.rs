@@ -99,6 +99,8 @@ pub(crate) fn ensure_vault_parent_dirs(
 ) -> Result<PathBuf, String> {
     let mut current = root.to_path_buf();
 
+    // Each existing component is canonicalized on its own so a symlink partway
+    // down the path cannot redirect the remaining components outside the vault.
     for component in relative_parent.components() {
         let Component::Normal(part) = component else {
             continue;
@@ -179,13 +181,28 @@ pub(crate) fn sanitize_asset_file_name(file_name: &str) -> String {
     }
 }
 pub(crate) fn sanitize_markdown_file_name(file_name: &str) -> Result<String, String> {
+    sanitize_vault_file_name(file_name, &[".md", ".markdown"], "Page name cannot be empty")
+}
+pub(crate) fn sanitize_canvas_file_name(file_name: &str) -> Result<String, String> {
+    sanitize_vault_file_name(file_name, &[".canvas"], "Canvas name cannot be empty")
+}
+pub(crate) fn sanitize_base_file_name(file_name: &str) -> Result<String, String> {
+    sanitize_vault_file_name(file_name, &[".base"], "Base name cannot be empty")
+}
+/// Reduces a user-typed name to a safe file name ending in `extensions[0]`.
+/// Any of `extensions` already typed by the user is stripped first.
+fn sanitize_vault_file_name(
+    file_name: &str,
+    extensions: &[&str],
+    empty_error: &str,
+) -> Result<String, String> {
     let file_name = Path::new(file_name)
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let without_extension = file_name
-        .strip_suffix(".md")
-        .or_else(|| file_name.strip_suffix(".markdown"))
+    let without_extension = extensions
+        .iter()
+        .find_map(|extension| file_name.strip_suffix(extension))
         .unwrap_or(&file_name);
     let mut clean = String::new();
     let mut previous_space = false;
@@ -216,49 +233,9 @@ pub(crate) fn sanitize_markdown_file_name(file_name: &str) -> Result<String, Str
         .to_string();
 
     if clean.is_empty() {
-        Err("Page name cannot be empty".into())
+        Err(empty_error.into())
     } else {
-        Ok(format!("{clean}.md"))
-    }
-}
-pub(crate) fn sanitize_canvas_file_name(file_name: &str) -> Result<String, String> {
-    let file_name = Path::new(file_name)
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let without_extension = file_name.strip_suffix(".canvas").unwrap_or(&file_name);
-    let mut clean = String::new();
-    let mut previous_space = false;
-
-    for character in without_extension.chars() {
-        let next =
-            if character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_' | ' ') {
-                character
-            } else if character.is_whitespace() {
-                ' '
-            } else {
-                '-'
-            };
-
-        if next == ' ' {
-            if !previous_space {
-                clean.push(next);
-            }
-            previous_space = true;
-        } else {
-            clean.push(next);
-            previous_space = false;
-        }
-    }
-
-    let clean = clean
-        .trim_matches(|character: char| character == '.' || character == '-' || character == ' ')
-        .to_string();
-
-    if clean.is_empty() {
-        Err("Canvas name cannot be empty".into())
-    } else {
-        Ok(format!("{clean}.canvas"))
+        Ok(format!("{clean}{}", extensions[0]))
     }
 }
 pub(crate) fn sanitize_directory_name(directory_name: &str) -> Result<String, String> {

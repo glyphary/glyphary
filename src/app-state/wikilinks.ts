@@ -68,6 +68,8 @@ export function useWikiLinkState() {
   const [wikiLinkPicker, setWikiLinkPicker] = useState<WikiLinkPickerState | null>(null);
   const [wikiLinkPickerSelectedIndex, setWikiLinkPickerSelectedIndex] = useState(0);
 
+  // Editor extensions capture their callbacks once, so they read the index
+  // and handlers through refs to always see the latest values.
   const wikiLinkIndexRef = useRef<VaultIndexedFile[]>([]);
   const wikiLinkSearchInputRef = useRef<HTMLInputElement | null>(null);
   const openWikiLinkSearchRef = useRef<() => void>(() => undefined);

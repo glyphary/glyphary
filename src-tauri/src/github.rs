@@ -709,6 +709,8 @@ async fn push_repository(
             continue;
         }
 
+        // Tracked at the last sync but gone locally means the user deleted it;
+        // `sha: None` is the tree API's delete marker.
         if metadata.files.contains_key(path) {
             changes.push(GithubTreeChange {
                 path: path.clone(),
@@ -1061,6 +1063,7 @@ pub(crate) async fn github_push_vault(
 
 #[tauri::command]
 pub(crate) fn github_get_token(repo_url: String) -> Result<String, String> {
+    // Tokens are keyed by owner/repo only, so any branch satisfies the parser.
     let repository = parse_github_repository(&repo_url, "main")?;
     read_saved_github_token(&repository)
 }

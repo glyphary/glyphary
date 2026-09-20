@@ -167,6 +167,8 @@ function normalizePersistedWorkspace(
     workspace.vaultDrawerItem === "tags"
       ? workspace.vaultDrawerItem
       : "files";
+  const taskSort: PersistedWorkspace["taskSort"] =
+    workspace.taskSort === "date" ? "date" : "name";
   const drawerItem: PersistedWorkspace["drawerItem"] =
     workspace.drawerItem === "toc" || workspace.drawerItem === "calendar"
       ? workspace.drawerItem
@@ -189,6 +191,9 @@ function normalizePersistedWorkspace(
     vaultDrawerOpen: workspace.vaultDrawerOpen !== false,
     vaultDrawerItem,
     drawerOpen: workspace.drawerOpen === true,
+    // Absent in workspaces saved before the floating drawer; docked is the old behavior.
+    drawerPinned: workspace.drawerPinned !== false,
+    taskSort,
     drawerItem,
     splitOpen: workspace.splitOpen === true,
   };

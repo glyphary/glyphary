@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { baseTitle, isBasePath } from "../base/base";
+import { baseTitle, isBasePath } from "../lib/base";
 import { canvasTitle, isCanvasPath } from "../CanvasView";
 import type { DocumentTab, EditorGroupId, EditorGroupState } from "../lib/app-types";
 import { defaultMetaDelimiter } from "../lib/markdown";
@@ -152,6 +152,7 @@ export function vaultImagePathCandidates(
     convertFileSrc(`${root}/${assetDirectory}/${cleanReference}`),
     convertFileSrc(`${root}/${defaultVaultImageDirectory}/${cleanReference}`),
     convertFileSrc(`${root}/${defaultVaultAssetDirectory}/${cleanReference}`),
+    // Obsidian's default attachment folder, so shared vaults resolve.
     convertFileSrc(`${root}/Attachments/${cleanReference}`),
     noteDirectory ? convertFileSrc(`${root}/${noteDirectory}/${cleanReference}`) : "",
   ];

@@ -103,6 +103,8 @@ export function useAiCommands({
   });
   const aiBuilderHistoryRef = useRef<AiBuilderHistoryStore>({ entries: {} });
 
+  // Mirrored into a ref so handlers that resume after an await read the
+  // latest history instead of the closure they were created with.
   aiBuilderHistoryRef.current = aiBuilderHistory;
 
   function aiBuilderHistoryKeyForFile(file: ActiveFile | null) {

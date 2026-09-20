@@ -53,6 +53,8 @@ fn move_traffic_lights(ns_window: &objc2_app_kit::NSWindow, x: f64, y: f64) -> R
     let zoom = ns_window
         .standardWindowButton(NSWindowButton::ZoomButton)
         .ok_or_else(|| "Zoom traffic-light button is not available".to_string())?;
+    // AppKit nests the buttons two views deep in the titlebar container, which
+    // must grow to cover the shifted buttons or they stop receiving clicks.
     let titlebar = unsafe { close.superview() }
         .and_then(|view| unsafe { view.superview() })
         .ok_or_else(|| "Traffic-light titlebar container is not available".to_string())?;

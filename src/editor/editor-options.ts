@@ -8,6 +8,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
 import { TaskItem } from "@tiptap/extension-task-item";
 import { TaskList } from "@tiptap/extension-task-list";
+import { TaskListInputRules } from "./task-list-input";
 import bash from "highlight.js/lib/languages/bash";
 import c from "highlight.js/lib/languages/c";
 import cmake from "highlight.js/lib/languages/cmake";
@@ -233,6 +234,8 @@ export function createGlypharyEditorOptions({
       TaskItem.configure({
         nested: true,
       }),
+      // Registered after TaskItem so the stock rule gets first refusal.
+      TaskListInputRules,
       // Custom block extensions must be registered before Markdown so their
       // tokenizers participate in markdown parse/serialize round-trips.
       CodeBlockWithLanguageControl.configure({

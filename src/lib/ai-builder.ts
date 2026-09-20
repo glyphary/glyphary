@@ -120,6 +120,9 @@ function aiBuilderNormalizeQuery(query: string) {
 export function aiBuilderVaultQueries(request: string) {
   const queries: string[] = [];
 
+  // Most specific first: quoted phrases, then "about X" phrases, then bare
+  // words. The dedupe keeps first occurrences and the slice keeps only the top
+  // few, so this order decides which queries survive.
   for (const match of request.matchAll(/["`']([^"`']{2,80})["`']/g)) {
     queries.push(match[1].trim());
   }

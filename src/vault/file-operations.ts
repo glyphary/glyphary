@@ -13,6 +13,7 @@ import type {
 import { folderActionInitialValue, isMoveAction, vaultEntryPath } from "./file-actions";
 import { rebasePathAfterDirectoryRename } from "./file-flow";
 import {
+  createBaseInDirectory,
   createCanvasInDirectory,
   createDirectoryInDirectory,
   createNoteInDirectory,
@@ -141,16 +142,25 @@ export function createVaultFileOperations(context: VaultFileOperationsContext) {
   }
 
   async function createCanvasFromFolderMenu(entry: VaultEntry, canvasName: string) {
-    if (!vaultRoot) {
-      return;
-    }
+    await createFileFromFolderMenu(entry, canvasName, createCanvasInDirectory, "canvas");
+  }
 
-    if (!canvasName?.trim()) {
+  async function createBaseFromFolderMenu(entry: VaultEntry, baseName: string) {
+    await createFileFromFolderMenu(entry, baseName, createBaseInDirectory, "base");
+  }
+
+  async function createFileFromFolderMenu(
+    entry: VaultEntry,
+    fileName: string,
+    create: (root: string, relative: string, name: string) => Promise<OpenedFile>,
+    label: string,
+  ) {
+    if (!vaultRoot || !fileName?.trim()) {
       return;
     }
 
     try {
-      const file = await createCanvasInDirectory(vaultRoot, entry.relativePath, canvasName);
+      const file = await create(vaultRoot, entry.relativePath, fileName);
       const tab = createDocumentTabFromFile(file);
 
       snapshotActiveTab();
@@ -158,7 +168,7 @@ export function createVaultFileOperations(context: VaultFileOperationsContext) {
       hydrateDocumentTab(tab);
       persistActiveFile(tab.activeFile);
       await loadEntries(vaultRoot, currentDir);
-      setStatus(`Created canvas ${file.relativePath}`);
+      setStatus(`Created ${label} ${file.relativePath}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -375,6 +385,8 @@ export function createVaultFileOperations(context: VaultFileOperationsContext) {
       await createNoteFromFolderMenu(entry, value);
     } else if (action === "create-canvas") {
       await createCanvasFromFolderMenu(entry, value);
+    } else if (action === "create-base") {
+      await createBaseFromFolderMenu(entry, value);
     } else if (action === "create-folder") {
       await createFolderFromFolderMenu(entry, value);
     } else if (action === "move-folder") {

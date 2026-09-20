@@ -52,6 +52,7 @@ function CodeBlockNodeView({ decorations, node, updateAttributes }: NodeViewProp
             aria-label="Code block language"
             list="code-language-options"
             onChange={(event) => updateAttributes({ language: event.currentTarget.value })}
+            // Stop ProseMirror from treating clicks and keys in the picker as editor input.
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
@@ -116,6 +117,8 @@ export const CodeBlockWithLanguageControl = CodeBlockLowlight.extend({
 
         return this.editor.commands.insertContent("    ");
       },
+      // Swallowed inside code so Shift-Tab cannot lift the block or move focus
+      // out of the editor.
       "Shift-Tab": () => this.editor.isActive(this.name),
     };
   },

@@ -643,7 +643,7 @@ test("canvas files open as editable React Flow graph tabs", () => {
   assert.match(canvasView, /onConnect=\{handleConnect\}/);
   assert.match(canvasView, /nodesDraggable/);
   assert.match(canvasView, /nodesConnectable/);
-  assert.match(app, /function updateCanvasDocument\(groupId: EditorGroupId, nextContent: string\)/);
+  assert.match(app, /function updateRawDocument\(groupId: EditorGroupId, nextContent: string, nextDirty = true\)/);
   assert.match(app, /dirty: true/);
   assert.match(css, /\.canvas-editor-pane/);
   assert.match(css, /\.canvas-file-icon \.canvas-edge-line/);
@@ -754,7 +754,7 @@ test("base files query markdown properties and render dedicated views", () => {
   const appTypes = readFileSync("src/lib/app-types.ts", "utf8");
   const appCss = readFileSync("src/App.css", "utf8");
   const appDocuments = readFileSync("src/app-state/documents.ts", "utf8");
-  const baseHelpers = readFileSync("src/base/base.ts", "utf8");
+  const baseHelpers = readFileSync("src/lib/base.ts", "utf8");
   const baseView = readFileSync("src/base/BaseView.tsx", "utf8");
   const editorPane = readFileSync("src/editor/EditorPane.tsx", "utf8");
   const persistence = readFileSync("src/vault/persistence.ts", "utf8");
@@ -784,16 +784,21 @@ test("base files query markdown properties and render dedicated views", () => {
   assert.match(editorPane, /<BaseView/);
   assert.match(editorPane, /assetDirectory=\{vaultSettings\.assetDirectory\}/);
   assert.match(editorPane, /imageLayout=\{vaultSettings\.files\?\.baseCardImageLayout === "top" \? "top" : "side"\}/);
-  assert.match(baseView, /queryBase\(vaultRoot, relativePath\)/);
+  assert.match(
+    readFileSync("src/base/use-base-document.ts", "utf8"),
+    /queryBase\(vaultRoot, relativePath\)/,
+  );
+  assert.match(persistence, /tzOffsetMinutes = -new Date\(\)\.getTimezoneOffset\(\)/);
+  const baseSession = readFileSync("src/base/use-base-view-session.ts", "utf8");
   assert.match(baseView, /function BaseControls/);
-  assert.match(baseView, /baseAvailableFields\(activeView\)/);
-  assert.match(baseView, /baseRowsMatchingTitle\(activeView\.rows, titleQuery\)/);
-  assert.match(baseView, /baseSortedRows\(/);
+  assert.match(baseSession, /baseAvailableFields\(activeView\)/);
+  assert.match(baseSession, /baseVisibleRows\(activeView\.rows/);
+  assert.match(baseHelpers, /baseRowsMatchingTitle\(rows, titleQuery\)/);
   assert.match(baseView, /openControl === "search"/);
   assert.match(baseView, /openControl === "sort"/);
   assert.match(baseView, /openControl === "fields"/);
-  assert.match(baseView, /event\.key !== "Escape"/);
-  assert.match(baseView, /window\.addEventListener\("keydown", closeBaseControl, \{ capture: true \}\)/);
+  assert.match(baseSession, /event\.key !== "Escape"/);
+  assert.match(baseSession, /window\.addEventListener\("keydown", closeBaseControl, \{ capture: true \}\)/);
   assert.match(baseView, /function baseControlIcon/);
   assert.match(baseView, /Displayed properties/);
   assert.match(baseView, /Search title/);
@@ -807,7 +812,7 @@ test("base files query markdown properties and render dedicated views", () => {
   assert.match(baseView, /vaultImagePathCandidates\(root, reference/);
   assert.match(baseView, /relativePath: row\.relativePath/);
   assert.match(baseView, /setImageIndex\(nextIndex\)/);
-  assert.match(baseView, /activeView\.type === "table"/);
+  assert.match(baseView, /view\.type === "table"/);
   assert.match(persistence, /"query_base"/);
   assert.match(appCss, /\.base-card-grid/);
   assert.match(appCss, /\.base-controls/);
@@ -823,9 +828,10 @@ test("base files query markdown properties and render dedicated views", () => {
   assert.match(backendLib, /mod base;/);
   assert.match(backendLib, /query_base/);
   assert.match(backend, /fn parse_base_definition/);
-  assert.match(backend, /fn parse_note_properties/);
-  assert.match(backend, /BaseCondition::HasProperty/);
-  assert.match(backend, /BaseCondition::Equals/);
+  assert.match(backend, /fn parse_note_values/);
+  assert.match(backend, /fn parse_filter_block/);
+  assert.match(backend, /CompiledFilter::Not\(children\) => !children/);
+  assert.match(backendLib, /mod base_expr;/);
   assert.match(backend, /walk_files/);
   assert.match(backendTests, /queries_base_views_from_note_frontmatter/);
 });

@@ -119,6 +119,7 @@ async function waitFor(fn, label, timeoutMs = 20000) {
 }
 
 function elementId(element) {
+  // W3C WebDriver element key; ELEMENT is the legacy JSON Wire fallback.
   return element["element-6066-11e4-a52e-4f735466cecf"] || element.ELEMENT;
 }
 
@@ -209,6 +210,8 @@ class WebDriverSession {
   }
 
   async shortcut(key) {
+    // \uE009 is WebDriver's Control key; Ctrl rather than Meta because this
+    // only runs on Windows/Linux (see the macOS skip in main).
     await request("POST", this.endpoint("/actions"), {
       actions: [
         {

@@ -22,6 +22,8 @@ import {
 type TableAlignment = Tokens.Table["align"][number];
 
 const tableDelimiterCellPattern = /^:?-+:?$/;
+// Mirrors Marked's own table terminator so a row list ends where another block
+// (heading, quote, list, fence, indented code) begins.
 const tableBlockStartPattern = /^(?: {0,3}(?:#{1,6}(?:\s|$)|>|(?:[*+-]|\d{1,9}[.)])\s|`{3,}|~{3,})| {4}\S)/;
 
 function isEscaped(value: string, index: number) {
@@ -219,6 +221,8 @@ const wikilinkTableTokenizer: MarkedExtension = {
 export function createGlypharyMarked() {
   const instance = new Marked(wikilinkTableTokenizer);
 
+  // Tiptap constructs `new markedInstance.Lexer()` with no options, which would
+  // fall back to Marked's global defaults and drop the wikilink tokenizer.
   class GlypharyMarkedLexer extends instance.Lexer {
     constructor(options?: MarkedOptions) {
       super(options ?? instance.defaults);

@@ -481,6 +481,7 @@ test("workspace sessions are persisted independently per vault", () => {
       drawerOpen: true,
       drawerItem: "calendar",
       splitOpen: false,
+      taskSort: "date",
     });
 
     const sessions = JSON.parse(store.get(workspaceSessionsStorageKey));
@@ -497,6 +498,9 @@ test("workspace sessions are persisted independently per vault", () => {
       readPersistedWorkspaceForVault("/Users/chris/Notes/Research")?.drawerItem,
       "calendar",
     );
+    // The Tasks drawer sort is remembered per vault; older saves fall back to name.
+    assert.equal(readPersistedWorkspaceForVault("/Users/chris/Notes/Research")?.taskSort, "date");
+    assert.equal(readPersistedWorkspaceForVault("/Users/chris/Notes/CFR")?.taskSort, "name");
     assert.equal(
       JSON.parse(store.get(workspaceStorageKey)).vaultRoot,
       "/Users/chris/Notes/Research",
@@ -727,6 +731,7 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(vaultContextMenu, /onPointerDown=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.match(vaultFileOperations, /createNoteFromFolderMenu/);
   assert.match(vaultFileOperations, /createCanvasFromFolderMenu/);
+  assert.match(vaultFileOperations, /createBaseFromFolderMenu/);
   assert.match(vaultFileOperations, /createFolderFromFolderMenu/);
   assert.match(vaultFileOperations, /renameFolderFromFolderMenu/);
   assert.match(vaultFileOperations, /renameFileFromContextMenu/);
@@ -764,6 +769,7 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(app, /onAction=\{openFolderActionDialog\}/);
   assert.match(vaultContextMenu, /onAction\("create-folder", menu\.entry\)/);
   assert.match(vaultContextMenu, /onAction\("create-canvas", menu\.entry\)/);
+  assert.match(vaultContextMenu, /onAction\("create-base", menu\.entry\)/);
   assert.match(vaultContextMenu, /onAction\("move-folder", menu\.entry\)/);
   assert.match(vaultContextMenu, /onAction\("move-file", menu\.entry\)/);
   assert.match(vaultContextMenu, /onAction\("rename-file", menu\.entry\)/);
@@ -771,6 +777,8 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(app, /aria-label=\{folderActionDialogTitle\(/);
   assert.match(vaultPersistence, /"create_note_in_directory"/);
   assert.match(vaultPersistence, /"create_canvas_in_directory"/);
+  assert.match(vaultPersistence, /"create_base_in_directory"/);
+  assert.match(vaultPersistence, /"render_base_definition"/);
   assert.match(vaultPersistence, /"create_directory_in_directory"/);
   assert.match(vaultPersistence, /"rename_vault_directory"/);
   assert.match(vaultPersistence, /"move_vault_directory"/);
@@ -778,6 +786,7 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(vaultPersistence, /"delete_vault_file"/);
   assert.match(vaultContextMenu, /Create Note/);
   assert.match(vaultContextMenu, /Create Canvas/);
+  assert.match(vaultContextMenu, /Create Base/);
   assert.match(vaultContextMenu, /Create Folder/);
   assert.match(vaultContextMenu, /Reveal in Finder/);
   assert.match(fileActions, /Move Folder/);

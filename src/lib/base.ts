@@ -1,10 +1,26 @@
-import type { BaseRow, BaseViewResult } from "../lib/app-types";
+/**
+ * Base display helpers.
+ *
+ * Responsibilities:
+ * - Keep `.base` file display helpers out of App and the renderer.
+ * - Normalize the supported Obsidian Bases field names for card/table output.
+ * - Sort rows by a view's `sort:` keys, with the note name as the final tie-break.
+ * - `baseVisibleRows` is the pane's whole pipeline: title filter, then the
+ *   session sort key ahead of the view's remaining keys, then the view limit.
+ *
+ * Contracts:
+ * - These helpers are presentation-only; Rust owns parsing and filesystem trust.
+ */
+import type { BaseRow, BaseSort, BaseViewResult } from "./app-types";
 
-// Responsibilities:
-// - Keep `.base` file display helpers out of App and the renderer.
-// - Normalize the supported Obsidian Bases field names for card/table output.
-// Contracts:
-// - These helpers are presentation-only; Rust owns parsing and filesystem trust.
+export type BaseSortKey = { field: string; direction: "asc" | "desc" };
+
+export function baseSortKeys(sort: BaseSort[]): BaseSortKey[] {
+  return sort.map((entry) => ({
+    field: entry.property,
+    direction: entry.direction.toLowerCase() === "desc" ? "desc" : "asc",
+  }));
+}
 
 export function isBasePath(relativePath: string | null | undefined) {
   return Boolean(relativePath?.toLowerCase().endsWith(".base"));
@@ -14,7 +30,13 @@ export function baseTitle(fileName: string) {
   return fileName.replace(/\.base$/i, "");
 }
 
-export function baseFieldLabel(field: string) {
+export function baseFieldLabel(field: string, displayNames?: Record<string, string>) {
+  const named = displayNames?.[field] ?? displayNames?.[field.replace(/^note\./, "")];
+
+  if (named) {
+    return named;
+  }
+
   const clean = field.replace(/^note\./, "").replace(/^file\./, "");
 
   return clean
@@ -61,21 +83,35 @@ export function baseRowsMatchingTitle(rows: BaseRow[], query: string) {
   });
 }
 
-export function baseSortedRows(
+export function baseVisibleRows(
   rows: BaseRow[],
-  field: string,
-  direction: "asc" | "desc",
+  options: {
+    limit?: number | null;
+    sortKey: BaseSortKey;
+    titleQuery: string;
+    viewSortKeys: BaseSortKey[];
+  },
 ) {
-  const multiplier = direction === "desc" ? -1 : 1;
+  const { limit, sortKey, titleQuery, viewSortKeys } = options;
+  const sorted = baseSortedRows(baseRowsMatchingTitle(rows, titleQuery), [
+    sortKey,
+    ...viewSortKeys.filter((key) => key.field !== sortKey.field),
+  ]);
 
+  return limit && limit > 0 ? sorted.slice(0, limit) : sorted;
+}
+
+export function baseSortedRows(rows: BaseRow[], keys: BaseSortKey[]) {
   return [...rows].sort((left, right) => {
-    const valueCompare = compareBaseFieldValues(
-      baseFieldValue(left, field),
-      baseFieldValue(right, field),
-    );
+    for (const key of keys) {
+      const valueCompare = compareBaseFieldValues(
+        baseFieldValue(left, key.field),
+        baseFieldValue(right, key.field),
+      );
 
-    if (valueCompare !== 0) {
-      return valueCompare * multiplier;
+      if (valueCompare !== 0) {
+        return key.direction === "desc" ? -valueCompare : valueCompare;
+      }
     }
 
     return left.name.localeCompare(right.name, undefined, {

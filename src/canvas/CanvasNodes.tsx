@@ -148,6 +148,8 @@ export function CanvasMarkdownPreview({ markdown }: { markdown: string }) {
 function CanvasTextNode({ data, id }: NodeProps<Node<CanvasNodeData, "text">>) {
   const [draft, setDraft] = useState(data.text ?? "");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Escape and Cmd+Enter unmount the textarea, which fires blur; the flag
+  // keeps that blur from committing a cancelled draft or committing twice.
   const skipNextBlurCommitRef = useRef(false);
 
   useEffect(() => {

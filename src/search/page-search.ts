@@ -44,6 +44,8 @@ export function pageSearchMatches(targetEditor: Editor | null, query: string): P
       return true;
     }
 
+    // Separator between text nodes so a needle cannot match across blocks;
+    // -1 marks it so such matches are dropped below.
     if (chars.length > 0) {
       chars.push("\n");
       positions.push(-1);

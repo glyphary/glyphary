@@ -13,10 +13,12 @@ use super::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+mod activity;
 mod ai;
 mod ai_history;
 mod assets;
 mod base;
+mod base_expr;
 mod calendar;
 mod graph;
 mod plugins;

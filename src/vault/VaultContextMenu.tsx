@@ -44,6 +44,7 @@ export function VaultContextMenu({
         <>
           <MenuButton onClick={() => onAction("create-note", menu.entry)}>Create Note</MenuButton>
           <MenuButton onClick={() => onAction("create-canvas", menu.entry)}>Create Canvas</MenuButton>
+          <MenuButton onClick={() => onAction("create-base", menu.entry)}>Create Base</MenuButton>
           <MenuButton onClick={() => onAction("create-folder", menu.entry)}>Create Folder</MenuButton>
           <MenuButton onClick={() => onOpenExternal(menu.entry)}>Open in Default App</MenuButton>
           <MenuButton onClick={() => onReveal(menu.entry)}>Reveal in Finder</MenuButton>

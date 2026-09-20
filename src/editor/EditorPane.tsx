@@ -66,7 +66,7 @@ export function EditorPane({
   metaHeader,
   metadataOpen,
   onActivateGroup,
-  onCanvasChange,
+  onRawDocumentChange,
   onCloseTab,
   onEditorContextMenu,
   onTabContextMenu,
@@ -103,7 +103,7 @@ export function EditorPane({
   metaHeader: string;
   metadataOpen: boolean;
   onActivateGroup: (groupId: EditorGroupId) => void;
-  onCanvasChange: (groupId: EditorGroupId, nextContent: string) => void;
+  onRawDocumentChange: (groupId: EditorGroupId, nextContent: string, dirty?: boolean) => void;
   onCloseTab: (tabId: string, groupId: EditorGroupId) => void;
   onEditorContextMenu: (
     event: ReactMouseEvent<HTMLDivElement>,
@@ -170,6 +170,9 @@ export function EditorPane({
     }
   }
 
+  // Vault images may live in any of several attachment folders (Obsidian
+  // vaults differ), so each load failure steps to the next candidate path
+  // instead of leaving a broken image.
   function handleEditorImageError(event: SyntheticEvent<HTMLDivElement>) {
     const target = event.target;
 
@@ -303,6 +306,7 @@ export function EditorPane({
                   <div className="frontmatter-rows">
                     {metadataEntries.map((entry, index) => {
                       const inputKey = `${paneActiveFile?.relativePath ?? "untitled"}:${entry.startLine}:${entry.key}`;
+                      // TOML frontmatter allows dotted keys; YAML keys stay plain.
                       const keyPattern = paneMetaDelimiter === "+++"
                         ? /^[A-Za-z0-9_.-]+$/
                         : /^[A-Za-z0-9_-]+$/;
@@ -504,15 +508,20 @@ export function EditorPane({
               name={panePageName}
               settings={canvasSettings}
               vaultRoot={vaultRoot}
-              onChange={(nextContent) => onCanvasChange(groupId, nextContent)}
+              onChange={(nextContent) => onRawDocumentChange(groupId, nextContent)}
               onOpenFile={onOpenFile}
             />
           ) : isBaseTab ? (
             <BaseView
               assetDirectory={vaultSettings.assetDirectory}
+              content={paneMarkdown}
+              dirty={groupActiveTab?.dirty ?? false}
               imageLayout={vaultSettings.files?.baseCardImageLayout === "top" ? "top" : "side"}
               relativePath={paneActiveFile?.relativePath ?? ""}
               vaultRoot={vaultRoot}
+              onChange={(nextContent, nextDirty) =>
+                onRawDocumentChange(groupId, nextContent, nextDirty)
+              }
               onOpenFile={onOpenFile}
             />
           ) : (

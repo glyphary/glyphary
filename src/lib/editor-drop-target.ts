@@ -73,7 +73,7 @@ export function editorDropTargetRect(target: EditorDropTarget): EditorDropRect {
   const splitGap =
     Number.parseFloat(
       getComputedStyle(target.groups).getPropertyValue("--glyphary-split-gap"),
-    ) || 12;
+    ) || 12; // matches the CSS default when the custom property is unresolved (jsdom)
   const width = (bounds.width - splitGap) / 2;
 
   return {

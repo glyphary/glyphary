@@ -526,6 +526,7 @@ export function createGlypharyVimMode(reportStatus: (message: string) => void) {
             }
             return waitForNextKey("y");
           default:
+            // Unbound printable keys are swallowed so Normal mode never types.
             if (event.key.length === 1) {
               return true;
             }
@@ -544,6 +545,7 @@ export function createGlypharyVimMode(reportStatus: (message: string) => void) {
 
               if (event.key === "Escape") {
                 setVimMode(this.editor, "normal");
+                // Vim steps the caret back one column when leaving insert mode.
                 setSelection(this.editor.state.selection.from - 1);
                 reportStatus("Vim normal mode");
                 event.preventDefault();

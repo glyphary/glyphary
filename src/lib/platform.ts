@@ -34,6 +34,7 @@ export function isIPadPlatform(platform: string, userAgent = "", maxTouchPoints 
   return (
     normalizedPlatform.includes("ipad") ||
     normalizedUserAgent.includes("ipad") ||
+    // iPadOS 13+ reports itself as desktop Safari; touch support is the only tell.
     (maxTouchPoints > 0 &&
       normalizedPlatform === "macintel" &&
       normalizedUserAgent.includes("macintosh"))

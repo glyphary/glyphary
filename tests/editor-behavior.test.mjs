@@ -234,6 +234,12 @@ test("command save shortcut is wrapped in the webview", () => {
   const editorOptionsForSlash = readFileSync("src/editor/editor-options.ts", "utf8");
   assert.match(editorOptionsForSlash, /view\.dispatch\(view\.state\.tr\.insertText\("\/"\)\)/);
   assert.match(app, /slashTrigger\.editor\.state\.tr\.delete\(slashTrigger\.from - 1, slashTrigger\.from\)/);
+  // Typing through the menu dismisses it and the keystroke lands in the note.
+  const paletteCommands = readFileSync("src/command-palette/commands.ts", "utf8");
+  const editorCommands = readFileSync("src/editor/commands.ts", "utf8");
+  assert.match(app, /slashMenuPassthrough\(event, commandPaletteQuery\)/);
+  assert.match(paletteCommands, /key === "Backspace" && query\.length === 0/);
+  assert.match(editorCommands, /editor\.state\.tr\.insertText\(passthrough\.text, slashEnd\)/);
   assert.match(app, /className="quiet-icon-action titlebar-command-palette"/);
   assert.match(editorPane, /className="page-search-bar"/);
   assert.match(editorPane, /aria-label="Find in page"/);
@@ -271,6 +277,13 @@ test("list task quote code table columns and callout toolbar actions render as i
   assert.match(editorOptions, /import \{ TaskItem \} from "@tiptap\/extension-task-item"/);
   assert.match(editorOptions, /import \{ TaskList \} from "@tiptap\/extension-task-list"/);
   assert.match(editorOptions, /TaskItem\.configure\(\{[\s\S]*nested: true,/);
+  // `- [ ] ` inside a bullet becomes a task item without touching sibling bullets.
+  const taskListInput = readFileSync("src/editor/task-list-input.ts", "utf8");
+  assert.match(editorOptions, /TaskItem\.configure\(\{[\s\S]*\}\),\s*\/\/[^\n]*\n\s*TaskListInputRules,/);
+  assert.match(taskListInput, /\$from\.node\(-1\)\.type\.name === "listItem"/);
+  assert.match(taskListInput, /if \(!insideBulletItem\(\$from\)\)/);
+  assert.match(taskListInput, /tr\.replaceWith\(listPos, listPos \+ list\.nodeSize, replacement\)/);
+  assert.doesNotMatch(taskListInput, /liftListItem|wrapInList/);
   assert.match(editorOptions, /TaskList/);
   assert.match(app, /toggleTaskList\(\)/);
   assert.match(editorPane, /renderToolbarIcon\(action\.icon\)/);

@@ -37,11 +37,13 @@ mod ai_history;
 mod assets;
 #[macro_use]
 mod base;
+mod base_expr;
 mod defaults;
 #[macro_use]
 mod calendar;
 #[macro_use]
 mod github;
+mod activity;
 mod graph;
 mod models;
 #[cfg(desktop)]
@@ -73,6 +75,7 @@ use base::*;
 use calendar::*;
 use defaults::*;
 use github::*;
+use activity::*;
 use graph::*;
 use models::*;
 #[cfg(desktop)]
@@ -254,6 +257,8 @@ pub fn run() {
 
             #[cfg(desktop)]
             {
+                // Hidden until `on_page_load` fires so the user never sees an
+                // unstyled white window before React renders.
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.hide();
                 }
@@ -324,9 +329,12 @@ pub fn run() {
             github_save_token,
             github_save_vault_token,
             query_base,
+            render_base_definition,
+            create_base_in_directory,
             search_vault,
             read_link_graph,
             read_vault_tags,
+            list_vault_activity,
             fetch_rich_link_metadata,
             list_ai_models,
             test_ai_connection,
