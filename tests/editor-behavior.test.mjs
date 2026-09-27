@@ -274,7 +274,7 @@ test("list task quote code table columns and callout toolbar actions render as i
   const css = readFileSync("src/App.css", "utf8");
   const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 
-  assert.match(editorOptions, /import \{ TaskItem \} from "@tiptap\/extension-task-item"/);
+  assert.match(editorOptions, /import \{ StatusTaskItem \} from "\.\/task-status"/);
   assert.match(editorOptions, /import \{ TaskList \} from "@tiptap\/extension-task-list"/);
   assert.match(editorOptions, /TaskItem\.configure\(\{[\s\S]*nested: true,/);
   // `- [ ] ` inside a bullet becomes a task item without touching sibling bullets.
@@ -331,4 +331,18 @@ test("Markdown editors use automatic text direction with direction-safe content 
   assert.match(css, /\.editor-surface blockquote \{[\s\S]*border-inline-start:/);
   assert.match(css, /\.editor-surface \.markdown-callout \{[\s\S]*border-inline-start:/);
   assert.match(css, /\.editor-surface ul,[\s\S]*padding-inline-start: 1\.35rem/);
+});
+
+test("saving writes text back as typed: wikilinks, tags, and underscores are not escaped", () => {
+  const serializer = readFileSync("src/editor/markdown-serializer.ts", "utf8");
+  const options = readFileSync("src/editor/editor-options.ts", "utf8");
+
+  // @tiptap/markdown escapes [ ] * _ ~ and backticks in every text node and
+  // encodes entities; that turned [[Note]] into \[\[Note\]\] on save.
+  // Verified headlessly on 2026-09-26: loaded and inserted wikilinks, a_b,
+  // `code`, and "5 < 6 & 7" all round-trip unchanged with this override.
+  assert.match(serializer, /manager\.encodeTextForMarkdown = \(text\) => text;/);
+  assert.match(options, /import \{ GlypharyMarkdown \} from "\.\/markdown-serializer"/);
+  assert.match(options, /GlypharyMarkdown\.configure\(\{\s*marked: createGlypharyMarked\(\)/);
+  assert.doesNotMatch(options, /import \{ Markdown \} from "@tiptap\/markdown"/);
 });

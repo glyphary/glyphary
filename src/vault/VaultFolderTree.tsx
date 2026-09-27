@@ -21,10 +21,14 @@ import { FolderIcon, VaultFileIcon } from "./VaultIcons";
 // Contracts:
 // - Move destinations cannot be the moved folder itself or one of its children.
 // - Backend load errors stay visible in the tree and are also reported upward.
+// - Folder listings are cached per node; only a `revision` change from the
+//   owner refreshes them, because the tree cannot see vault mutations itself.
 
 type VaultFolderTreeProps = {
   root: string;
   selectedPath: string;
+  /** Bumped by the owner after any vault mutation so cached folders reload. */
+  revision?: number;
   activeFilePath?: string | null;
   hideHeader?: boolean;
   unframed?: boolean;
@@ -57,6 +61,7 @@ function isMoveFolderDestinationDisabled(relativePath: string, movingEntry?: Vau
 export function VaultFolderTree({
   root,
   selectedPath,
+  revision = 0,
   activeFilePath = null,
   hideHeader = false,
   unframed = false,
@@ -150,6 +155,28 @@ export function VaultFolderTree({
       void loadChildren(path, scopeChanged);
     }
   }, [root, showFiles, selectedPath, activeFilePath]);
+
+  const revisionRef = useRef(revision);
+
+  useEffect(() => {
+    if (revisionRef.current === revision) {
+      return;
+    }
+
+    revisionRef.current = revision;
+    // Expanded folders reload in place so the tree does not flicker; collapsed
+    // ones are forgotten and reload on their next expand.
+    setNodes((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([path]) => expandedPaths.includes(path)),
+      ),
+    );
+    for (const path of expandedPaths) {
+      if (nodes[path]?.loaded) {
+        void loadChildren(path, true);
+      }
+    }
+  }, [revision]);
 
   useEffect(() => {
     if (!activeFilePath) {

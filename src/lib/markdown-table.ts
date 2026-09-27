@@ -18,6 +18,8 @@ import {
   type Tokens,
   marked,
 } from "marked";
+import { tableColumnRatios, tableDelimiterDashCounts } from "./table-widths.js";
+import { normalizeTaskMarkers } from "./task-status.js";
 
 type TableAlignment = Tokens.Table["align"][number];
 
@@ -159,6 +161,8 @@ function tableCell(text: string, header: boolean, align: TableAlignment, inlineT
   };
 }
 
+export type GlypharyTableToken = Tokens.Table & { widths?: number[] };
+
 export function tokenizeGfmTable(
   src: string,
   inlineTokens: (text: string) => Token[],
@@ -172,7 +176,8 @@ export function tokenizeGfmTable(
   }
 
   const header = splitGfmTableRow(headerLine);
-  const align = tableDelimiterAlignments(splitGfmTableRow(delimiterLine));
+  const delimiterCells = splitGfmTableRow(delimiterLine);
+  const align = tableDelimiterAlignments(delimiterCells);
 
   if (!align || align.length !== header.length) {
     return false;
@@ -191,28 +196,35 @@ export function tokenizeGfmTable(
   }
 
   const raw = `${lines.slice(0, rowLines.length + 2).join("\n")}\n`;
-
-  return {
+  const rows = rowLines.map((line) => normalizeTableCells(splitGfmTableRow(line), header.length));
+  const longestCells = header.map((text, index) =>
+    Math.max(text.trim().length, ...rows.map((row) => row[index].trim().length)),
+  );
+  const widths = tableColumnRatios(tableDelimiterDashCounts(delimiterCells), longestCells);
+  const token: GlypharyTableToken = {
     type: "table",
     raw,
     align,
     header: header.map((text, index) => tableCell(text, true, align[index], inlineTokens)),
-    rows: rowLines.map((line) =>
-      normalizeTableCells(splitGfmTableRow(line), header.length).map((text, index) =>
-        tableCell(text, false, align[index], inlineTokens),
-      ),
+    rows: rows.map((row) =>
+      row.map((text, index) => tableCell(text, false, align[index], inlineTokens)),
     ),
   };
+
+  if (widths) {
+    token.widths = widths;
+  }
+
+  return token;
 }
 
+// Every table goes through Glyphary's tokenizer, not only ones with wikilinks:
+// it is the one place that reads width ratios off the delimiter row. Returning
+// false still hands anything it does not recognise back to Marked.
 const wikilinkTableTokenizer: MarkedExtension = {
   gfm: true,
   tokenizer: {
     table(src) {
-      if (!src.includes("[[")) {
-        return false;
-      }
-
       return tokenizeGfmTable(src, (text) => this.lexer.inlineTokens(text) as Token[]);
     },
   },
@@ -226,6 +238,13 @@ export function createGlypharyMarked() {
   class GlypharyMarkedLexer extends instance.Lexer {
     constructor(options?: MarkedOptions) {
       super(options ?? instance.defaults);
+    }
+
+    // Obsidian status markers (`[/]`, `[-]`, ...) are rewritten before Marked
+    // and Tiptap gate task items on `[ ]`/`[x]`; the status rides in the text
+    // as a sentinel until the task item node lifts it into an attribute.
+    lex(src: string) {
+      return super.lex(normalizeTaskMarkers(src));
     }
   }
 

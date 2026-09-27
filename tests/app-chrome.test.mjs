@@ -541,6 +541,10 @@ test("interactive overlays use native modal and viewport-aware popover primitive
   assert.match(popover, /createPortal\(/);
   assert.match(popover, /window\.addEventListener\("scroll", updatePosition, true\)/);
   assert.match(app, /<AnchoredPopover[\s\S]*className="file-menu-popover"/);
+  // Settings has a gear pinned to the foot of the vault rail as well as the
+  // File menu entry and Cmd+,.
+  assert.match(app, /className="vault-tab vault-rail-settings"[\s\S]{0,160}onClick=\{\(\) => void openSettings\(\)\}/);
+  assert.match(readFileSync("src/App.css", "utf8"), /\.vault-rail-settings \{\s*margin-top: auto;/);
   assert.match(palette, /<ModalDialog[\s\S]*className=\{anchor \? "command-palette-screen anchored" : "command-palette-screen"\}/);
   // The caret-anchored slash menu positions the card at the cursor and has no
   // Back navigation into the hierarchical root scope.

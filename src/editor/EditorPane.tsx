@@ -6,7 +6,9 @@ import type {
 } from "react";
 import type { Editor } from "@tiptap/core";
 import { EditorContent } from "@tiptap/react";
+import type { CSSProperties } from "react";
 import { BaseView } from "../base/BaseView";
+import { normalizeTagColors, tagStyle } from "../lib/tag-colors";
 import { CanvasView, type CanvasCommandRequest } from "../CanvasView";
 import { renderToolbarIcon, type ToolbarIconName } from "../toolbar-icons";
 import {
@@ -152,6 +154,11 @@ export function EditorPane({
   const frontmatterPillSettings = normalizeFrontmatterPillSettings(
     vaultSettings.frontmatterPills,
   );
+  const tagColors = normalizeTagColors(vaultSettings.tagColors);
+  const pillTagStyle = (key: string, value: string) =>
+    key.toLowerCase() === "tags"
+      ? (tagStyle(value.replace(/^#/, ""), tagColors) as CSSProperties | undefined)
+      : undefined;
   const frontmatterPills = frontmatterPillSettings.enabled
     ? frontmatterListValues(paneMetaHeader, frontmatterPillSettings.headerName)
     : [];
@@ -372,7 +379,15 @@ export function EditorPane({
                               aria-label={`${entry.key} values`}
                             >
                               {listValues.map((value, valueIndex) => (
-                                <span className="frontmatter-value-pill" key={valueIndex}>
+                                <span
+                                  className={
+                                    pillTagStyle(entry.key, value)
+                                      ? "frontmatter-value-pill tag-tinted"
+                                      : "frontmatter-value-pill"
+                                  }
+                                  style={pillTagStyle(entry.key, value)}
+                                  key={valueIndex}
+                                >
                                   <input
                                     aria-label={`${entry.key} value ${valueIndex + 1}`}
                                     disabled={!paneActiveFile}

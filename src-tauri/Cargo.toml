@@ -35,6 +35,8 @@ tauri-plugin-notification = "2"
 base64 = "0.22"
 sha2 = "0.10"
 keyring = { version = "3.6.3", default-features = false, features = ["apple-native"] }
+dom_smoothie = "0.18.1"
+htmd = "0.5.5"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSButton", "NSControl", "NSView", "NSWindow"] }

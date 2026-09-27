@@ -1263,6 +1263,12 @@ body.workspace-resizing * {
   padding: 12px 7px;
 }
 
+/* The rail is a column; pushing the gear's top margin to auto pins it to the
+   bottom while the drawer items stay stacked at the top. */
+.vault-rail-settings {
+  margin-top: auto;
+}
+
 .vault-tab {
   display: grid;
   place-items: center;
@@ -4184,9 +4190,172 @@ body.workspace-resizing * {
   min-width: 0;
 }
 
+/* Obsidian status markers other than done: the box is drawn by hand so the
+   status can show inside it. A checked item falls back to the native box.
+   The editor's node view emits li[data-checked] without data-type, so both
+   forms are matched, as the task styles above do. */
+.editor-surface li[data-type="taskItem"][data-status],
+.editor-surface ul[data-type="taskList"] > li[data-status] {
+  position: relative;
+}
+
+.editor-surface li[data-type="taskItem"][data-status]:not([data-checked="true"]) input[type="checkbox"],
+.editor-surface ul[data-type="taskList"] > li[data-status]:not([data-checked="true"]) input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1.5px solid var(--accent);
+  border-radius: 3px;
+  background: transparent;
+}
+
+.editor-surface li[data-type="taskItem"][data-status="/"]:not([data-checked="true"]) input[type="checkbox"],
+.editor-surface ul[data-type="taskList"] > li[data-status="/"]:not([data-checked="true"]) input[type="checkbox"] {
+  background: linear-gradient(135deg, var(--accent) 50%, transparent 50%);
+}
+
+.editor-surface li[data-type="taskItem"][data-status]:not([data-status="/"]):not([data-checked="true"])::before,
+.editor-surface ul[data-type="taskList"] > li[data-status]:not([data-status="/"]):not([data-checked="true"])::before {
+  content: attr(data-status);
+  position: absolute;
+  top: 0.25rem;
+  left: 0;
+  display: grid;
+  width: 0.95rem;
+  height: 0.95rem;
+  place-items: center;
+  color: var(--accent);
+  font: 700 0.68rem/1 var(--font-ui);
+  pointer-events: none;
+}
+
+.editor-surface li[data-type="taskItem"][data-status="-"]:not([data-checked="true"]) > div,
+.editor-surface ul[data-type="taskList"] > li[data-status="-"]:not([data-checked="true"]) > div {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 .editor-surface li[data-type="taskItem"] > div > p,
 .editor-surface ul[data-type="taskList"] > li[data-checked] > div > p {
   margin: 0;
+}
+
+/* A picked tag colour, shared by inline pills, frontmatter tag pills, and the
+   Tags drawer. Tags without a pick keep their neutral accent look; the pick is
+   mixed with the theme surfaces so one hex reads in light and dark alike. */
+.tag-tinted {
+  --tag-fill: color-mix(in srgb, var(--tag-color) 22%, var(--surface));
+  --tag-ink: color-mix(in srgb, var(--tag-color) 70%, var(--text));
+  --tag-line: color-mix(in srgb, var(--tag-color) 55%, var(--border));
+}
+
+/* Inline #tags read like the frontmatter pills, sized to running text. */
+.editor-surface .inline-tag {
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--heading);
+  padding: 0.05em 0.5em;
+  font-size: 0.9em;
+}
+
+.editor-surface .inline-tag.tag-tinted {
+  border-color: var(--tag-line);
+  background: var(--tag-fill);
+  color: var(--tag-ink);
+}
+
+.frontmatter-value-pill.tag-tinted {
+  border-color: var(--tag-line);
+  background: var(--tag-fill);
+  color: var(--tag-ink);
+}
+
+.tag-row-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tag-row-line > .tag-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.tag-row strong.tag-tinted {
+  color: var(--tag-ink);
+}
+
+/* The swatch is a native colour input drawn as a dot: the UA swatch is
+   hidden so the fill matches the pills rather than the raw hex. */
+.tag-results .tag-color-swatch {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 1px dashed var(--muted);
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  margin: 0 2px 0 6px;
+}
+
+.tag-results .tag-color-swatch::-webkit-color-swatch-wrapper,
+.tag-results .tag-color-swatch::-webkit-color-swatch {
+  display: none;
+}
+
+.tag-results .tag-color-swatch.tag-tinted {
+  border: 1px solid var(--tag-line);
+  background: var(--tag-fill);
+}
+
+.tag-results .tag-color-swatch:hover {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.tag-results .tag-color-clear {
+  display: block;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: 700 0.85rem/1 var(--font-ui);
+  padding: 0;
+  text-align: center;
+}
+
+.tag-results .tag-color-clear:hover {
+  color: var(--danger, #c94848);
+}
+
+.tag-row-line {
+  padding-right: 6px;
+}
+
+.tag-results .tag-row-line > .tag-row {
+  padding-left: 4px;
+}
+
+/* The count sits outside the row button, last in the line, so the clear
+   control appears before it without shifting it. */
+.tag-results .tag-row-line > .tag-count {
+  flex: 0 0 auto;
+  padding-right: 2px;
+}
+
+.visually-hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .editor-surface blockquote {
@@ -4652,6 +4821,8 @@ body.workspace-resizing * {
 
 .editor-surface th,
 .editor-surface td {
+  /* The column resize handle is an absolutely positioned child of the cell. */
+  position: relative;
   min-width: 90px;
   border: 1px solid var(--table-border);
   padding: 0.55rem 0.65rem;
@@ -4680,15 +4851,19 @@ body.workspace-resizing * {
 
 .editor-surface .column-resize-handle {
   position: absolute;
-  top: 0;
+  top: -1px;
   inset-inline-end: -2px;
-  bottom: -2px;
-  width: 4px;
+  bottom: -1px;
+  z-index: 1;
+  width: 3px;
+  border-radius: 2px;
   background: var(--accent);
   pointer-events: none;
 }
 
-.editor-surface.resize-cursor {
+/* The plugin puts the class on the ProseMirror root, not on the wrapper. */
+.editor-surface .ProseMirror.resize-cursor,
+.editor-surface .ProseMirror.resize-cursor * {
   cursor: col-resize;
 }
 
@@ -6479,6 +6654,132 @@ body.workspace-resizing * {
   padding: 14px 10px;
 }
 
+.task-quick-menu {
+  position: fixed;
+  z-index: 82;
+  display: grid;
+  gap: 1px;
+  min-width: 200px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px var(--shadow-strong);
+  outline: none;
+  padding: 5px;
+}
+
+.task-quick-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--heading);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 6px 9px;
+  text-align: left;
+}
+
+.task-quick-menu button.group-start {
+  border-top: 1px solid var(--border-soft);
+  border-radius: 0 0 6px 6px;
+  margin-top: 4px;
+  padding-top: 9px;
+}
+
+.task-quick-menu button:hover,
+.task-quick-menu button.active {
+  background: var(--hover);
+}
+
+.task-quick-menu button > span {
+  width: 1.4em;
+  text-align: center;
+}
+
+.inline-suggest {
+  min-width: 240px;
+  max-width: min(420px, calc(100vw - 24px));
+}
+
+.inline-suggest button {
+  display: grid;
+  gap: 2px;
+}
+
+.inline-suggest button small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.inline-suggest-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  padding: 6px 9px;
+}
+
+.task-date-picker {
+  position: fixed;
+  z-index: 82;
+  width: 252px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px var(--shadow-strong);
+  outline: none;
+  padding: 8px;
+}
+
+.task-date-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+}
+
+.task-date-picker-header button {
+  width: 24px;
+  height: 22px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.task-date-picker-header button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.task-date-picker .calendar-grid {
+  gap: 2px;
+  animation: none;
+}
+
+.task-date-picker .calendar-weekday {
+  font-size: 0.62rem;
+  text-align: center;
+}
+
+.task-date-picker .calendar-day {
+  border-radius: 6px;
+  font-size: 0.72rem;
+}
+
+.task-date-picker .calendar-day.focused {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 .wikilink-picker {
   position: fixed;
   z-index: 82;
@@ -7769,6 +8070,273 @@ body.workspace-resizing * {
   animation: glyphary-pop-in var(--motion-duration-base) var(--motion-ease);
 }
 
+.task-board-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 72;
+  display: grid;
+  background: color-mix(in srgb, var(--app-bg) 36%, transparent);
+  padding: max(66px, calc(var(--glyphary-shell-padding-top) + 52px)) 20px 20px 20px;
+  animation: glyphary-fade-in var(--motion-duration-fast) var(--motion-ease);
+}
+
+.task-board-card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 22px 60px var(--shadow-strong);
+  animation: glyphary-pop-in var(--motion-duration-base) var(--motion-ease);
+}
+
+/* Dedicated window: the board fills it, the frame is the window itself. */
+.task-board-window-app {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  background: var(--app-bg);
+}
+
+.task-board-window {
+  position: static;
+  inset: auto;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+  padding: max(52px, calc(var(--glyphary-shell-padding-top) + 12px)) 12px 12px;
+  animation: none;
+}
+
+.task-board-window .task-board-card {
+  box-shadow: none;
+  animation: none;
+}
+
+.task-board-window-app .empty-vault {
+  margin: auto;
+}
+
+.task-board-window-status {
+  color: var(--text);
+  font-size: 0.8rem;
+  padding: 4px 14px 10px;
+}
+
+.task-board-columns {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 16px 16px;
+}
+
+.task-board-column {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--app-bg) 60%, var(--surface));
+}
+
+.task-board-column.drop-target {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.task-board-column h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0;
+  padding: 10px 12px 8px;
+  color: var(--heading);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.task-board-count {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.task-board-cards {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 10px;
+}
+
+.task-board-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: grab;
+}
+
+.task-board-item.dragging {
+  opacity: 0.45;
+}
+
+.task-board-open {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Follows the pointer during a card drag; hit-testing goes through it. */
+.task-board-ghost {
+  position: fixed;
+  z-index: 80;
+  max-width: 260px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px var(--shadow-strong);
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow: hidden;
+  padding: 6px 10px;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  transform: translate(12px, 12px);
+  white-space: nowrap;
+}
+
+.task-board-open {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 8px 4px 8px 10px;
+  text-align: left;
+}
+
+.task-board-open strong {
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.task-board-open span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-board-sort {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 4px 6px;
+}
+
+.task-board-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.task-board-meta em {
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+  padding: 1px 5px;
+}
+
+.task-board-priority.priority-0,
+.task-board-priority.priority-1 {
+  background: color-mix(in srgb, var(--danger, #c94848) 18%, var(--surface));
+  color: var(--danger, #c94848);
+}
+
+.task-board-priority.priority-2 {
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  color: var(--accent);
+}
+
+.task-board-due.overdue {
+  background: color-mix(in srgb, var(--danger, #c94848) 18%, var(--surface));
+  color: var(--danger, #c94848);
+}
+
+.task-board-move {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-right: 4px;
+}
+
+.task-board-move button {
+  width: 22px;
+  height: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.task-board-move button:hover:not(:disabled) {
+  color: var(--accent);
+}
+
+.task-board-move button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.task-board-show-more {
+  width: 100%;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 7px;
+}
+
+.task-board-show-more:hover {
+  border-style: solid;
+  background: var(--hover);
+  color: var(--text);
+}
+
+.task-board-empty {
+  margin: 4px 4px 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .graph-view-header {
   display: flex;
   align-items: center;
@@ -8089,6 +8657,22 @@ body.workspace-resizing * {
 .activity-cell:focus-visible {
   outline: 2px solid var(--glyphary-focus);
   outline-offset: 1px;
+}
+
+.activity-tooltip {
+  position: fixed;
+  z-index: 40;
+  transform: translate(-50%, calc(-100% - 6px));
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 8px 22px var(--shadow-strong);
+  color: var(--text);
+  font-size: 0.72rem;
+  line-height: 1.3;
+  padding: 4px 8px;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .activity-day {

@@ -255,6 +255,9 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(app, /title: "Choose New Tab File"/);
   assert.match(app, /Choose a file inside the current vault/);
   assert.match(settingsDialog, /value=\{newTabFileDraft\}/);
+  // A checkbox value read inside a deferred state updater sees a null
+  // currentTarget; the value must be captured before the updater runs.
+  assert.doesNotMatch(settingsDialog, /Draft\(\(settings\) => \(\{[^}]*event\.currentTarget/);
   assert.match(settingsDialog, /Choose\.\.\./);
   assert.match(settingsDialog, /setNewTabFileDraft\(activeFile\?\.relativePath \?\? ""\)/);
   assert.match(app, /Configure a new tab note in Settings/);

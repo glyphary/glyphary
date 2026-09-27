@@ -1,9 +1,11 @@
 import type { SearchResult, TaskFilter, TaskSort } from "../lib/app-types";
+import { taskStatusFromLine } from "../lib/task-board";
 
 // Responsibilities:
 // - Keep task-search regexes and task drawer presentation rules together.
 // Contracts:
-// - Task rows parse standard Markdown checkbox syntax.
+// - Task rows parse standard Markdown checkbox syntax; `[/]` counts as open,
+//   since it is in progress rather than done.
 // - Date sort falls back to stable task/file ordering.
 
 export function taskSearchPattern(filter: TaskFilter) {
@@ -12,15 +14,15 @@ export function taskSearchPattern(filter: TaskFilter) {
   }
 
   if (filter === "all") {
-    return "- \\[( |[xX])\\]";
+    return "- \\[( |[xX]|/)\\]";
   }
 
-  return "- \\[ \\]";
+  return "- \\[( |/)\\]";
 }
 
 export function taskResultPresentation(lineText: string | null | undefined) {
   const line = lineText?.trim() || "Task";
-  const match = line.match(/^- \[([ xX])\]\s*(.*)$/);
+  const match = line.match(/^- \[([ xX/])\]\s*(.*)$/);
 
   if (!match) {
     return {
@@ -31,7 +33,7 @@ export function taskResultPresentation(lineText: string | null | undefined) {
 
   return {
     label: match[2] || "Task",
-    completed: match[1].toLowerCase() === "x",
+    completed: taskStatusFromLine(line) === "x",
   };
 }
 

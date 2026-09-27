@@ -33,6 +33,75 @@ fn reads_and_writes_files_inside_vault() {
 }
 
 #[test]
+fn rewrites_only_the_task_marker() {
+    let root = test_root();
+    let vault = root.to_string_lossy().into_owned();
+    // CRLF proves line endings survive the rewrite.
+    let original = "# Plan\r\n\r\n- [ ] first\r\n  * [x] nested done\r\n3) [/] numbered\r\n- plain bullet\r\n";
+    fs::write(root.join("Plan.md"), original).expect("note should be created");
+
+    assert_eq!(
+        set_task_status(vault.clone(), "Plan.md".into(), 3, "/".into()).unwrap(),
+        "- [/] first"
+    );
+    assert_eq!(
+        set_task_status(vault.clone(), "Plan.md".into(), 4, " ".into()).unwrap(),
+        "  * [ ] nested done"
+    );
+    assert_eq!(
+        set_task_status(vault.clone(), "Plan.md".into(), 5, "x".into()).unwrap(),
+        "3) [x] numbered"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Plan.md")).unwrap(),
+        "# Plan\r\n\r\n- [/] first\r\n  * [ ] nested done\r\n3) [x] numbered\r\n- plain bullet\r\n"
+    );
+    assert!(set_task_status(vault.clone(), "Plan.md".into(), 6, "x".into()).is_err());
+    assert!(set_task_status(vault.clone(), "Plan.md".into(), 1, "x".into()).is_err());
+    assert!(set_task_status(vault.clone(), "Plan.md".into(), 99, "x".into()).is_err());
+    assert!(set_task_status(vault, "Plan.md".into(), 3, "?".into()).is_err());
+
+    fs::remove_dir_all(root).expect("test root should be removed");
+}
+
+#[test]
+fn archives_tasks_with_their_children_into_the_archive_note() {
+    let root = test_root();
+    let vault = root.to_string_lossy().into_owned();
+    let original = "# Plan\n\n- [x] first\n  - detail\n\n  more detail\n\n- [ ] second\n- [x] third\n";
+    fs::create_dir(root.join("Notes")).unwrap();
+    fs::write(root.join("Notes/Plan.md"), original).unwrap();
+
+    let refs = vec![
+        TaskRef { relative_path: "Notes/Plan.md".into(), line_number: 3 },
+        TaskRef { relative_path: "Notes/Plan.md".into(), line_number: 9 },
+    ];
+    let count = archive_tasks(vault.clone(), refs, "Archive/Tasks.md".into(), "2026-09-26".into())
+        .expect("tasks should archive");
+
+    assert_eq!(count, 2);
+    // The blank inside `first` travels with it; the trailing blank stays behind.
+    assert_eq!(
+        fs::read_to_string(root.join("Notes/Plan.md")).unwrap(),
+        "# Plan\n\n\n- [ ] second\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("Archive/Tasks.md")).unwrap(),
+        "- [x] first (from [[Notes/Plan]], archived 2026-09-26)\n  - detail\n\n  more detail\n- [x] third (from [[Notes/Plan]], archived 2026-09-26)\n"
+    );
+
+    let more =vec![TaskRef { relative_path: "Notes/Plan.md".into(), line_number: 4 }];
+    archive_tasks(vault.clone(), more, "Archive/Tasks.md".into(), "2026-09-27".into()).unwrap();
+    assert!(fs::read_to_string(root.join("Archive/Tasks.md")).unwrap().ends_with("- [ ] second (from [[Notes/Plan]], archived 2026-09-27)\n"));
+    let bad = vec![TaskRef { relative_path: "Notes/Plan.md".into(), line_number: 1 }];
+    assert!(archive_tasks(vault.clone(), bad, "Archive/Tasks.md".into(), "x".into()).is_err());
+    let self_ref = vec![TaskRef { relative_path: "Archive/Tasks.md".into(), line_number: 1 }];
+    assert!(archive_tasks(vault, self_ref, "Archive/Tasks.md".into(), "x".into()).is_err());
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn creates_directory_shadow_file() {
     let root = test_root();
     fs::create_dir(root.join("chapter")).expect("directory should be created");

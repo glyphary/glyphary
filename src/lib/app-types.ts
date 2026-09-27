@@ -274,6 +274,8 @@ export type SettingsDragState = {
 export type VaultSettings = {
   assetDirectory: string;
   newTabFile?: string | null;
+  /** Note that archived tasks are appended to; defaults to Archive/Tasks.md. */
+  taskArchiveNote?: string | null;
   starredFiles?: string[] | null;
   frontmatterPills?: FrontmatterPillSettings | null;
   files?: FileDisplaySettings | null;
@@ -287,6 +289,8 @@ export type VaultSettings = {
   ai?: AiSettings | null;
   canvas?: CanvasSettings | null;
   theme?: VaultThemeSettings | null;
+  /** Picked tag colours, `#rrggbb` by lowercase tag; families inherit. */
+  tagColors?: Record<string, string> | null;
 };
 
 export type ActiveFile = {
@@ -420,7 +424,7 @@ export type SearchMode = "filename" | "content";
 export type TaskFilter = "incomplete" | "complete" | "all";
 export type TaskSort = "name" | "date";
 export type AppearanceMode = "auto" | "light" | "dark";
-export type SettingsTab = "main" | "appearance" | "canvas" | "plugins" | "ai" | "debug";
+export type SettingsTab = "main" | "appearance" | "canvas" | "plugins" | "ai" | "export" | "debug";
 export type DrawerItem = "source" | "toc" | "calendar";
 export type VaultDrawerItem = "vaults" | "files" | "search" | "starred" | "recent" | "tasks" | "tags";
 export type ResizeSide = "vault" | "drawer";

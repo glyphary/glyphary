@@ -69,8 +69,10 @@ import {
   expandDateTemplate,
 } from "../.test-dist/dates.js";
 import {
+  glypharyClipBookmarklet,
   glypharyOpenUrl,
   parseGlypharyOpenUrl,
+  parseGlypharyUrl,
   resolveDeepLinkVaultRoot,
 } from "../.test-dist/deep-links.js";
 import { reorderedStarredFiles } from "../.test-dist/starred-files.js";
@@ -105,6 +107,20 @@ test("Glyphary deep links parse Obsidian-style open requests", () => {
     "glyphary://open?vault=Demo&file=00+Start+Here%2F01+Quick+Start.md",
   );
   assert.equal(parseGlypharyOpenUrl("glyphary://new?file=Note.md"), null);
+  assert.equal(parseGlypharyOpenUrl("glyphary://clip?url=https%3A%2F%2Fx.test"), null);
+  assert.deepEqual(
+    parseGlypharyUrl("glyphary://clip?url=https%3A%2F%2Fx.test%2Fa%3Fb%3D1&selection=Hi%20there&vault=Demo"),
+    { action: "clip", vaultName: "Demo", url: "https://x.test/a?b=1", selection: "Hi there" },
+  );
+  assert.deepEqual(parseGlypharyUrl("glyphary://clip?url=https%3A%2F%2Fx.test&selection="), {
+    action: "clip",
+    vaultName: undefined,
+    url: "https://x.test",
+    selection: undefined,
+  });
+  assert.equal(parseGlypharyUrl("glyphary://clip?selection=only"), null);
+  assert.match(glypharyClipBookmarklet(), /^javascript:location\.href='glyphary:\/\/clip\?url='/);
+  assert.match(glypharyClipBookmarklet(), /encodeURIComponent\(String\(getSelection\(\)\)\)/);
   assert.equal(
     resolveDeepLinkVaultRoot("demo", "/vaults/current", [
       { name: "Demo", root: "/vaults/demo", lastOpenedAt: 1 },
@@ -622,16 +638,26 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(vaultTasks, /right\.modifiedMs \?\? 0/);
   assert.match(vaultTasks, /function taskSearchPattern/);
   assert.match(vaultTasks, /function taskResultPresentation/);
+  // In-progress tasks (`[/]`) are open, and the board moves cards by
+  // rewriting only that marker through one Rust command.
+  assert.ok(vaultTasks.includes('return "- \\\\[( |/)\\\\]";'));
+  assert.match(app, /<TaskBoard/);
+  assert.match(readFileSync("src/app-state/task-board.ts", "utf8"), /const blocker = dirtyBlocker\(\[result\.relativePath\]\)/);
+  assert.match(readFileSync("src/vault/persistence.ts", "utf8"), /"set_task_status"/);
+  assert.match(
+    readFileSync("src/command-palette/command-definitions.ts", "utf8"),
+    /id: "open-task-board"/,
+  );
   assert.match(vaultTasks, /line\.match\(\/\^- \\\[/);
   assert.ok(vaultTasks.includes('return "- \\\\[[xX]\\\\]";'));
-  assert.ok(vaultTasks.includes('return "- \\\\[ \\\\]";'));
+  assert.ok(vaultTasks.includes('return "- \\\\[( |/)\\\\]";'));
   assert.match(app, /includeContent: true/);
   assert.match(app, /markdownOnly: true/);
   assert.match(app, /excludeDotPaths: true/);
   assert.match(app, /aria-label="Refresh tasks"/);
   assert.match(app, /renderToolbarIcon\("refresh"\)/);
   assert.match(app, /renderToolbarIcon\(task\.completed \? "task-done" : "task-open"\)/);
-  assert.match(app, /result\.isContentMatch/);
+  assert.match(app, /isLiveTaskResult\(result, archiveNote\)/);
   assert.match(app, /visibleVaultSearchResults\(searchResults\)/);
   assert.match(vaultSearch, /const seenPaths = new Set<string>\(\)/);
   assert.match(vaultSearch, /const matchCounts = searchResults\.reduce/);
@@ -746,6 +772,11 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(vaultTree, /block: "nearest"/);
   assert.match(vaultTree, /treeScopeRef/);
   assert.match(vaultTree, /treeScopeRef\.current\.root !== root/);
+  // Deleting or creating inside an expanded subfolder must refresh that node.
+  assert.match(vaultTree, /revisionRef\.current === revision/);
+  assert.match(vaultTree, /void loadChildren\(path, true\)/);
+  assert.match(app, /setVaultTreeRevision\(\(revision\) => revision \+ 1\)/);
+  assert.match(app, /revision=\{vaultTreeRevision\}/);
   assert.match(vaultTree, /setExpandedPaths\(paths\)/);
   assert.match(vaultTree, /loadChildren\(path, scopeChanged\)/);
   assert.match(vaultTree, /setExpandedPaths\(\(current\) => mergeExpandedFolderPaths\(current, paths\)\)/);
@@ -778,6 +809,13 @@ test("vault rows expose context menu actions for folders and files", () => {
   assert.match(vaultPersistence, /"create_note_in_directory"/);
   assert.match(vaultPersistence, /"create_canvas_in_directory"/);
   assert.match(vaultPersistence, /"create_base_in_directory"/);
+  assert.match(vaultPersistence, /"clip_web_page"/);
+  assert.match(app, /request\.action === "clip"/);
+  assert.match(app, /aria-label="Clip web page"/);
+  assert.match(
+    readFileSync("src/command-palette/command-definitions.ts", "utf8"),
+    /id: "clip-web-page"/,
+  );
   assert.match(vaultPersistence, /"render_base_definition"/);
   assert.match(vaultPersistence, /"create_directory_in_directory"/);
   assert.match(vaultPersistence, /"rename_vault_directory"/);

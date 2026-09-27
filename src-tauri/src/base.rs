@@ -85,7 +85,7 @@ fn yaml_expression(text: &str) -> String {
     }
 }
 
-fn yaml_scalar(value: &str) -> String {
+pub(crate) fn yaml_scalar(value: &str) -> String {
     let needs_quotes = value.is_empty()
         || value != value.trim()
         || value.contains(": ")

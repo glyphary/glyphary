@@ -2,12 +2,18 @@ import { markInputRule } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 import type { LanguageFn } from "highlight.js";
-import { Markdown } from "@tiptap/markdown";
+import { GlypharyMarkdown } from "./markdown-serializer";
 import { Strike } from "@tiptap/extension-strike";
 import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
-import { TaskItem } from "@tiptap/extension-task-item";
+import { GlypharyTable } from "./table-widths";
 import { TaskList } from "@tiptap/extension-task-list";
+import { StatusTaskItem } from "./task-status";
+import { createInlineTagExtension } from "./inline-tags";
+import { createInlineSuggestExtension, type InlineSuggestSession } from "./inline-suggest";
+import { createTaskDateExtension, type TaskDateTrigger } from "./task-dates";
+import { createTaskQuickMenuExtension, type TaskQuickTrigger } from "./task-quick-menu";
+import type { TagColors } from "../lib/tag-colors";
 import { TaskListInputRules } from "./task-list-input";
 import bash from "highlight.js/lib/languages/bash";
 import c from "highlight.js/lib/languages/c";
@@ -173,10 +179,15 @@ export function createGlypharyEditorOptions({
   openCommandPalette,
   openExcalidrawDrawing,
   openWikiLinkSearch,
+  onInlineSuggest,
+  onInlineSuggestKey,
+  openTaskDatePicker,
+  openTaskQuickMenu,
   queueImageImport,
   resolveVaultAssetSrc,
   resolveVaultImageSrc,
   resolveWikiLinkTarget,
+  getTagColors,
   setDirty,
   setEditorFocused,
   setMarkdown,
@@ -197,10 +208,15 @@ export function createGlypharyEditorOptions({
   openCommandPalette: () => void;
   openExcalidrawDrawing: (target: string) => void;
   openWikiLinkSearch: () => void;
+  onInlineSuggest: (session: InlineSuggestSession | null) => void;
+  onInlineSuggestKey: (key: string) => boolean;
+  openTaskDatePicker: (trigger: TaskDateTrigger) => void;
+  openTaskQuickMenu: (trigger: TaskQuickTrigger) => void;
   queueImageImport: (transfer: DataTransfer | null | undefined) => boolean;
   resolveVaultAssetSrc: (target: string) => string;
   resolveVaultImageSrc: (target: string) => string;
   resolveWikiLinkTarget: (target: string) => WikiLinkResolution;
+  getTagColors: () => TagColors;
   setDirty: (dirty: boolean) => void;
   setEditorFocused: (focused: boolean) => void;
   setMarkdown: (markdown: string) => void;
@@ -231,7 +247,7 @@ export function createGlypharyEditorOptions({
         },
       }),
       TaskList,
-      TaskItem.configure({
+      StatusTaskItem.configure({
         nested: true,
       }),
       // Registered after TaskItem so the stock rule gets first refusal.
@@ -287,13 +303,16 @@ export function createGlypharyEditorOptions({
       // Vault images resolve late through callbacks because the same editor
       // instance can survive vault changes.
       createVaultImageExtension(resolveVaultImageSrc, resolveVaultAssetSrc),
+      createInlineTagExtension(getTagColors),
+      createInlineSuggestExtension({ onChange: onInlineSuggest, onKey: onInlineSuggestKey }),
+      createTaskDateExtension({ openDatePicker: openTaskDatePicker }),
+      createTaskQuickMenuExtension({ openQuickMenu: openTaskQuickMenu }),
       createBlockBoundaryInsertionExtension(),
-      TableKit.configure({
-        table: {
-          resizable: true,
-        },
-      }),
-      Markdown.configure({
+      TableKit.configure({ table: false }),
+      // The stock table node is swapped for one that keeps delimiter-row
+      // width ratios; the rest of the kit is unchanged.
+      GlypharyTable,
+      GlypharyMarkdown.configure({
         marked: createGlypharyMarked(),
         markedOptions: { gfm: true },
       }),

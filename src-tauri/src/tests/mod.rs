@@ -20,6 +20,7 @@ mod assets;
 mod base;
 mod base_expr;
 mod calendar;
+mod clipper;
 mod graph;
 mod plugins;
 mod rich_links;

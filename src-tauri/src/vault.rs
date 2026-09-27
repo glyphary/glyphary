@@ -408,6 +408,209 @@ pub(crate) fn create_note_in_directory(
         relative_string(&root_path, &path)?,
     )
 }
+/// `status` is the bare character between the brackets. Everything else in
+/// the file, line endings included, stays byte-identical so the edit never
+/// shows up as a spurious diff.
+#[tauri::command]
+pub(crate) fn set_task_status(
+    root: String,
+    relative: String,
+    line_number: usize,
+    status: String,
+) -> Result<String, String> {
+    if !matches!(status.as_str(), " " | "/" | "x") {
+        return Err("Task status must be to do, in progress, or done".into());
+    }
+
+    let (_, path) = resolve_existing(&root, &relative)?;
+    let content = fs::read_to_string(&path).map_err(|err| format!("Could not read note: {err}"))?;
+    let mut lines: Vec<&str> = content.split_inclusive('\n').collect();
+    let Some(line) = line_number.checked_sub(1).and_then(|index| lines.get(index).copied()) else {
+        return Err(format!("Line {line_number} is not in the note"));
+    };
+    let Some(marker_index) = task_marker_index(line) else {
+        return Err(format!("Line {line_number} is not a task"));
+    };
+
+    let mut updated = line.to_string();
+    updated.replace_range(marker_index..marker_index + 1, &status);
+    lines[line_number - 1] = &updated;
+    let next_content: String = lines.concat();
+
+    fs::write(&path, next_content).map_err(|err| format!("Could not write note: {err}"))?;
+
+    Ok(updated.trim_end_matches(['\n', '\r']).to_string())
+}
+
+/// A task travels with its indented continuation, dedented and stamped with
+/// its source, so the trail reads the same in Obsidian. The archive is
+/// written before any source is rewritten so a failure cannot lose a task.
+#[tauri::command]
+pub(crate) fn archive_tasks(
+    root: String,
+    tasks: Vec<TaskRef>,
+    archive_relative: String,
+    archived_on: String,
+) -> Result<usize, String> {
+    let root_path = vault_root(&root)?;
+    let archive_clean = clean_relative(&archive_relative)?;
+
+    if archive_clean.as_os_str().is_empty() {
+        return Err("Task archive note is not set".into());
+    }
+
+    let mut by_file: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+
+    for task in tasks {
+        by_file.entry(task.relative_path).or_default().push(task.line_number);
+    }
+
+    let mut archived = String::new();
+    let mut rewritten: Vec<(PathBuf, String)> = Vec::new();
+    let mut count = 0;
+
+    for (relative, mut line_numbers) in by_file {
+        if clean_relative(&relative)? == archive_clean {
+            return Err("Tasks in the archive note itself cannot be archived".into());
+        }
+
+        let (_, path) = resolve_existing(&root, &relative)?;
+        let content =
+            fs::read_to_string(&path).map_err(|err| format!("Could not read note: {err}"))?;
+        let mut lines: Vec<String> = content.split_inclusive('\n').map(str::to_string).collect();
+        let source = relative.strip_suffix(".md").unwrap_or(&relative).to_string();
+        let mut blocks = Vec::new();
+
+        // Highest line first so removing one block never shifts the next.
+        line_numbers.sort_unstable();
+        line_numbers.dedup();
+
+        for line_number in line_numbers.into_iter().rev() {
+            let index = line_number
+                .checked_sub(1)
+                .filter(|index| *index < lines.len())
+                .ok_or_else(|| format!("Line {line_number} is not in {relative}"))?;
+
+            if task_marker_index(&lines[index]).is_none() {
+                return Err(format!("Line {line_number} in {relative} is not a task"));
+            }
+
+            let end = task_block_end(&lines, index);
+            let block: Vec<String> = lines.drain(index..end).collect();
+
+            blocks.push(archived_block(&block, &source, &archived_on));
+            count += 1;
+        }
+
+        blocks.reverse();
+        archived.push_str(&blocks.concat());
+        rewritten.push((path, lines.concat()));
+    }
+
+    let archive_parent = archive_clean.parent().unwrap_or_else(|| Path::new(""));
+    ensure_vault_parent_dirs(&root_path, archive_parent)?;
+    let (_, archive_path) = resolve_for_write(&root, &archive_relative)?;
+    let mut archive_content = if archive_path.exists() {
+        fs::read_to_string(&archive_path)
+            .map_err(|err| format!("Could not read archive note: {err}"))?
+    } else {
+        String::new()
+    };
+
+    if !archive_content.is_empty() && !archive_content.ends_with('\n') {
+        archive_content.push('\n');
+    }
+
+    archive_content.push_str(&archived);
+    fs::write(&archive_path, archive_content)
+        .map_err(|err| format!("Could not write archive note: {err}"))?;
+
+    for (path, content) in rewritten {
+        fs::write(&path, content).map_err(|err| format!("Could not write note: {err}"))?;
+    }
+
+    Ok(count)
+}
+
+fn line_indent(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+/// Blank lines inside the block travel with it, but trailing blanks stay
+/// with the note so its paragraph spacing survives the removal.
+fn task_block_end(lines: &[String], index: usize) -> usize {
+    let indent = line_indent(&lines[index]);
+    let mut end = index + 1;
+    let mut last_content = end;
+
+    while end < lines.len() {
+        let line = &lines[end];
+
+        if line.trim().is_empty() {
+            end += 1;
+            continue;
+        }
+
+        if line_indent(line) <= indent {
+            break;
+        }
+
+        end += 1;
+        last_content = end;
+    }
+
+    last_content
+}
+
+fn archived_block(block: &[String], source: &str, archived_on: &str) -> String {
+    let indent = line_indent(&block[0]);
+    let mut out = String::new();
+
+    for (position, line) in block.iter().enumerate() {
+        // Blank lines inside the block can be shorter than the indent, so a
+        // blind slice would cut into text or panic.
+        let dedented = line
+            .char_indices()
+            .find(|(offset, character)| *offset >= indent || !character.is_whitespace())
+            .map_or("", |(offset, _)| &line[offset..]);
+
+        if position == 0 {
+            let text = dedented.trim_end_matches(['\n', '\r']);
+            out.push_str(&format!("{text} (from [[{source}]], archived {archived_on})\n"));
+        } else {
+            out.push_str(dedented);
+        }
+    }
+
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+
+    out
+}
+
+fn task_marker_index(line: &str) -> Option<usize> {
+    let indent = line.len() - line.trim_start().len();
+    let rest = &line[indent..];
+    let bullet_len = if rest.starts_with(['-', '*', '+']) {
+        1
+    } else {
+        let digits = rest.chars().take_while(char::is_ascii_digit).count();
+        (digits > 0 && rest[digits..].starts_with(['.', ')'])).then_some(digits + 1)?
+    };
+    let after_bullet = &rest[bullet_len..];
+    let spaces = after_bullet.len() - after_bullet.trim_start_matches(' ').len();
+    let checkbox = &after_bullet[spaces..];
+
+    if spaces == 0 || !checkbox.starts_with('[') || checkbox.as_bytes().get(2) != Some(&b']') {
+        return None;
+    }
+
+    // `X` and `-` are Obsidian's done/cancelled spellings; the app never writes
+    // them but must still treat such lines as tasks.
+    matches!(checkbox.as_bytes()[1], b' ' | b'x' | b'X' | b'/' | b'-')
+        .then_some(indent + bullet_len + spaces + 1)
+}
 #[tauri::command]
 pub(crate) fn create_canvas_in_directory(
     root: String,

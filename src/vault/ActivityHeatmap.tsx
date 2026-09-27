@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   buildActivityHeatmap,
   describeActivityDay,
@@ -13,6 +14,10 @@ import {
 // - Layout math lives in lib/activity-heatmap; this only renders it.
 // - The grid scrolls horizontally and opens scrolled to today so the recent
 //   weeks are visible in a narrow drawer.
+// - The day tooltip is drawn by hand because the native `title` tooltip never
+//   appears in Tauri's WebKit view. It is fixed-positioned and portalled to the
+//   body: the drawer carries a transform, which would otherwise anchor a fixed
+//   element to the drawer instead of the viewport.
 
 type ActivityHeatmapProps = {
   files: readonly ActivityFile[];
@@ -20,9 +25,17 @@ type ActivityHeatmapProps = {
   onSelectDay: (day: ActivityDay | null) => void;
 };
 
+type Tooltip = { text: string; x: number; y: number };
+
 export function ActivityHeatmap({ files, selectedDay, onSelectDay }: ActivityHeatmapProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const heatmap = useMemo(() => buildActivityHeatmap(files, new Date()), [files]);
+  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
+
+  function showTooltip(day: ActivityDay, cell: HTMLElement) {
+    const rect = cell.getBoundingClientRect();
+    setTooltip({ text: describeActivityDay(day), x: rect.left + rect.width / 2, y: rect.top });
+  }
 
   useEffect(() => {
     const scroller = scrollRef.current;
@@ -49,10 +62,13 @@ export function ActivityHeatmap({ files, selectedDay, onSelectDay }: ActivityHea
                 type="button"
                 className={selectedDay === day.key ? "activity-cell selected" : "activity-cell"}
                 data-level={day.level}
-                title={describeActivityDay(day)}
                 aria-label={describeActivityDay(day)}
                 aria-pressed={selectedDay === day.key}
                 onClick={() => onSelectDay(selectedDay === day.key ? null : day)}
+                onPointerEnter={(event) => showTooltip(day, event.currentTarget)}
+                onPointerLeave={() => setTooltip(null)}
+                onFocus={(event) => showTooltip(day, event.currentTarget)}
+                onBlur={() => setTooltip(null)}
               />
             ) : (
               <span key={`empty-${column}-${row}`} className="activity-cell future" aria-hidden="true" />
@@ -60,6 +76,14 @@ export function ActivityHeatmap({ files, selectedDay, onSelectDay }: ActivityHea
           ),
         )}
       </div>
+      {tooltip
+        ? createPortal(
+            <div className="activity-tooltip" role="tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
+              {tooltip.text}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

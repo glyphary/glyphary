@@ -284,7 +284,7 @@ test("vault plugins are settings-gated and run commands through safe host paths"
   assert.match(appTypes, /export type PluginManifest/);
   assert.match(appTypes, /runtime: "glyphary-wasm-transform@1"/);
   assert.match(appTypes, /export type PluginWasmCommand/);
-  assert.match(appTypes, /export type SettingsTab = "main" \| "appearance" \| "canvas" \| "plugins" \| "ai" \| "debug"/);
+  assert.match(appTypes, /export type SettingsTab = "main" \| "appearance" \| "canvas" \| "plugins" \| "ai" \| "export" \| "debug"/);
   assert.match(appTypes, /export type DebugSettings/);
   assert.match(appTypes, /debug\?: DebugSettings \| null/);
   assert.match(settings, /defaultDebugSettings: DebugSettings = \{\s*enabled: false,/);

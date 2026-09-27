@@ -202,6 +202,25 @@ fn writes_ai_settings_for_openai_compatible_backends() {
 }
 
 #[test]
+fn cleans_tag_colours_and_rejects_non_hex_values() {
+    let mut colors = BTreeMap::new();
+    colors.insert("#AI".to_string(), "#E12729".to_string());
+    colors.insert("/ml/notes/".to_string(), " #00ff00 ".to_string());
+    colors.insert("".to_string(), "#123456".to_string());
+    let clean = clean_tag_colors(colors).expect("valid colours clean");
+    assert_eq!(clean.get("ai").map(String::as_str), Some("#e12729"));
+    assert_eq!(clean.get("ml/notes").map(String::as_str), Some("#00ff00"));
+    assert_eq!(clean.len(), 2);
+
+    let mut bad = BTreeMap::new();
+    bad.insert("x".to_string(), "red".to_string());
+    assert!(clean_tag_colors(bad).is_err());
+    let mut injected = BTreeMap::new();
+    injected.insert("x".to_string(), "#123456; background:url(x)".to_string());
+    assert!(clean_tag_colors(injected).is_err());
+}
+
+#[test]
 fn writes_vault_settings_file() {
     let root = test_root();
 

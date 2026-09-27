@@ -550,6 +550,16 @@ export function sameNewTabFile(left: string | undefined | null, right: string | 
   return normalizeNewTabFile(left) === normalizeNewTabFile(right);
 }
 
+export const defaultTaskArchiveNote = "Archive/Tasks.md";
+
+export function normalizeTaskArchiveNote(value: string | undefined | null) {
+  return value?.trim().replace(/^\/+/, "") || defaultTaskArchiveNote;
+}
+
+export function sameTaskArchiveNote(left: string | undefined | null, right: string | undefined | null) {
+  return normalizeTaskArchiveNote(left) === normalizeTaskArchiveNote(right);
+}
+
 export function normalizeStarredFiles(files: string[] | undefined | null) {
   const seen = new Set<string>();
 

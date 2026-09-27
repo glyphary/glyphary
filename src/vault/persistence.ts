@@ -48,6 +48,10 @@ export function readVaultFile(root: string, relative: string) {
   return invoke<OpenedFile>("read_vault_file", { root, relative });
 }
 
+export function writeObsidianSnippet(root: string, name: string, content: string) {
+  return invoke<string>("write_obsidian_snippet", { root, name, content });
+}
+
 export function writeVaultFile(root: string, relative: string, content: string) {
   return invoke("write_vault_file", { root, relative, content });
 }
@@ -163,6 +167,23 @@ export function queryBase(root: string, relative: string) {
 
 export function renderBaseDefinition(definition: BaseDefinition) {
   return invoke<string>("render_base_definition", { definition });
+}
+
+export function setTaskStatus(root: string, relative: string, lineNumber: number, status: string) {
+  return invoke<string>("set_task_status", { root, relative, lineNumber, status });
+}
+
+export function archiveTasks(
+  root: string,
+  tasks: { relativePath: string; lineNumber: number }[],
+  archiveRelative: string,
+  archivedOn: string,
+) {
+  return invoke<number>("archive_tasks", { root, tasks, archiveRelative, archivedOn });
+}
+
+export function clipWebPage(root: string, url: string, selection: string | undefined, clippedOn: string) {
+  return invoke<OpenedFile>("clip_web_page", { root, url, selection, clippedOn });
 }
 
 export function createBaseInDirectory(root: string, relative: string, baseName: string) {

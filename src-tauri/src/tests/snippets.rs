@@ -57,3 +57,25 @@ fn lists_and_reads_only_approved_css_snippets() {
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }
+
+#[test]
+fn writes_obsidian_snippets_into_the_obsidian_folder() {
+    let root = test_root();
+    let root_string = root.to_string_lossy().into_owned();
+
+    let written = write_obsidian_snippet(
+        root_string.clone(),
+        "glyphary-tag-colors.css".into(),
+        "a.tag { color: red; }".into(),
+    )
+    .expect("snippet should be written");
+    assert_eq!(written, ".obsidian/snippets/glyphary-tag-colors.css");
+    assert_eq!(
+        fs::read_to_string(root.join(".obsidian/snippets/glyphary-tag-colors.css")).unwrap(),
+        "a.tag { color: red; }"
+    );
+
+    assert!(write_obsidian_snippet(root_string.clone(), "../escape.css".into(), String::new()).is_err());
+    assert!(write_obsidian_snippet(root_string, "notes.md".into(), String::new()).is_err());
+    fs::remove_dir_all(root).unwrap();
+}

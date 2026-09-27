@@ -39,6 +39,7 @@ import {
 import {
   defaultCssSnippetDirectory,
   defaultNewTabFile,
+  defaultTaskArchiveNote,
   maximumCalendarPreviewDelayMs,
   maximumGlassOpacity,
   minimumCalendarPreviewDelayMs,
@@ -52,6 +53,8 @@ import {
   isRunningOnMacOs,
 } from "../lib/settings";
 import { ThemeBuilderPanel } from "./ThemeBuilderPanel";
+import { OBSIDIAN_TAG_SNIPPET_NAME, obsidianTagColorSnippet, type TagColors } from "../lib/tag-colors";
+import { writeObsidianSnippet } from "../vault/persistence";
 
 // ponytail: App still owns settings draft state; replace this wide prop bag only when settings state moves with it.
 type SettingsDialogProps = {
@@ -73,6 +76,8 @@ type SettingsDialogProps = {
   frontmatterPillDraft: FrontmatterPillSettings;
   moveSettingsDrag: (event: ReactPointerEvent<HTMLDivElement>) => void;
   newTabFileDraft: string;
+  taskArchiveNoteDraft: string;
+  setTaskArchiveNoteDraft: Dispatch<SetStateAction<string>>;
   normalizedCanvasDraft: CanvasSettings;
   normalizedVaultAppearanceDraft: VaultAppearanceSettings;
   onboardingTipsEnabled: boolean;
@@ -115,6 +120,7 @@ type SettingsDialogProps = {
   shortcutFromKeyboardEvent: (event: KeyboardEvent<HTMLInputElement>) => string;
   startSettingsDrag: (event: ReactPointerEvent<HTMLDivElement>) => void;
   stopSettingsDrag: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  tagColors: TagColors;
   testAiConnection: () => void | Promise<void>;
   themeCalloutDraft: VaultThemeCalloutSettings;
   themeDraft: Record<string, string>;
@@ -229,6 +235,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
     frontmatterPillDraft,
     moveSettingsDrag,
     newTabFileDraft,
+    taskArchiveNoteDraft,
+    setTaskArchiveNoteDraft,
     normalizedCanvasDraft,
     normalizedVaultAppearanceDraft,
     onboardingTipsEnabled,
@@ -271,6 +279,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     shortcutFromKeyboardEvent,
     startSettingsDrag,
     stopSettingsDrag,
+    tagColors,
     testAiConnection,
     themeCalloutDraft,
     themeDraft,
@@ -281,9 +290,20 @@ export function SettingsDialog(props: SettingsDialogProps) {
     vaultRoot,
   } = props;
 
-  // In-dialog confirmation note for Reset Hints; the settings window has no
-  // status bar, so feedback must render next to the control itself.
+  // The settings window has no status bar, so Reset Hints and export feedback
+  // must render inside the dialog.
   const [hintsResetDone, setHintsResetDone] = useState(false);
+  const [exportNote, setExportNote] = useState<{ text: string; error: boolean } | null>(null);
+
+  async function exportTagColorSnippet() {
+    try {
+      const relative = await writeObsidianSnippet(vaultRoot, OBSIDIAN_TAG_SNIPPET_NAME, obsidianTagColorSnippet(tagColors));
+
+      setExportNote({ text: `Wrote ${relative}. Enable it in Obsidian under Appearance, CSS snippets.`, error: false });
+    } catch (error) {
+      setExportNote({ text: error instanceof Error ? error.message : String(error), error: true });
+    }
+  }
 
   if (!settingsOpen) {
     return null;
@@ -307,6 +327,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     canvas: "Canvas",
     plugins: "Plugins",
     ai: "AI",
+    export: "Export",
     debug: "Debug",
   };
   const settingsTabs = (
@@ -355,6 +376,15 @@ export function SettingsDialog(props: SettingsDialogProps) {
         onClick={() => setSettingsTab("ai")}
       >
         AI
+      </button>
+      <button
+        className={settingsTab === "export" ? "active" : ""}
+        type="button"
+        role="tab"
+        aria-selected={settingsTab === "export"}
+        onClick={() => setSettingsTab("export")}
+      >
+        Export
       </button>
       <button
         className={settingsTab === "debug" ? "active" : ""}
@@ -461,6 +491,16 @@ export function SettingsDialog(props: SettingsDialogProps) {
                       </button>
                     </div>
                     <small>Cmd+T opens this vault file in the active pane.</small>
+                  </label>
+                  <label>
+                    <span>Task archive</span>
+                    <input
+                      disabled={!vaultRoot}
+                      value={taskArchiveNoteDraft}
+                      onChange={(event) => setTaskArchiveNoteDraft(event.currentTarget.value)}
+                      placeholder={defaultTaskArchiveNote}
+                    />
+                    <small>The task board appends archived tasks to this note, created on first use.</small>
                   </label>
                   <SettingsCheckbox
                     checked={fileDisplayDraft.showDotfiles}
@@ -660,12 +700,13 @@ export function SettingsDialog(props: SettingsDialogProps) {
                       checked={editorBehaviorDraft.vimMode}
                       disabled={!vaultRoot}
                       type="checkbox"
-                      onChange={(event) =>
-                        setEditorBehaviorDraft((settings) => ({
-                          ...settings,
-                          vimMode: event.currentTarget.checked,
-                        }))
-                      }
+                      onChange={(event) => {
+                        // React clears currentTarget after dispatch; the
+                        // updater runs later, so read the value first.
+                        const vimMode = event.currentTarget.checked;
+
+                        setEditorBehaviorDraft((settings) => ({ ...settings, vimMode }));
+                      }}
                     />
                     <span>Use Vim keybindings</span>
                   </label>
@@ -674,12 +715,13 @@ export function SettingsDialog(props: SettingsDialogProps) {
                       checked={editorBehaviorDraft.slashMenu}
                       disabled={!vaultRoot}
                       type="checkbox"
-                      onChange={(event) =>
-                        setEditorBehaviorDraft((settings) => ({
-                          ...settings,
-                          slashMenu: event.currentTarget.checked,
-                        }))
-                      }
+                      onChange={(event) => {
+                        // React clears currentTarget after dispatch; the
+                        // updater runs later, so read the value first.
+                        const slashMenu = event.currentTarget.checked;
+
+                        setEditorBehaviorDraft((settings) => ({ ...settings, slashMenu }));
+                      }}
                     />
                     <span>Open the command menu with "/"</span>
                   </label>
@@ -1372,6 +1414,40 @@ export function SettingsDialog(props: SettingsDialogProps) {
                       <p className="settings-note">No CSS snippets found.</p>
                     )}
                   </div>
+                </section>
+              </div>
+            ) : null}
+            {settingsTab === "export" ? (
+              <div className="settings-tab-panel" role="tabpanel" aria-label="Export settings">
+                <section className="settings-section" aria-label="Tag colour export">
+                  <div className="settings-section-header">
+                    <div>
+                      <h3>Tag Colours</h3>
+                      <p>
+                        Write the colours picked in the Tags drawer as an Obsidian CSS snippet in this
+                        vault. Enable it in Obsidian under Appearance, CSS snippets. Nested tags take
+                        their root colour in live preview.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="settings-inline-actions">
+                    <button
+                      className="settings-inline-action"
+                      type="button"
+                      disabled={!vaultRoot || !isTauri() || Object.keys(tagColors).length === 0}
+                      onClick={() => void exportTagColorSnippet()}
+                    >
+                      Export Obsidian CSS Snippet
+                    </button>
+                  </div>
+                  {exportNote ? (
+                    <p
+                      className={exportNote.error ? "settings-save-error" : "settings-note"}
+                      role={exportNote.error ? "alert" : "status"}
+                    >
+                      {exportNote.text}
+                    </p>
+                  ) : null}
                 </section>
               </div>
             ) : null}

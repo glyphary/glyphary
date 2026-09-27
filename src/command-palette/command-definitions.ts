@@ -47,10 +47,14 @@ export type CommandPaletteContext = {
   insertCollapseBlock: () => void;
   insertHtmlBlock: () => void;
   insertMermaidDiagram: () => void;
+  insertTaskDateField: (emoji: string) => void;
   openAiPageBuilder: () => void;
   openGraphView: () => void;
+  openTaskBoard: () => void;
   openLocalGraphView: () => void;
   openRichLinkDialog: () => void;
+  openClipDialog: () => void;
+  copyClipperBookmarklet: () => void;
   pluginCatalog: PluginCatalog;
   pluginDraft: PluginSettings;
   runAiContinueWritingCommand: () => Promise<void>;
@@ -94,10 +98,14 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
     insertCollapseBlock,
     insertHtmlBlock,
     insertMermaidDiagram,
+    insertTaskDateField,
     openAiPageBuilder,
     openGraphView,
+    openTaskBoard,
     openLocalGraphView,
     openRichLinkDialog,
+    openClipDialog,
+    copyClipperBookmarklet,
     pluginCatalog,
     pluginDraft,
     runAiContinueWritingCommand,
@@ -401,10 +409,34 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
       run: () => requestCanvasCommand("group"),
     },
   ];
+  // Task dates sit at the root as well as under Insert so "/due" finds them
+  // without a submenu hop; each writes the Tasks-format emoji and opens the
+  // calendar for the day.
+  const taskDateCommandPaletteCommands: CommandPaletteCommand[] = [
+    {
+      id: "insert-due-date",
+      title: "Due Date",
+      description: "Add a 📅 due date picked from a calendar",
+      run: () => insertTaskDateField("📅"),
+    },
+    {
+      id: "insert-scheduled-date",
+      title: "Scheduled Date",
+      description: "Add a ⏳ scheduled date picked from a calendar",
+      run: () => insertTaskDateField("⏳"),
+    },
+    {
+      id: "insert-start-date",
+      title: "Start Date",
+      description: "Add a 🛫 start date picked from a calendar",
+      run: () => insertTaskDateField("🛫"),
+    },
+  ];
   // Insert commands are grouped for density, but they remain ordinary commands
   // once the user enters the submenu so fuzzy search and keyboard behavior stay
   // identical to the root palette.
   const insertCommandPaletteCommands: CommandPaletteCommand[] = [
+    ...taskDateCommandPaletteCommands,
     {
       id: "insert-rich-link",
       title: "Insert rich link",
@@ -533,6 +565,12 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
   // local one reports through status when no note is open.
   const graphCommandPaletteCommands: CommandPaletteCommand[] = [
     {
+      id: "open-task-board",
+      title: "Open Task Board",
+      description: "Move every vault task between To Do, In Progress, and Done",
+      run: openTaskBoard,
+    },
+    {
       id: "open-graph-view",
       title: "Open Global Graph",
       description: "See how every note in this vault links to the others",
@@ -570,6 +608,18 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
       run: createTidbit,
     },
     {
+      id: "clip-web-page",
+      title: "Clip Web Page",
+      description: "Save a web page as a Markdown note in Clippings",
+      run: openClipDialog,
+    },
+    {
+      id: "copy-clipper-bookmarklet",
+      title: "Copy Web Clipper Bookmarklet",
+      description: "Copy a browser bookmarklet that clips the current page into Glyphary",
+      run: copyClipperBookmarklet,
+    },
+    {
       id: "toggle-focus-mode",
       title: focusMode ? "Exit Focus Mode" : "Enter Focus Mode",
       description: "Show only the note editing area",
@@ -590,6 +640,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
           },
         ]
       : []),
+    ...taskDateCommandPaletteCommands,
     {
       id: "insert-menu",
       title: "Insert ...",

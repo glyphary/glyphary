@@ -38,6 +38,7 @@ import {
   calendarDayRelativePath,
   calendarDayTitle,
   calendarPathDateKey,
+  monthGridDays,
   monthTitle,
   sameCalendarDate,
 } from "./lib/calendar";
@@ -115,6 +116,8 @@ import {
   normalizeFileDisplaySettings,
   normalizeFrontmatterPillSettings,
   normalizeNewTabFile,
+  normalizeTaskArchiveNote,
+  sameTaskArchiveNote,
   normalizePluginSettings,
   normalizeStarredFiles,
   normalizeTidbitSettings,
@@ -150,9 +153,13 @@ import {
 import { richLinkMarkdown } from "./lib/rich-links";
 import {
   glypharyOpenUrl,
-  parseGlypharyOpenUrl,
+  glypharyClipBookmarklet,
+  parseGlypharyUrl,
   resolveDeepLinkVaultRoot,
 } from "./lib/deep-links";
+import { localDayKey } from "./lib/activity-heatmap";
+import { normalizeTagColors, sameTagColors, withTagColor } from "./lib/tag-colors";
+import { refreshTagColorsMeta } from "./editor/inline-tags";
 import { jumpToHeadingInEditor } from "./editor/code-block-renderers";
 import {
   alignCurrentTableColumn,
@@ -253,6 +260,7 @@ import { VaultTitlebarActions } from "./vault/VaultTitlebarActions";
 import {
   allowVaultAssets,
   cloneGithubVault,
+  clipWebPage,
   createVaultMarkdownFile,
   getGithubToken,
   getGithubVaultToken,
@@ -278,6 +286,22 @@ import {
   taskSearchPattern,
   visibleVaultTaskResults,
 } from "./tasks/vault-tasks";
+import { TaskBoard } from "./tasks/TaskBoard";
+import { TaskDatePicker } from "./editor/TaskDatePicker";
+import { TaskQuickMenu } from "./editor/TaskQuickMenu";
+import { InlineSuggestMenu } from "./editor/InlineSuggestMenu";
+import { useInlineSuggest } from "./app-state/inline-suggest";
+import { useTaskBoard } from "./app-state/task-board";
+import { useTaskFieldPickers } from "./app-state/task-field-pickers";
+import { openAuxiliaryWindow } from "./app-state/aux-window";
+import {
+  dirtyFilePaths,
+  peerStorageKeys,
+  subscribePeerNotices,
+  writeDirtyFilesMirror,
+  writePeerNotice,
+} from "./lib/peer-windows";
+import { isLiveTaskResult } from "./lib/task-board";
 import { renderToolbarIcon } from "./toolbar-icons";
 import packageJson from "../package.json";
 import type {
@@ -514,15 +538,19 @@ function moveSelectableIndex(currentIndex: number, itemCount: number, delta: -1 
 
 type AppProps = {
   settingsWindowMode?: boolean;
+  taskBoardWindowMode?: boolean;
 };
 
 const settingsRevisionStorageKey = "glyphary.settingsRevision";
-
 // Stable empty datasets for the drawer loaders so no-vault resets never churn.
 const noVaultTags: VaultTag[] = [];
 const noVaultActivity: VaultFileActivity[] = [];
 
-function App({ settingsWindowMode = false }: AppProps = {}) {
+function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppProps = {}) {
+  // Settings and the task board open as separate windows, each its own App
+  // instance without the editor shell; the main window alone owns the tabs,
+  // the native menu, and the window-show handshake.
+  const auxiliaryWindowMode = settingsWindowMode || taskBoardWindowMode;
   // The active editor group is mirrored into these top-level document fields
   // because drawers, toolbar state, save commands, and native menu events all
   // operate on "the current document" regardless of which split pane owns it.
@@ -549,6 +577,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     fileDisplayDraft,
     frontmatterPillDraft,
     newTabFileDraft,
+    taskArchiveNoteDraft,
+    setTaskArchiveNoteDraft,
     pluginCatalog,
     pluginDraft,
     pluginStyles,
@@ -687,6 +717,11 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     useState<CanvasCommandRequest | null>(null);
   const [richLinkDialogOpen, setRichLinkDialogOpen] = useState(false);
   const [richLinkUrlDraft, setRichLinkUrlDraft] = useState("");
+  const [vaultTreeRevision, setVaultTreeRevision] = useState(0);
+  const [clipDialogOpen, setClipDialogOpen] = useState(false);
+  const [clipUrlDraft, setClipUrlDraft] = useState("");
+  const [clipSubmitting, setClipSubmitting] = useState(false);
+  const clipInputRef = useRef<HTMLInputElement | null>(null);
   const [richLinkSubmitting, setRichLinkSubmitting] = useState(false);
   const [releaseNotification, setReleaseNotification] =
     useState<ReleaseNotification | null>(null);
@@ -727,6 +762,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setWikiLinkPickerSelectedIndex,
     setWikiLinkSearchQuery,
     setWikiLinkSearchSelectedIndex,
+    wikiLinkIndex,
     wikiLinkIndexVersion,
     wikiLinkPicker,
     wikiLinkPickerSelectedIndex,
@@ -833,6 +869,21 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     canvas: defaultCanvasSettings,
     theme: null,
   });
+  const inlineSuggest = useInlineSuggest({ editorRef: activeEditorRef, vaultRootRef, wikiLinkIndex });
+  const pickers = useTaskFieldPickers({ editorRef: activeEditorRef });
+  const taskBoard = useTaskBoard({
+    vaultRoot,
+    vaultRootRef,
+    vaultSettingsRef,
+    windowMode: taskBoardWindowMode,
+    canOpenWindow: isTauri() && !auxiliaryWindowMode && !isIPad,
+    setStatus,
+    findOpenFileTab,
+    reloadOpenTabFromDisk,
+    refreshDrawerTasks: () => void refreshTasks(),
+    patchDrawerTasks: (patch) => setTaskResults((items) => items.map(patch)),
+    confirmDestructiveAction,
+  });
   const excalidraw = useExcalidraw({
     confirmDestructiveAction,
     getEditor: () => activeEditorRef.current,
@@ -871,6 +922,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
   useEffect(() => {
     editorGroupsRef.current = editorGroups;
+
+    if (!auxiliaryWindowMode) {
+      writeDirtyFilesMirror(dirtyFilePaths(editorGroups));
+    }
   }, [editorGroups]);
 
   useEffect(() => {
@@ -1377,6 +1432,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     return normalizeNewTabFile(vaultSettings.newTabFile);
   }
 
+  function savedTaskArchiveNote() {
+    return normalizeTaskArchiveNote(vaultSettings.taskArchiveNote);
+  }
+
   function vaultRelativeFileFromSelection(selected: string) {
     // The dialog returns an absolute native path; settings store portable
     // vault-relative paths so the config remains usable if the vault moves.
@@ -1427,6 +1486,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     return (
       settingsDraft !== vaultSettings.assetDirectory ||
       !sameNewTabFile(newTabFileDraft, savedNewTabFile()) ||
+      !sameTaskArchiveNote(taskArchiveNoteDraft, savedTaskArchiveNote()) ||
       !sameFrontmatterPillSettings(frontmatterPillDraft, savedFrontmatterPillSettings()) ||
       !sameEditorBehaviorSettings(editorBehaviorDraft, savedEditorBehaviorSettings()) ||
       !sameFileDisplaySettings(fileDisplayDraft, savedFileDisplaySettings) ||
@@ -1506,37 +1566,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   async function openSettings() {
     if (isTauri() && !settingsWindowMode && !isIPad) {
       try {
-        const existing = await WebviewWindow.getByLabel("settings");
-
-        if (existing) {
-          await existing.show();
-          await existing.setFocus();
-          return;
-        }
-
-        const settingsWindow = new WebviewWindow("settings", {
-          url: "index.html?view=settings",
-          title: "Settings",
-          width: 900,
-          height: 720,
-          minWidth: 760,
-          minHeight: 560,
-          center: true,
-          decorations: true,
-          focus: true,
-          hiddenTitle: true,
-          resizable: true,
-          skipTaskbar: true,
-          titleBarStyle: "overlay",
-          trafficLightPosition: new LogicalPosition(20, 28),
-          acceptFirstMouse: true,
-          transparent: true,
-          visible: false,
-        });
-
-        settingsWindow.once("tauri://error", (event) => {
-          setStatus(`Could not open settings: ${String(event.payload)}`);
-        });
+        await openAuxiliaryWindow(
+          { label: "settings", view: "settings", title: "Settings", width: 900, height: 720, minWidth: 760, minHeight: 560 },
+          (message) => setStatus(`Could not open settings: ${message}`),
+        );
         return;
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error));
@@ -1571,7 +1604,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   }
 
   function showMainWindowAfterRestore() {
-    if (!isTauri() || settingsWindowMode || mainWindowShownRef.current) {
+    if (!isTauri() || auxiliaryWindowMode || mainWindowShownRef.current) {
       return;
     }
 
@@ -1634,7 +1667,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     // A crashed or force-closed settings window can leave a stale preview
     // behind; the main window clears it on startup.
-    if (!settingsWindowMode) {
+    if (!auxiliaryWindowMode) {
       window.localStorage.removeItem(themePreviewStorageKey);
     }
 
@@ -1662,7 +1695,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   }, [settingsWindowMode]);
 
   useEffect(() => {
-    if (!settingsWindowMode || !isTauri()) {
+    if (!auxiliaryWindowMode || !isTauri()) {
       return;
     }
 
@@ -1688,7 +1721,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [settingsWindowMode]);
+  }, [auxiliaryWindowMode]);
 
   function clampSettingsOffset(x: number, y: number) {
     const margin = 28;
@@ -2328,6 +2361,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       openCommandPalette: () => openCommandPaletteRootRef.current("flat"),
       openExcalidrawDrawing: excalidraw.stable.openDrawing,
       openWikiLinkSearch: () => openWikiLinkSearchRef.current(),
+      onInlineSuggest: inlineSuggest.onSessionChange,
+      onInlineSuggestKey: inlineSuggest.onKey,
+      openTaskDatePicker: pickers.openTaskDatePicker,
+      openTaskQuickMenu: pickers.openTaskQuickMenu,
       queueImageImport,
       resolveVaultAssetSrc: (target) =>
         joinVaultAssetPath(
@@ -2337,6 +2374,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         ),
       resolveVaultImageSrc: (target) => joinVaultImagePath(vaultRootRef.current, target),
       resolveWikiLinkTarget: (target) => resolveWikiLinkTargetRef.current(target),
+      getTagColors: () => normalizeTagColors(vaultSettingsRef.current.tagColors),
       setDirty,
       setEditorFocused,
       setMarkdown,
@@ -2546,7 +2584,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   activeEditorRef.current = editor;
 
   useEffect(() => {
-    if (settingsWindowMode) {
+    if (auxiliaryWindowMode) {
       return;
     }
 
@@ -2561,10 +2599,10 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         setStatus(error instanceof Error ? error.message : String(error));
       });
     }
-  }, [activeFileBackedName, dirty, settingsWindowMode]);
+  }, [activeFileBackedName, dirty, auxiliaryWindowMode]);
 
   useEffect(() => {
-    if (!isTauri() || settingsWindowMode) {
+    if (!isTauri() || auxiliaryWindowMode) {
       return;
     }
 
@@ -2600,7 +2638,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     dirty,
     focusMode,
     recentFiles,
-    settingsWindowMode,
+    auxiliaryWindowMode,
     splitOpen,
     vaultDrawerOpen,
   ]);
@@ -2954,20 +2992,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
   const tableOfContents = useMemo(() => markdownHeadings(markdown), [markdown]);
 
-  const calendarDays = useMemo(() => {
-    const firstDay = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
-    const start = new Date(firstDay);
-    start.setDate(firstDay.getDate() - firstDay.getDay());
-
-    // Six 7-day rows cover any month; the fixed count keeps the grid height
-    // stable when paging between months.
-    return Array.from({ length: 42 }, (_, index) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + index);
-
-      return date;
-    });
-  }, [calendarMonth]);
+  const calendarDays = useMemo(() => monthGridDays(calendarMonth), [calendarMonth]);
 
   const calendarNoteDateKeySet = useMemo(
     () => new Set(calendarNoteDateKeys),
@@ -3643,20 +3668,20 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     return left.length === right.length && left.every((path, index) => path === right[index]);
   }
 
-  async function persistStarredFiles(nextFiles: string[]) {
+  // A partial vault-settings write outside the settings dialog: applied
+  // optimistically, re-synced from what the backend committed, rolled back
+  // on failure. `onApplied` runs after each state change for side effects
+  // such as redrawing editors.
+  async function persistVaultSettingsPatch(
+    patch: Partial<VaultSettings>,
+    onApplied?: () => void,
+  ) {
     const previousSettings = vaultSettingsRef.current;
-    const starredFiles = normalizeStarredFiles(nextFiles);
-    const nextSettings = {
-      ...previousSettings,
-      starredFiles,
-    };
-
-    if (samePathList(starredFiles, normalizeStarredFiles(previousSettings.starredFiles))) {
-      return true;
-    }
+    const nextSettings = { ...previousSettings, ...patch };
 
     vaultSettingsRef.current = nextSettings;
     setVaultSettings(nextSettings);
+    onApplied?.();
 
     if (!vaultRootRef.current || !isTauri()) {
       return true;
@@ -3672,13 +3697,25 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
       vaultSettingsRef.current = committedSettings;
       setVaultSettings(committedSettings);
+      onApplied?.();
       return true;
     } catch (error) {
       vaultSettingsRef.current = previousSettings;
       setVaultSettings(previousSettings);
+      onApplied?.();
       setStatus(error instanceof Error ? error.message : String(error));
       return false;
     }
+  }
+
+  async function persistStarredFiles(nextFiles: string[]) {
+    const starredFiles = normalizeStarredFiles(nextFiles);
+
+    if (samePathList(starredFiles, normalizeStarredFiles(vaultSettingsRef.current.starredFiles))) {
+      return true;
+    }
+
+    return persistVaultSettingsPatch({ starredFiles });
   }
 
   async function toggleFileStar(relativePath: string) {
@@ -3700,6 +3737,27 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
   async function toggleActiveFileStar() {
     await toggleFileStar(activeFileBackedPath);
+  }
+
+  async function persistTagColor(tag: string, color: string | null) {
+    const current = normalizeTagColors(vaultSettingsRef.current.tagColors);
+    const tagColors = withTagColor(current, tag, color);
+
+    if (sameTagColors(tagColors, current)) {
+      return;
+    }
+
+    await persistVaultSettingsPatch({ tagColors }, redrawInlineTags);
+  }
+
+  function redrawInlineTags() {
+    // Tag colours live in vault settings, not in the document, so the
+    // decoration plugin never sees them change without an explicit nudge.
+    for (const groupEditor of [primaryEditor, secondaryEditor]) {
+      if (groupEditor && !groupEditor.isDestroyed) {
+        groupEditor.view.dispatch(groupEditor.state.tr.setMeta(refreshTagColorsMeta, true));
+      }
+    }
   }
 
   async function updateStarredFiles(mapper: (path: string) => string | null) {
@@ -3789,6 +3847,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setStarredDragOrder(null);
   }
 
+  // Every vault mutation ends in loadEntries, so bumping the tree revision
+  // here refreshes the folder tree for all of them without each caller
+  // knowing the tree exists.
   async function loadEntries(root: string, relative: string) {
     const nextEntries = await listVaultDir(root, relative);
 
@@ -3797,6 +3858,14 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     }
 
     setEntries(nextEntries);
+    setVaultTreeRevision((revision) => revision + 1);
+    notifyVaultChanged(root);
+  }
+
+  function notifyVaultChanged(root: string) {
+    if (!auxiliaryWindowMode) {
+      writePeerNotice(peerStorageKeys.vaultRevision, { root });
+    }
   }
 
   async function revealFileInVaultDrawer(file: ActiveFile | null) {
@@ -3875,10 +3944,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
     const label = wikiLinkDisplayName(file);
     const { state } = editor;
-    const beforeCursor = state.doc.textBetween(
-      Math.max(0, state.selection.from - 2),
-      state.selection.from,
-    );
+    const { from } = state.selection;
+    const beforeCursor = state.doc.textBetween(Math.max(0, from - 2), from);
     const insertion = beforeCursor === "[[" ? `${label}]]` : `[[${label}]]`;
 
     // Completing a wikilink is plain text editing. Running the fragment through
@@ -4025,11 +4092,13 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     const ai = normalizeAiSettings(settings.ai);
     const canvas = normalizeCanvasSettings(settings.canvas);
     const newTabFile = normalizeNewTabFile(settings.newTabFile);
+    const taskArchiveNote = normalizeTaskArchiveNote(settings.taskArchiveNote);
     const starredFiles = normalizeStarredFiles(settings.starredFiles);
 
     const normalizedSettings = {
       ...settings,
       newTabFile,
+      taskArchiveNote,
       starredFiles,
       frontmatterPills,
       files: fileDisplaySettings,
@@ -4042,6 +4111,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       plugins,
       ai,
       canvas,
+      tagColors: normalizeTagColors(settings.tagColors),
       theme:
         Object.keys(themeTokens).length > 0 ||
         !sameThemeOptions(themeOptions, defaultThemeOptions) ||
@@ -4059,6 +4129,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setVaultSettings(normalizedSettings);
     setSettingsDraft(settings.assetDirectory);
     setNewTabFileDraft(newTabFile);
+    setTaskArchiveNoteDraft(taskArchiveNote);
     setFrontmatterPillDraft(frontmatterPills);
     setEditorBehaviorDraft(editorSettings);
     setEditorBehavior(editorSettings);
@@ -4102,7 +4173,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       const settings = await writeVaultSettings(vaultRoot, {
           assetDirectory: settingsDraft,
           newTabFile: normalizeNewTabFile(newTabFileDraft),
+          taskArchiveNote: normalizeTaskArchiveNote(taskArchiveNoteDraft),
           starredFiles: normalizeStarredFiles(vaultSettingsRef.current.starredFiles),
+          tagColors: normalizeTagColors(vaultSettingsRef.current.tagColors),
           frontmatterPills: normalizeFrontmatterPillSettings(frontmatterPillDraft),
           files: normalizeFileDisplaySettings(fileDisplayDraft),
           autosave: normalizeAutosaveSettings(autosaveDraft),
@@ -4142,10 +4215,12 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       const ai = normalizeAiSettings(settings.ai);
       const canvas = normalizeCanvasSettings(settings.canvas);
       const newTabFile = normalizeNewTabFile(settings.newTabFile);
+      const taskArchiveNote = normalizeTaskArchiveNote(settings.taskArchiveNote);
       const starredFiles = normalizeStarredFiles(settings.starredFiles);
       const normalizedSettings = {
         ...settings,
         newTabFile,
+        taskArchiveNote,
         starredFiles,
         frontmatterPills,
         files: fileDisplaySettings,
@@ -4158,6 +4233,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         plugins,
         ai,
         canvas,
+        tagColors: normalizeTagColors(settings.tagColors),
         theme:
           Object.keys(themeTokens).length > 0 ||
           !sameThemeOptions(themeOptions, defaultThemeOptions) ||
@@ -4179,6 +4255,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       setVaultSettings(normalizedSettings);
       setSettingsDraft(settings.assetDirectory);
       setNewTabFileDraft(newTabFile);
+      setTaskArchiveNoteDraft(taskArchiveNote);
       setFrontmatterPillDraft(frontmatterPills);
       setEditorBehaviorDraft(editorSettings);
       setEditorBehavior(editorSettings);
@@ -4247,6 +4324,31 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     window.addEventListener("storage", reloadSettingsFromPeerWindow);
 
     return () => window.removeEventListener("storage", reloadSettingsFromPeerWindow);
+  }, []);
+
+  const peerRequestHandlersRef = useRef({ openFile, reloadOpenTabFromDisk });
+  peerRequestHandlersRef.current = { openFile, reloadOpenTabFromDisk };
+
+  // The task board window asks this window to open a note or to reload one
+  // it changed; requests for another vault are ignored.
+  useEffect(() => {
+    if (auxiliaryWindowMode) {
+      return;
+    }
+
+    return subscribePeerNotices([peerStorageKeys.openRequest, peerStorageKeys.fileRevision], (key, notice) => {
+      if (notice.root !== vaultRootRef.current || !notice.relativePath) {
+        return;
+      }
+
+      if (key === peerStorageKeys.openRequest) {
+        void peerRequestHandlersRef.current.openFile(notice.relativePath, { revealInVaultDrawer: false });
+        void getCurrentWindow().setFocus();
+        return;
+      }
+
+      void peerRequestHandlersRef.current.reloadOpenTabFromDisk(notice.relativePath);
+    });
   }, []);
 
   async function saveCurrentFile() {
@@ -4326,6 +4428,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           );
 
     await writeVaultFile(vaultRoot, file.relativePath, content);
+    notifyVaultChanged(vaultRoot);
     const savedMarkdown =
       activeTab?.kind !== "markdown" ? markdownDraft : editor?.getMarkdown() ?? "";
     const savedDraft = markdownDraft;
@@ -5068,6 +5171,12 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     richLinkInputRef.current?.focus();
   }, [richLinkDialogOpen]);
 
+  useEffect(() => {
+    if (clipDialogOpen) {
+      clipInputRef.current?.focus();
+    }
+  }, [clipDialogOpen]);
+
 
   useEffect(() => {
     if (!wikiLinkPicker) {
@@ -5636,7 +5745,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
   async function openGlypharyUrls(urls: string[]) {
     for (const value of urls) {
-      const request = parseGlypharyOpenUrl(value);
+      const request = parseGlypharyUrl(value);
 
       if (!request) {
         continue;
@@ -5656,7 +5765,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
         }
       }
 
-      if (request.filePath) {
+      if (request.action === "clip") {
+        await clipWebPageFromUrl(request.url, request.selection);
+      } else if (request.filePath) {
         await openFile(request.filePath);
       }
     }
@@ -6804,6 +6915,60 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     setRichLinkDialogOpen(true);
   }
 
+  function openClipDialog() {
+    if (!vaultRootRef.current) {
+      setStatus("Open a vault before clipping a web page");
+      return;
+    }
+
+    setClipUrlDraft("");
+    setClipDialogOpen(true);
+  }
+
+  async function copyClipperBookmarklet() {
+    try {
+      await window.navigator.clipboard.writeText(glypharyClipBookmarklet());
+      setStatus("Copied the web clipper bookmarklet; add it as a browser bookmark");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function clipWebPageFromUrl(url: string, selection?: string) {
+    const root = vaultRootRef.current;
+    const trimmedUrl = url.trim();
+
+    if (!root) {
+      setStatus("Open a vault before clipping a web page");
+      return;
+    }
+
+    if (!trimmedUrl) {
+      return;
+    }
+
+    try {
+      setClipSubmitting(true);
+      setStatus(`Clipping ${trimmedUrl}`);
+      const file = await clipWebPage(root, trimmedUrl, selection, localDayKey(new Date()));
+      const tab = createDocumentTabFromFile(file);
+
+      snapshotActiveTab();
+      addTabToGroup(tab);
+      hydrateDocumentTab(tab);
+      persistActiveFile(tab.activeFile);
+      addFileToWikiLinkIndex(file);
+      await loadEntries(root, currentDir);
+      setClipDialogOpen(false);
+      setClipUrlDraft("");
+      setStatus(`Clipped ${file.relativePath}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setClipSubmitting(false);
+    }
+  }
+
   async function insertRichLinkFromUrl(url: string) {
     const trimmedUrl = url.trim();
 
@@ -6874,10 +7039,14 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
     insertCollapseBlock,
     insertHtmlBlock,
     insertMermaidDiagram,
+    insertTaskDateField: pickers.insertTaskDateField,
     openAiPageBuilder,
     openGraphView,
+    openTaskBoard: taskBoard.openBoard,
     openLocalGraphView,
     openRichLinkDialog,
+    openClipDialog,
+    copyClipperBookmarklet,
     pluginCatalog,
     pluginDraft,
     runAiContinueWritingCommand,
@@ -7343,7 +7512,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
       // Filename hits are not useful in this view; task navigation is based on
       // the exact Markdown task lines returned by content search.
-      const contentResults = results.filter((result) => result.isContentMatch);
+      const archiveNote = normalizeTaskArchiveNote(vaultSettingsRef.current.taskArchiveNote);
+      const contentResults = results.filter((result) => isLiveTaskResult(result, archiveNote));
       setTaskResults(contentResults);
       setStatus(
         `Found ${contentResults.length} task${contentResults.length === 1 ? "" : "s"}`,
@@ -7384,6 +7554,28 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
 
   async function openSearchResult(result: SearchResult) {
     await openFile(result.relativePath, { revealInVaultDrawer: false });
+  }
+
+  // A note changed on disk (a task moved): a clean open tab follows the file,
+  // a dirty one is left alone so edits are not lost.
+  async function reloadOpenTabFromDisk(relativePath: string) {
+    const root = vaultRootRef.current;
+    const existing = findOpenFileTab(relativePath);
+
+    if (!root || !existing || existing.tab.dirty) {
+      return;
+    }
+
+    const file = await readVaultFile(root, relativePath);
+    const reloaded = createDocumentTabFromFile(file);
+
+    updateGroupTab(existing.groupId, existing.tab.id, reloaded);
+
+    const group = editorGroupsRef.current[existing.groupId];
+
+    if (group.activeTabId === existing.tab.id) {
+      hydrateDocumentTab(reloaded, existing.groupId);
+    }
   }
 
   useEffect(() => {
@@ -7797,6 +7989,8 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       frontmatterPillDraft={frontmatterPillDraft}
       moveSettingsDrag={moveSettingsDrag}
       newTabFileDraft={newTabFileDraft}
+      taskArchiveNoteDraft={taskArchiveNoteDraft}
+      setTaskArchiveNoteDraft={setTaskArchiveNoteDraft}
       normalizedCanvasDraft={normalizedCanvasDraft}
       normalizedVaultAppearanceDraft={normalizedVaultAppearanceDraft}
       onboardingTipsEnabled={onboardingTipsEnabled}
@@ -7824,6 +8018,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
       setSettingsDraft={setSettingsDraft}
       setSettingsTab={setSettingsTab}
       setStatus={setStatus}
+      tagColors={normalizeTagColors(vaultSettings.tagColors)}
       setThemeCalloutDraft={setThemeCalloutDraft}
       setThemeOptionsDraft={setThemeOptionsDraft}
       setTidbitDraft={setTidbitDraft}
@@ -7853,6 +8048,42 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
   const tableContextEditor = tableContextMenu
     ? editorForGroup(tableContextMenu.groupId)
     : null;
+
+  if (taskBoardWindowMode) {
+    return (
+      <main className={`${appShellClassName} task-board-window-app`} style={appShellStyle}>
+        {cssSnippetContents.map((snippet) => (
+          <style data-glyphary-css-snippet={snippet.name} key={snippet.name}>
+            {snippet.content}
+          </style>
+        ))}
+        {pluginStyles.map((style) => (
+          <style
+            data-glyphary-plugin={style.pluginId}
+            data-glyphary-plugin-style={style.name}
+            key={`${style.pluginId}:${style.name}`}
+          >
+            {style.content}
+          </style>
+        ))}
+        {vaultRoot ? (
+          <TaskBoard
+            windowSurface
+            results={taskBoard.results}
+            loading={taskBoard.loading}
+            onMoveTask={(result, status) => void taskBoard.moveTask(result, status)}
+            onArchiveTasks={(results) => void taskBoard.archiveTasks(results)}
+            onOpenTask={taskBoard.openInMainWindow}
+            onRefresh={() => void taskBoard.refresh()}
+            onRequestClose={() => void getCurrentWindow().close()}
+          />
+        ) : (
+          <p className="empty-vault">Open a vault in the main window to see its tasks.</p>
+        )}
+        <footer className="statusbar task-board-window-status">{status}</footer>
+      </main>
+    );
+  }
 
   if (settingsWindowMode) {
     return (
@@ -8236,6 +8467,18 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                 <circle cx="7.6" cy="8.6" r="1.2" />
               </svg>
             </button>
+            <button
+              className="vault-tab vault-rail-settings"
+              type="button"
+              aria-label="Settings"
+              title="Settings"
+              onClick={() => void openSettings()}
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+              </svg>
+            </button>
           </div>
           {vaultDrawerOpen ? (
             <div className="vault-content">
@@ -8329,6 +8572,7 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                       <VaultFolderTree
                         activeFilePath={activeFile?.relativePath}
                         hideHeader
+                        revision={vaultTreeRevision}
                         root={vaultRoot}
                         selectedPath={currentDir}
                         unframed={!savedFileDisplaySettings.showFolderTreeBackground}
@@ -8537,6 +8781,16 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                     >
                       {tasksSearching ? "..." : renderToolbarIcon("refresh")}
                     </button>
+                    <button
+                      className="task-refresh-button"
+                      disabled={!vaultRoot}
+                      type="button"
+                      title="Open task board"
+                      aria-label="Open task board"
+                      onClick={taskBoard.openBoard}
+                    >
+                      {renderToolbarIcon("columns")}
+                    </button>
                   </div>
                   <div className="task-list-tools">
                     <label>
@@ -8609,7 +8863,9 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
                 <VaultTagsPanel
                   hasVault={Boolean(vaultRoot)}
                   tags={vaultTags.data}
+                  tagColors={normalizeTagColors(vaultSettings.tagColors)}
                   loading={vaultTags.loading}
+                  onSetTagColor={(tag, color) => void persistTagColor(tag, color)}
                   onRefresh={() => void vaultTags.refresh()}
                   onOpenFile={(relativePath, event) =>
                     handleDocumentClick(event, () =>
@@ -9144,6 +9400,20 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           <span>{calendarDayPreview.relativePath}</span>
           <CanvasMarkdownPreview markdown={calendarDayPreview.markdown} />
         </aside>
+      ) : null}
+      {taskBoard.open && vaultRoot ? (
+        <TaskBoard
+          results={taskBoard.results}
+          loading={taskBoard.loading}
+          onMoveTask={(result, status) => void taskBoard.moveTask(result, status)}
+          onArchiveTasks={(results) => void taskBoard.archiveTasks(results)}
+          onOpenTask={(result) => {
+            taskBoard.close();
+            void openSearchResult(result);
+          }}
+          onRefresh={() => void taskBoard.refresh()}
+          onRequestClose={taskBoard.close}
+        />
       ) : null}
       {graphViewOpen && vaultRoot ? (
         <GraphView
@@ -9700,6 +9970,66 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
           </form>
         </ModalDialog>
       ) : null}
+      {clipDialogOpen ? (
+        <ModalDialog
+          className="rich-link-dialog-screen"
+          aria-label="Clip web page"
+          onRequestClose={() => {
+            if (!clipSubmitting) {
+              setClipDialogOpen(false);
+            }
+          }}
+        >
+          <form
+            className="rich-link-dialog-card"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void clipWebPageFromUrl(clipUrlDraft);
+            }}
+          >
+            <div className="rich-link-dialog-header">
+              <h2>Clip Web Page</h2>
+              <span>Save the readable article as a note in Clippings.</span>
+            </div>
+            <label>
+              <span>URL</span>
+              <input
+                ref={clipInputRef}
+                disabled={clipSubmitting}
+                inputMode="url"
+                placeholder="https://example.com/article"
+                spellCheck="false"
+                type="url"
+                value={clipUrlDraft}
+                onChange={(event) => setClipUrlDraft(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape" && !clipSubmitting) {
+                    event.preventDefault();
+                    setClipDialogOpen(false);
+                  }
+                }}
+              />
+            </label>
+            <div className="rich-link-dialog-actions">
+              <button
+                className="inline-action"
+                disabled={clipSubmitting}
+                type="button"
+                onClick={() => setClipDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-action"
+                disabled={clipSubmitting || !clipUrlDraft.trim()}
+                type="submit"
+              >
+                {clipSubmitting ? "Clipping..." : "Clip"}
+              </button>
+            </div>
+          </form>
+        </ModalDialog>
+      ) : null}
       {githubDialog ? (
         <ModalDialog
           className="folder-action-dialog-screen"
@@ -9876,6 +10206,33 @@ function App({ settingsWindowMode = false }: AppProps = {}) {
             </div>
           </section>
         </ModalDialog>
+      ) : null}
+      {inlineSuggest.session ? (
+        <InlineSuggestMenu
+          x={inlineSuggest.session.x}
+          y={inlineSuggest.session.y}
+          items={inlineSuggest.items}
+          index={inlineSuggest.index}
+          emptyText={inlineSuggest.emptyText}
+          onChoose={inlineSuggest.accept}
+          onHover={inlineSuggest.setIndex}
+        />
+      ) : null}
+      {pickers.quickMenu ? (
+        <TaskQuickMenu
+          x={pickers.quickMenu.x}
+          y={pickers.quickMenu.y}
+          onChoose={pickers.applyTaskQuickChoice}
+          onClose={pickers.closeTaskQuickMenu}
+        />
+      ) : null}
+      {pickers.datePicker ? (
+        <TaskDatePicker
+          x={pickers.datePicker.x}
+          y={pickers.datePicker.y}
+          onPick={pickers.pickTaskDate}
+          onClose={pickers.closeTaskDatePicker}
+        />
       ) : null}
       {wikiLinkPicker ? (
         <div

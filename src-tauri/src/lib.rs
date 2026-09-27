@@ -13,7 +13,7 @@
 //!   and settings helpers.
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     path::{Component, Path, PathBuf},
     sync::Mutex,
@@ -41,6 +41,7 @@ mod base_expr;
 mod defaults;
 #[macro_use]
 mod calendar;
+mod clipper;
 #[macro_use]
 mod github;
 mod activity;
@@ -73,6 +74,7 @@ use ai_history::*;
 use assets::*;
 use base::*;
 use calendar::*;
+use clipper::*;
 use defaults::*;
 use github::*;
 use activity::*;
@@ -295,6 +297,8 @@ pub fn run() {
             delete_vault_file,
             create_note_in_directory,
             create_canvas_in_directory,
+            set_task_status,
+            archive_tasks,
             create_directory_in_directory,
             rename_vault_directory,
             move_vault_directory,
@@ -329,6 +333,8 @@ pub fn run() {
             github_save_token,
             github_save_vault_token,
             query_base,
+            clip_web_page,
+            write_obsidian_snippet,
             render_base_definition,
             create_base_in_directory,
             search_vault,
@@ -346,11 +352,19 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
+        .run(|app, event| match event {
             #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
-            if let tauri::RunEvent::Opened { urls } = event {
+            tauri::RunEvent::Opened { urls } => {
                 queue_and_emit_open_paths(app, opened_paths_from_urls(urls));
             }
+            // Auxiliary windows (settings, tidbit capture) would otherwise keep
+            // the process alive after the main window is closed.
+            tauri::RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::Destroyed,
+                ..
+            } if label == "main" => app.exit(0),
+            _ => {}
         });
 }
 

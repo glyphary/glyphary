@@ -25,6 +25,11 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
         .collect::<Vec<_>>()
         .join("/");
     let new_tab_file = clean_optional_relative(&settings.new_tab_file)?;
+    let task_archive_note = match clean_optional_relative(&settings.task_archive_note)? {
+        // Blank resets to the default rather than disabling archiving.
+        note if note.is_empty() => default_task_archive_note(),
+        note => note,
+    };
     let starred_files = clean_starred_files(settings.starred_files)?;
 
     let theme = clean_theme(settings.theme)?;
@@ -37,6 +42,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
     let plugins = clean_plugin_settings(settings.plugins)?;
     let ai = clean_ai_settings(settings.ai)?;
     let canvas = clean_canvas_settings(settings.canvas);
+    let tag_colors = clean_tag_colors(settings.tag_colors)?;
 
     if asset_directory.is_empty() {
         Err("Asset directory cannot be empty".into())
@@ -44,6 +50,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
         Ok(VaultSettings {
             asset_directory,
             new_tab_file,
+            task_archive_note,
             starred_files,
             frontmatter_pills,
             files,
@@ -57,6 +64,7 @@ pub(crate) fn clean_settings(settings: VaultSettings) -> Result<VaultSettings, S
             ai,
             canvas,
             theme,
+            tag_colors,
         })
     }
 }
@@ -79,6 +87,34 @@ pub(crate) fn clean_editor_settings(settings: EditorSettings) -> EditorSettings 
         slash_menu: settings.slash_menu,
     }
 }
+/// Only `#rrggbb` is accepted so a hand-edited config cannot inject CSS
+/// through a colour.
+pub(crate) fn clean_tag_colors(
+    colors: BTreeMap<String, String>,
+) -> Result<BTreeMap<String, String>, String> {
+    let mut clean = BTreeMap::new();
+
+    for (tag, color) in colors {
+        let key = tag.trim().trim_start_matches('#').trim_matches('/').to_lowercase();
+        let value = color.trim().to_lowercase();
+        let valid = value.len() == 7
+            && value.starts_with('#')
+            && value[1..].chars().all(|c| c.is_ascii_hexdigit());
+
+        if key.is_empty() {
+            continue;
+        }
+
+        if !valid {
+            return Err(format!("Tag colour for #{key} must be a #rrggbb value"));
+        }
+
+        clean.insert(key, value);
+    }
+
+    Ok(clean)
+}
+
 pub(crate) fn clean_starred_files(files: Vec<String>) -> Result<Vec<String>, String> {
     let mut seen = BTreeSet::new();
     let mut cleaned = Vec::new();

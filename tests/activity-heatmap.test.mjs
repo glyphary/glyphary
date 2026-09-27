@@ -75,6 +75,13 @@ test("activity heatmap is wired into the Recent drawer through persistence", () 
   assert.match(app, /<VaultActivityPanel/);
   assert.match(app, /load: readVaultActivity,/);
   assert.match(panel, /<ActivityHeatmap/);
+  // WebKit in Tauri never shows native title tooltips, so the day text is
+  // drawn by the component on hover and focus.
+  assert.doesNotMatch(component, /title=\{describeActivityDay/);
+  assert.match(component, /onPointerEnter=\{\(event\) => showTooltip\(day, event\.currentTarget\)\}/);
+  assert.match(component, /onFocus=\{\(event\) => showTooltip\(day, event\.currentTarget\)\}/);
+  assert.match(component, /role="tooltip"/);
+  assert.match(readFileSync("src/App.css", "utf8"), /\.activity-tooltip \{\s*position: fixed;/);
   assert.doesNotMatch(component, /invoke\(/);
   assert.match(component, /scroller\.scrollLeft = scroller\.scrollWidth/);
 });

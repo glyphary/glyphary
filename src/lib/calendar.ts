@@ -80,6 +80,22 @@ export function calendarPathDateKey(relativePath: string) {
   return calendarDateKey(date);
 }
 
+/** Six Sunday-first weeks around a month; the fixed count keeps grids stable. */
+export function monthGridDays(month: Date) {
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
+  const start = new Date(firstDay);
+
+  start.setDate(firstDay.getDate() - firstDay.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+
+    date.setDate(start.getDate() + index);
+
+    return date;
+  });
+}
+
 export function monthTitle(date: Date) {
   return `${date.toLocaleString(undefined, { month: "long" })} ${date.getFullYear()}`;
 }

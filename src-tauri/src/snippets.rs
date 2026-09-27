@@ -44,6 +44,28 @@ pub(crate) fn clean_css_snippet_settings(
 
     Ok(CssSnippetSettings { directory, enabled })
 }
+/// Obsidian only reads snippets from its own folder, not the app's.
+const OBSIDIAN_SNIPPET_DIRECTORY: &str = ".obsidian/snippets";
+
+#[tauri::command]
+pub(crate) fn write_obsidian_snippet(
+    root: String,
+    name: String,
+    content: String,
+) -> Result<String, String> {
+    let root = vault_root(&root)?;
+    let name = clean_css_snippet_name(&name)?;
+    let directory = ensure_vault_parent_dirs(&root, Path::new(OBSIDIAN_SNIPPET_DIRECTORY))?;
+    let target = directory.join(name);
+
+    if target.exists() && !target.is_file() {
+        return Err("Obsidian snippet path is not a file".into());
+    }
+
+    fs::write(&target, content).map_err(|err| format!("Could not write snippet: {err}"))?;
+    relative_string(&root, &target)
+}
+
 pub(crate) fn clean_css_snippet_name(name: &str) -> Result<String, String> {
     let name = name.trim();
 

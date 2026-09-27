@@ -32,6 +32,7 @@ import {
   defaultFileDisplaySettings,
   defaultFrontmatterPillSettings,
   defaultNewTabFile,
+  defaultTaskArchiveNote,
   defaultPluginSettings,
   defaultStarredFiles,
   defaultTidbitSettings,
@@ -62,6 +63,7 @@ export function useSettingsState() {
   });
   const [settingsDraft, setSettingsDraft] = useState(defaultVaultAssetDirectory);
   const [newTabFileDraft, setNewTabFileDraft] = useState(defaultNewTabFile);
+  const [taskArchiveNoteDraft, setTaskArchiveNoteDraft] = useState(defaultTaskArchiveNote);
   const [frontmatterPillDraft, setFrontmatterPillDraft] = useState<FrontmatterPillSettings>(
     defaultFrontmatterPillSettings,
   );
@@ -123,6 +125,8 @@ export function useSettingsState() {
     fileDisplayDraft,
     frontmatterPillDraft,
     newTabFileDraft,
+    taskArchiveNoteDraft,
+    setTaskArchiveNoteDraft,
     pluginCatalog,
     pluginDraft,
     pluginStyles,

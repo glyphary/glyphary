@@ -119,6 +119,10 @@ pub(crate) const THEME_CALLOUT_ICON_ALLOWLIST: &[&str] =
 pub(crate) fn default_asset_directory() -> String {
     DEFAULT_ASSET_DIRECTORY.into()
 }
+pub(crate) const DEFAULT_TASK_ARCHIVE_NOTE: &str = "Archive/Tasks.md";
+pub(crate) fn default_task_archive_note() -> String {
+    DEFAULT_TASK_ARCHIVE_NOTE.into()
+}
 
 pub(crate) fn default_css_snippet_directory() -> String {
     DEFAULT_CSS_SNIPPET_DIRECTORY.into()
@@ -214,6 +218,7 @@ impl Default for VaultSettings {
         Self {
             asset_directory: DEFAULT_ASSET_DIRECTORY.into(),
             new_tab_file: String::new(),
+            task_archive_note: default_task_archive_note(),
             starred_files: Vec::new(),
             frontmatter_pills: FrontmatterPillSettings::default(),
             files: FileDisplaySettings::default(),
@@ -227,6 +232,7 @@ impl Default for VaultSettings {
             ai: AiSettings::default(),
             canvas: CanvasSettings::default(),
             theme: None,
+            tag_colors: BTreeMap::new(),
         }
     }
 }

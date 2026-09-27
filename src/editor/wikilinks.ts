@@ -103,6 +103,15 @@ export function createWikiLinkExtension(options: WikiLinkExtensionOptions) {
                 return false;
               }
 
+              const $from = view.state.doc.resolve(from);
+              const inCode =
+                Boolean($from.parent.type.spec.code) ||
+                $from.marks().some((mark) => mark.type.name === "code");
+
+              if (inCode) {
+                return false;
+              }
+
               if (view.state.doc.textBetween(Math.max(0, from - 1), from) !== "[") {
                 return false;
               }

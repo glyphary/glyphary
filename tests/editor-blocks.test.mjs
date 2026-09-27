@@ -34,7 +34,13 @@ import {
 import {
   createGlypharyMarked,
   splitGfmTableRow,
+  tokenizeGfmTable,
 } from "../.test-dist/markdown-table.js";
+import {
+  tableColumnRatios,
+  tableDelimiterDashCounts,
+  tableMarkdownWithRatios,
+} from "../.test-dist/table-widths.js";
 import {
   excalidrawFileNameForTitle,
   fileNameForDroppedImage,
@@ -276,6 +282,9 @@ test("editor images can be opened in a full-size preview", () => {
   assert.match(editorPane, /candidate !== target\.currentSrc/);
   assert.match(editorPane, /target\.src = candidates\[nextIndex\]/);
   assert.match(appState, /function vaultImagePathCandidates/);
+  // A frontmatter image property is a bare wikilink in Obsidian; the resolver
+  // must read it like an embed.
+  assert.match(appState, /reference\.match\(\/\^!\?\\\[\\\[/);
   assert.match(appState, /convertFileSrc\(`\$\{root\}\/\$\{defaultVaultAssetDirectory\}\/\$\{cleanReference\}`\)/);
   assert.match(appState, /convertFileSrc\(`\$\{root\}\/Attachments\/\$\{cleanReference\}`\)/);
   assert.match(vaultImages, /start: \(src: string\) => src\.indexOf\("!\[\["\)/);

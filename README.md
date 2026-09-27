@@ -30,15 +30,15 @@ hides document-specific controls.
 ## Highlights
 
 - **Visual extended Markdown editing**: edit rich Markdown structures directly, including tables with right-click row, column, and alignment actions; Mermaid diagrams; columns; callouts; rich card links; galleries; code blocks; task lists; and collapsible sections.
-- **Obsidian compatibility where it matters**: open local vaults, resolve wikilinks and aliases, edit frontmatter as structured properties, render banner images, support compatible daily notes, load approved CSS snippets, and fully open/edit Obsidian `.canvas` files.
-- **Vault library and favorites**: switch between remembered vaults with independent workspaces and optional covers, star any note, canvas, or Base, and drag starred files into your preferred order.
-- **Fast local search**: built-in vault search is extremely fast and does not require an external `rg` install.
-- **Command palette and slash menu**: use quick commands for inserts, table actions, rich links, Excalidraw drawings, tidbits, canvas actions, and more, or type `/` in a note for a caret-anchored menu of Insert and AI commands.
-- **Canvas support**: create, open, rename, edit, move, color, connect, and save Obsidian-compatible canvas nodes and edges.
-- **Base views**: open `.base` files to browse vault notes through table or gallery views backed by local frontmatter.
-- **Native desktop workflows**: use macOS menus and context menus, a separate Settings window, Finder/Open With integration, and file actions for opening, revealing, copying paths, creating, renaming, moving, or deleting.
-- **Native Excalidraw integration**: create drawings from Glyphary and store them as vault files.
+- **Obsidian compatibility**: open local vaults, resolve wikilinks and aliases, edit frontmatter as structured properties, render banner images, support compatible daily notes, load approved CSS snippets, and fully open/edit Obsidian `.canvas` files and `.base` files.
+- **Fast local search**: where possible, rather than relying on stales indexes, Glyphary performs fast searches using fast parallel traversal and SIMD-accelerated search (leveraging `rg`'s library)
+- **Command palette and slash menu**: use quick commands for inserts, table actions, rich links, Excalidraw drawings, tidbits, canvas actions, and more; alternatively, contextual `/` menus can be enabled.
+- **Native desktop workflows**: use macOS or Windows menus and context menus; a separate Settings window; Finder/Open With integration, and file actions for opening, revealing, copying paths, creating, renaming, moving, or deleting. Oh, and throw in drag and drop support too.
+- **Native integrations**: Excalidraw, Mermaid, and more.
 - **Daily notes and tidbits**: preview calendar notes on hover, open or create daily pages, create quick notes, and capture tidbits from anywhere when the app is running.
+- **Rich Table editing**: Column widths, Pandoc style. As with everything else, columns can be resized in WYSIWYG mode.
+- **Task board window**: the Kanban board opens in its own window, and two-way synchronization with the source notes is maintained. When a task is created in a note, pressing `+` opens a menu allowing you to set priorities, due dates, etc. Tasks can be in progress, canceled, forwarded, archived.
+- **Tag and people completion**: typing `#` at the start of a word drops a list of the vault's tags under the caret, most used first, filtering as you keep typing. The same goes for notes found under `People/` when typing `@`. Of course, tag colours are supported and persisted, and can be exported to Obsidian styles.
 - **AI assistance**: connect an OpenAI-compatible backend for writing help, summaries, outlines, title generation, and page building.
 - **Optional Vim mode**: use a practical Normal/Insert mode editing layer for keyboard-driven note work.
 - **Focused reading and editing**: switch between View and Edit chrome, enter Focus Mode to hide everything but the note, close every tab when you want a blank workspace, and configure `Cmd+T` to reopen a chosen vault note.

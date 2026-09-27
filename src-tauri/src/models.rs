@@ -21,6 +21,14 @@ pub(crate) struct VaultEntry {
     pub(crate) is_dir: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TaskRef {
+    pub(crate) relative_path: String,
+    /// 1-based.
+    pub(crate) line_number: usize,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OpenedFile {
@@ -50,6 +58,8 @@ pub(crate) struct VaultSettings {
     pub(crate) asset_directory: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub(crate) new_tab_file: String,
+    #[serde(default = "crate::defaults::default_task_archive_note")]
+    pub(crate) task_archive_note: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) starred_files: Vec<String>,
     #[serde(default)]
@@ -76,6 +86,8 @@ pub(crate) struct VaultSettings {
     pub(crate) canvas: CanvasSettings,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) theme: Option<VaultTheme>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) tag_colors: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

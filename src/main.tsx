@@ -44,6 +44,8 @@ const rootView =
     <TidbitCapture />
   ) : query.get("view") === "settings" ? (
     <App settingsWindowMode />
+  ) : query.get("view") === "tasks" ? (
+    <App taskBoardWindowMode />
   ) : (
     <App />
   );

@@ -19,6 +19,8 @@ import { type WikiLinkResolution, wikiLinkTargetFromMarkup } from "../editor/wik
 // Contracts:
 // - This hook never opens files or edits the editor; App supplies those side effects.
 // - Only Markdown files are indexed for wikilink completion and resolution.
+// - The raw index is exposed for inline completion (`@`), which filters it
+//   itself while the caret stays in the editor.
 
 export function wikiLinkDisplayName(file: VaultIndexedFile) {
   return fileNameWithoutMarkdownExtension(file.name);
@@ -146,21 +148,18 @@ export function useWikiLinkState() {
     setWikiLinkSearchSelectedIndex(0);
   }
 
-  const filteredWikiLinkFiles = useMemo(
-    () =>
-      wikiLinkIndex
-        .filter((file) => {
-          const query = wikiLinkSearchQuery.trim().toLowerCase();
+  const filteredWikiLinkFiles = useMemo(() => {
+    const query = wikiLinkSearchQuery.trim().toLowerCase();
 
-          return (
-            !query ||
-            wikiLinkDisplayName(file).toLowerCase().includes(query) ||
-            file.relativePath.toLowerCase().includes(query)
-          );
-        })
-        .slice(0, 20),
-    [wikiLinkIndex, wikiLinkSearchQuery],
-  );
+    return wikiLinkIndex
+      .filter(
+        (file) =>
+          !query ||
+          wikiLinkDisplayName(file).toLowerCase().includes(query) ||
+          file.relativePath.toLowerCase().includes(query),
+      )
+      .slice(0, 20);
+  }, [wikiLinkIndex, wikiLinkSearchQuery]);
   const selectedWikiLinkSearchIndex =
     filteredWikiLinkFiles.length > 0
       ? Math.min(wikiLinkSearchSelectedIndex, filteredWikiLinkFiles.length - 1)
@@ -188,6 +187,7 @@ export function useWikiLinkState() {
     setWikiLinkPickerSelectedIndex,
     setWikiLinkSearchQuery,
     setWikiLinkSearchSelectedIndex,
+    wikiLinkIndex,
     wikiLinkIndexVersion,
     wikiLinkPicker,
     wikiLinkPickerSelectedIndex,

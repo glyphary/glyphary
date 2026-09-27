@@ -135,7 +135,9 @@ export function vaultImagePathCandidates(
   reference: string,
   options: { assetDirectory?: string; relativePath?: string } = {},
 ) {
-  const wikilinkMatch = reference.match(/^!\[\[([^\]\n]+)\]\]$/);
+  // Obsidian image properties are bare wikilinks (`[[photo.jpg]]`); embeds
+  // in note text carry the leading bang. Both name the same file.
+  const wikilinkMatch = reference.match(/^!?\[\[([^\]\n]+)\]\]$/);
   const cleanReference = cleanVaultAssetReference(wikilinkMatch?.[1] ?? reference);
 
   if (!root || !cleanReference) {
