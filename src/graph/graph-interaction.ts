@@ -21,7 +21,7 @@ export type GraphInteractionHost = {
   click: (node: GraphNode) => void;
   /** Screen-space drag delta on the globe. */
   rotate: (dx: number, dy: number) => void;
-  transformChanged: () => void;
+  transformChanged: (transform: ZoomTransform) => void;
 };
 
 export type GraphInteraction = {
@@ -62,7 +62,7 @@ export function attachGraphInteraction(
     )
     .on("zoom", (event: { transform: ZoomTransform }) => {
       transform = event.transform;
-      host.transformChanged();
+      host.transformChanged(transform);
     });
   // d3-zoom's default double-click jump would fire on a fast second click of a
   // node and yank the view away from the note the user is opening.

@@ -3,6 +3,7 @@ import type { Editor } from "@tiptap/core";
 import type { EditorView } from "@tiptap/pm/view";
 import type { LanguageFn } from "highlight.js";
 import { GlypharyMarkdown } from "./markdown-serializer";
+import { NoteLockGuard } from "./note-lock";
 import { Strike } from "@tiptap/extension-strike";
 import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
@@ -229,6 +230,7 @@ export function createGlypharyEditorOptions({
 }) {
   return {
     extensions: [
+      NoteLockGuard,
       StarterKit.configure({
         codeBlock: false,
         strike: false,

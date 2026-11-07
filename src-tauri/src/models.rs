@@ -204,14 +204,16 @@ pub(crate) struct FrontmatterPillSettings {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct VaultTheme {
+    // Theme ids pick one light and one dark palette from the built-in list or
+    // the app-wide custom themes; the appearance mode decides which applies.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(crate) preset_id: Option<String>,
+    pub(crate) light_theme_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) dark_theme_id: Option<String>,
     #[serde(default, skip_serializing_if = "VaultThemeCallouts::is_default")]
     pub(crate) callouts: VaultThemeCallouts,
     #[serde(default, skip_serializing_if = "VaultThemeOptions::is_default")]
     pub(crate) options: VaultThemeOptions,
-    #[serde(default)]
-    pub(crate) tokens: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -264,6 +266,14 @@ pub(crate) struct LinkGraphNode {
 pub(crate) struct VaultFileActivity {
     pub(crate) relative_path: String,
     pub(crate) modified_ms: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PersonPhoto {
+    pub(crate) relative_path: String,
+    /// The frontmatter value as written: a wikilink, a path, or a URL.
+    pub(crate) photo: String,
 }
 
 #[derive(Debug, Serialize)]

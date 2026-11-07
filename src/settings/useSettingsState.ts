@@ -16,6 +16,8 @@ import type {
   PluginStyleContent,
   SettingsDragState,
   SettingsTab,
+  ThemeBuilderDraft,
+  ThemePreset,
   TidbitSettings,
   VaultAppearanceSettings,
   VaultSettings,
@@ -42,6 +44,7 @@ import {
   defaultThemeCalloutSettings,
   defaultThemeOptions,
 } from "./theme-options";
+import { readCustomThemes } from "../lib/theme-library";
 
 export function useSettingsState() {
   const [vaultSettings, setVaultSettings] = useState<VaultSettings>({
@@ -96,8 +99,10 @@ export function useSettingsState() {
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTestStatus, setAiTestStatus] = useState<"success" | "error" | null>(null);
   const [canvasDraft, setCanvasDraft] = useState<CanvasSettings>(defaultCanvasSettings);
-  const [selectedThemePresetIdDraft, setSelectedThemePresetIdDraft] = useState<string | null>(null);
-  const [themeDraft, setThemeDraft] = useState<Record<string, string>>({});
+  const [lightThemeIdDraft, setLightThemeIdDraft] = useState<string | null>(null);
+  const [darkThemeIdDraft, setDarkThemeIdDraft] = useState<string | null>(null);
+  const [customThemes, setCustomThemes] = useState<ThemePreset[]>(readCustomThemes);
+  const [themeBuilderDraft, setThemeBuilderDraft] = useState<ThemeBuilderDraft | null>(null);
   const [themeOptionsDraft, setThemeOptionsDraft] =
     useState<VaultThemeOptions>(defaultThemeOptions);
   const [themeCalloutDraft, setThemeCalloutDraft] =
@@ -130,7 +135,9 @@ export function useSettingsState() {
     pluginCatalog,
     pluginDraft,
     pluginStyles,
-    selectedThemePresetIdDraft,
+    customThemes,
+    darkThemeIdDraft,
+    lightThemeIdDraft,
     setAiDraft,
     setAiModels,
     setAiModelsLoading,
@@ -151,14 +158,16 @@ export function useSettingsState() {
     setPluginCatalog,
     setPluginDraft,
     setPluginStyles,
-    setSelectedThemePresetIdDraft,
+    setCustomThemes,
+    setDarkThemeIdDraft,
+    setLightThemeIdDraft,
     setSettingsDraft,
     setSettingsDragging,
     setSettingsOffset,
     setSettingsOpen,
     setSettingsTab,
+    setThemeBuilderDraft,
     setThemeCalloutDraft,
-    setThemeDraft,
     setThemeOptionsDraft,
     setTidbitDraft,
     setTidbitSettings,
@@ -169,8 +178,8 @@ export function useSettingsState() {
     settingsOffset,
     settingsOpen,
     settingsTab,
+    themeBuilderDraft,
     themeCalloutDraft,
-    themeDraft,
     themeOptionsDraft,
     tidbitDraft,
     tidbitSettings,

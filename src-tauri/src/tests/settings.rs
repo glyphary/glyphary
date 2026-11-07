@@ -2,11 +2,11 @@
 //!
 //! Responsibilities:
 //! - Verify vault settings defaults, persistence, validation, and normalization.
-//! - Lock theme token, callout, dotfile, autosave, and frontmatter-pill behavior.
+//! - Lock theme selection, callout, dotfile, autosave, and frontmatter-pill behavior.
 //!
 //! Contracts:
 //! - Settings writes must validate and normalize vault-local configuration.
-//! - Theme allowlists must reject unsupported tokens, styles, and icons.
+//! - Theme allowlists must reject unsupported callout styles and icons.
 use super::*;
 
 #[test]
@@ -480,22 +480,15 @@ fn rejects_invalid_frontmatter_pill_headers() {
 }
 
 #[test]
-fn writes_vault_theme_tokens() {
+fn writes_vault_theme_selection() {
     let root = test_root();
-    let mut tokens = HashMap::new();
-    tokens.insert("--glyphary-accent".into(), "#336699".into());
-    tokens.insert("--glyphary-surface".into(), "  #ffffff  ".into());
-    tokens.insert(
-        "--glyphary-font-editor".into(),
-        "\"Avenir Next\", ui-serif, Georgia, serif".into(),
-    );
-    tokens.insert("--glyphary-editor-max-width".into(), "72ch".into());
 
     let settings = write_vault_settings(
         root.to_string_lossy().into_owned(),
         VaultSettings {
             theme: Some(VaultTheme {
-                preset_id: Some("field-notes".into()),
+                light_theme_id: Some("  field-notes  ".into()),
+                dark_theme_id: Some("".into()),
                 callouts: VaultThemeCallouts::default(),
                 options: VaultThemeOptions {
                     colorful_headings: true,
@@ -504,7 +497,6 @@ fn writes_vault_theme_tokens() {
                     rich_callouts: true,
                     ..VaultThemeOptions::default()
                 },
-                tokens,
             }),
             ..VaultSettings::default()
         },
@@ -515,63 +507,22 @@ fn writes_vault_theme_tokens() {
     assert!(saved_theme.options.heading_underlines);
     assert!(!saved_theme.options.heading_anchors);
     assert!(saved_theme.options.rich_callouts);
-    let saved_tokens = saved_theme.tokens;
-
-    assert_eq!(saved_theme.preset_id, Some("field-notes".to_string()));
-    assert_eq!(
-        saved_tokens.get("--glyphary-accent"),
-        Some(&"#336699".to_string())
-    );
-    assert_eq!(
-        saved_tokens.get("--glyphary-surface"),
-        Some(&"#ffffff".to_string())
-    );
-    assert_eq!(
-        saved_tokens.get("--glyphary-font-editor"),
-        Some(&"\"Avenir Next\", ui-serif, Georgia, serif".to_string())
-    );
-    assert_eq!(
-        saved_tokens.get("--glyphary-editor-max-width"),
-        Some(&"72ch".to_string())
-    );
+    assert_eq!(saved_theme.light_theme_id, Some("field-notes".to_string()));
+    assert_eq!(saved_theme.dark_theme_id, None);
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }
 
 #[test]
-fn rejects_unsupported_vault_theme_tokens() {
-    let root = test_root();
-    let mut tokens = HashMap::new();
-    tokens.insert("--not-a-token".into(), "#336699".into());
-
-    let error = write_vault_settings(
-        root.to_string_lossy().into_owned(),
-        VaultSettings {
-            theme: Some(VaultTheme {
-                preset_id: None,
-                callouts: VaultThemeCallouts::default(),
-                options: VaultThemeOptions::default(),
-                tokens,
-            }),
-            ..VaultSettings::default()
-        },
-    )
-    .expect_err("unsupported token should fail");
-
-    assert!(error.contains("Unsupported theme token"));
-
-    fs::remove_dir_all(root).expect("test root should be removed");
-}
-
-#[test]
-fn writes_vault_theme_options_without_tokens() {
+fn writes_vault_theme_options_without_theme_ids() {
     let root = test_root();
 
     let settings = write_vault_settings(
         root.to_string_lossy().into_owned(),
         VaultSettings {
             theme: Some(VaultTheme {
-                preset_id: None,
+                light_theme_id: None,
+                dark_theme_id: None,
                 callouts: VaultThemeCallouts {
                     style: "card".into(),
                     icons: HashMap::from([
@@ -587,15 +538,14 @@ fn writes_vault_theme_options_without_tokens() {
                     plain_editor_frame: true,
                     drawer_shadow: true,
                 },
-                tokens: HashMap::new(),
             }),
             ..VaultSettings::default()
         },
     )
-    .expect("theme options should write without token overrides");
+    .expect("theme options should write without theme ids");
     let saved_theme = settings.theme.expect("theme options should be retained");
 
-    assert!(saved_theme.tokens.is_empty());
+    assert!(saved_theme.light_theme_id.is_none());
     assert_eq!(saved_theme.callouts.style, "card");
     assert_eq!(
         saved_theme.callouts.icons.get("note"),
@@ -625,13 +575,13 @@ fn rejects_unsupported_vault_callout_settings() {
         root.to_string_lossy().into_owned(),
         VaultSettings {
             theme: Some(VaultTheme {
-                preset_id: None,
+                light_theme_id: None,
+                dark_theme_id: None,
                 callouts: VaultThemeCallouts {
                     style: "scripted".into(),
                     icons: HashMap::new(),
                 },
                 options: VaultThemeOptions::default(),
-                tokens: HashMap::new(),
             }),
             ..VaultSettings::default()
         },
@@ -644,13 +594,13 @@ fn rejects_unsupported_vault_callout_settings() {
         root.to_string_lossy().into_owned(),
         VaultSettings {
             theme: Some(VaultTheme {
-                preset_id: None,
+                light_theme_id: None,
+                dark_theme_id: None,
                 callouts: VaultThemeCallouts {
                     style: "plain".into(),
                     icons: HashMap::from([("note".into(), "skull".into())]),
                 },
                 options: VaultThemeOptions::default(),
-                tokens: HashMap::new(),
             }),
             ..VaultSettings::default()
         },

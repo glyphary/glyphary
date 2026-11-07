@@ -129,7 +129,7 @@ test("done tasks are shown newest first and archiving moves lines into the archi
   assert.match(readFileSync("src/vault/persistence.ts", "utf8"), /"archive_tasks"/);
   // Otherwise every archived task reappears in Done, scanned from the archive.
   assert.match(readFileSync("src/app-state/task-board.ts", "utf8"), /isLiveTaskResult\(result, archive\)/);
-  assert.match(app, /results\.filter\(\(result\) => isLiveTaskResult\(result, archiveNote\)\)/);
+  assert.match(app, /await scanLiveTasks\(vaultRoot, filter, vaultSettingsRef\.current\)/);
 });
 
 test("the board sort is remembered per browser and falls back to note order", () => {

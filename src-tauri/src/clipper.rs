@@ -10,6 +10,10 @@
 //! - The note is never overwritten; a clashing title gets a numeric suffix.
 //! - Extraction and note composition are pure so they can be tested on local
 //!   HTML without the network.
+//! - The frontmatter follows the Obsidian Web Clipper's default template
+//!   (author list of wikilinks, published/created dates, cover, permalink) so
+//!   a vault shared with it holds one shape of clipping. The browser
+//!   extension's `clipping.ts` mirrors every rule here.
 use super::*;
 use dom_smoothie::{Config, Readability};
 use std::time::Duration;
@@ -24,7 +28,66 @@ pub(crate) struct Clipping {
     pub(crate) published: Option<String>,
     pub(crate) description: Option<String>,
     pub(crate) site_name: Option<String>,
+    pub(crate) image: Option<String>,
     pub(crate) markdown: String,
+}
+
+/// Obsidian's default template: `{{author|split:", "|wikilink|join}}`.
+fn author_list(author: Option<&str>) -> Vec<String> {
+    author
+        .unwrap_or("")
+        .split(", ")
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(|name| format!("[[{name}]]"))
+        .collect()
+}
+
+/// The day part of an ISO date; anything else is kept as written.
+fn date_only(value: &str) -> &str {
+    let bytes = value.as_bytes();
+    let iso = bytes.len() >= 10
+        && bytes[..10]
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| if index == 4 || index == 7 { *byte == b'-' } else { byte.is_ascii_digit() });
+
+    if iso {
+        &value[..10]
+    } else {
+        value
+    }
+}
+
+/// The Obsidian clipper's kebab rule: camelCase splits, punctuation other
+/// than dots and hyphens is dropped, spaces become hyphens.
+pub(crate) fn kebab(text: &str) -> String {
+    let mut out = String::new();
+    let mut previous: Option<char> = None;
+    let mut pending_hyphen = false;
+
+    for character in text.chars() {
+        let keep = character.is_ascii_alphanumeric() || character == '.';
+
+        if character.is_whitespace() || character == '-' {
+            pending_hyphen = !out.is_empty();
+        } else if keep {
+            let camel = character.is_ascii_uppercase()
+                && previous.is_some_and(|prev| prev.is_ascii_lowercase() || prev.is_ascii_digit());
+
+            if pending_hyphen || camel {
+                out.push('-');
+            }
+            out.push(character.to_ascii_lowercase());
+            pending_hyphen = false;
+        }
+
+        // Dropped punctuation still counts as the previous character, as in
+        // the extension: "x/Y" is "xy", not a camelCase split.
+        previous = Some(character);
+    }
+
+    out
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {
@@ -56,28 +119,51 @@ pub(crate) fn extract_clipping(html: &str, url: &str) -> Result<Clipping, String
         published: non_empty(article.published_time),
         description: non_empty(article.excerpt),
         site_name: non_empty(article.site_name),
+        image: non_empty(article.image)
+            .map(|value| absolute_metadata_url(url, &value))
+            .filter(|value| !value.is_empty()),
         markdown: markdown.trim().to_string(),
     })
 }
 
+fn push_property(out: &mut String, key: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        out.push_str(&format!("{key}: {}\n", yaml_scalar(value)));
+    }
+}
+
+fn push_list(out: &mut String, key: &str, values: &[String]) {
+    if !values.is_empty() {
+        out.push_str(&format!("{key}:\n"));
+        for value in values {
+            out.push_str(&format!("  - {}\n", yaml_scalar(value)));
+        }
+    }
+}
+
 /// A selection clips as a quote under the page's metadata instead of the
 /// whole article, which is what someone highlighting a passage asked for.
-pub(crate) fn compose_clipping(clipping: &Clipping, selection: Option<&str>, clipped_on: &str) -> String {
+pub(crate) fn compose_clipping(clipping: &Clipping, selection: Option<&str>, created_on: &str) -> String {
     let mut out = String::from("---\n");
-    let mut property = |key: &str, value: Option<&str>| {
-        if let Some(value) = value {
-            out.push_str(&format!("{key}: {}\n", yaml_scalar(value)));
-        }
-    };
 
-    property("title", Some(&clipping.title));
-    property("source", Some(&clipping.url));
-    property("author", clipping.author.as_deref());
-    property("published", clipping.published.as_deref());
-    property("site", clipping.site_name.as_deref());
-    property("description", clipping.description.as_deref());
-    property("clipped", Some(clipped_on));
-    out.push_str("tags:\n  - clippings\n---\n\n");
+    push_property(&mut out, "title", Some(&clipping.title));
+    push_property(&mut out, "source", Some(&clipping.url));
+    push_list(&mut out, "author", &author_list(clipping.author.as_deref()));
+    push_property(&mut out, "published", clipping.published.as_deref().map(date_only));
+    push_property(&mut out, "created", Some(created_on));
+    push_property(&mut out, "site", clipping.site_name.as_deref());
+    push_property(&mut out, "description", clipping.description.as_deref());
+    // The app has no clip UI to pick a type; the browser extension does. The
+    // extension also saves a local feature/thumbnail pair the app skips.
+    out.push_str("tags:\n  - clippings\nsourcetype: default\nreviewed: false\n");
+    push_property(&mut out, "cover", clipping.image.as_deref());
+    let permalink: Vec<String> = [CLIPPINGS_DIRECTORY, clipping.title.as_str()]
+        .iter()
+        .map(|part| kebab(part))
+        .filter(|part| !part.is_empty())
+        .collect();
+    push_property(&mut out, "permalink", Some(&permalink.join("/")));
+    out.push_str("---\n\n");
 
     match selection.map(str::trim).filter(|text| !text.is_empty()) {
         Some(selection) => {

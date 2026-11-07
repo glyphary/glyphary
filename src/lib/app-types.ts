@@ -176,9 +176,11 @@ export type PluginStyleContent = {
 };
 
 export type VaultThemeSettings = {
-  presetId?: string | null;
+  // Ids into the built-in presets or the app-wide custom themes; the
+  // appearance mode picks which one is active.
+  lightThemeId?: string | null;
+  darkThemeId?: string | null;
   callouts?: VaultThemeCalloutSettings | null;
-  tokens: Record<string, string>;
   options?: VaultThemeOptions | null;
 };
 
@@ -338,6 +340,11 @@ export type VaultFileActivity = {
   modifiedMs: number;
 };
 
+export type PersonPhoto = {
+  relativePath: string;
+  photo: string;
+};
+
 export type VaultTag = {
   tag: string;
   files: string[];
@@ -494,6 +501,15 @@ export type ThemePreset = {
   // The appearance mode this palette is designed for. Applying the preset
   // switches the app to this mode so glass materials and native window
   // chrome match the palette.
+  base: "light" | "dark";
+  tokens: Record<string, string>;
+};
+
+// A theme being edited in the builder. `id` names the custom theme being
+// edited in place, or null for a new one.
+export type ThemeBuilderDraft = {
+  id: string | null;
+  name: string;
   base: "light" | "dark";
   tokens: Record<string, string>;
 };

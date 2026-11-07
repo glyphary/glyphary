@@ -1,6 +1,6 @@
 import { useEffect, useState, type MutableRefObject } from "react";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { DocumentTab, SearchResult, VaultSettings } from "../lib/app-types";
+import type { DocumentTab, SearchResult, TaskFilter, VaultSettings } from "../lib/app-types";
 import { localDayKey } from "../lib/activity-heatmap";
 import { peerStorageKeys, readDirtyFilesMirror, subscribePeerNotices, writePeerNotice } from "../lib/peer-windows";
 import { normalizeTaskArchiveNote } from "../lib/settings";
@@ -41,6 +41,18 @@ type TaskBoardDeps = {
 
 const vaultChangeDebounceMs = 1000;
 
+/** The vault's task lines minus the archive note: the one scan the board, the task drawer and the dashboard share. */
+export async function scanLiveTasks(vaultRoot: string, filter: TaskFilter, settings: VaultSettings) {
+  const found = await searchVaultFiles(vaultRoot, taskSearchPattern(filter), {
+    includeContent: true,
+    markdownOnly: true,
+    excludeDotPaths: true,
+  });
+  const archive = normalizeTaskArchiveNote(settings.taskArchiveNote);
+
+  return found.filter((result) => isLiveTaskResult(result, archive));
+}
+
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
@@ -62,15 +74,7 @@ export function useTaskBoard(deps: TaskBoardDeps) {
 
     try {
       setLoading(true);
-      const found = await searchVaultFiles(vaultRoot, taskSearchPattern("all"), {
-        includeContent: true,
-        markdownOnly: true,
-        excludeDotPaths: true,
-      });
-
-      const archive = archiveNote();
-
-      setResults(found.filter((result) => isLiveTaskResult(result, archive)));
+      setResults(await scanLiveTasks(vaultRoot, "all", vaultSettingsRef.current));
     } catch (error) {
       setStatus(errorMessage(error));
     } finally {

@@ -22,7 +22,6 @@ import type {
   PluginSettings,
   SettingsDragState,
   SettingsTab,
-  ThemePreset,
   TidbitSettings,
   TidbitShortcutStatus,
   VaultAppearanceSettings,
@@ -52,7 +51,7 @@ import {
   normalizeVaultAppearanceSettings,
   isRunningOnMacOs,
 } from "../lib/settings";
-import { ThemeBuilderPanel } from "./ThemeBuilderPanel";
+import { ThemeBuilderPanel, type ThemeLibraryControls } from "./ThemeBuilderPanel";
 import { OBSIDIAN_TAG_SNIPPET_NAME, obsidianTagColorSnippet, type TagColors } from "../lib/tag-colors";
 import { writeObsidianSnippet } from "../vault/persistence";
 
@@ -64,7 +63,6 @@ type SettingsDialogProps = {
   aiModelsLoading: boolean;
   aiTestStatus: "success" | "error" | null;
   aiTesting: boolean;
-  applyThemePreset: (preset: ThemePreset) => void;
   autosaveDraft: AutosaveSettings;
   chooseNewTabFile: () => void | Promise<void>;
   closeSettings: () => void;
@@ -88,10 +86,8 @@ type SettingsDialogProps = {
   refreshPlugins: (vaultRoot: string, settings: PluginSettings) => Promise<void>;
   requestTidbitShortcutAccessibilityPermission: () => boolean | Promise<boolean>;
   resetOnboardingTips: () => Promise<boolean>;
-  resetThemeDraft: () => void;
   revertSettingsDraft: () => void;
   saveVaultSettings: () => void | Promise<void>;
-  selectedThemePresetIdDraft: string | null;
   setAutosaveDraft: Dispatch<SetStateAction<AutosaveSettings>>;
   setCanvasDraft: Dispatch<SetStateAction<CanvasSettings>>;
   setCssSnippetDraft: Dispatch<SetStateAction<CssSnippetSettings>>;
@@ -123,11 +119,10 @@ type SettingsDialogProps = {
   tagColors: TagColors;
   testAiConnection: () => void | Promise<void>;
   themeCalloutDraft: VaultThemeCalloutSettings;
-  themeDraft: Record<string, string>;
+  themeLibrary: ThemeLibraryControls;
   themeOptionsDraft: VaultThemeOptions;
   tidbitDraft: TidbitSettings;
   updateAiDraft: (nextSettings: AiSettings) => void;
-  updateThemeDraftToken: (token: string, value: string) => void;
   vaultRoot: string;
 };
 
@@ -151,6 +146,7 @@ function SettingsCheckbox({
       <input
         checked={checked}
         disabled={disabled}
+        role="switch"
         type="checkbox"
         onChange={(event) => onChange(event.currentTarget.checked)}
       />
@@ -223,7 +219,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
     aiModelsLoading,
     aiTestStatus,
     aiTesting,
-    applyThemePreset,
     autosaveDraft,
     chooseNewTabFile,
     closeSettings,
@@ -247,10 +242,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
     refreshPlugins,
     requestTidbitShortcutAccessibilityPermission,
     resetOnboardingTips,
-    resetThemeDraft,
     revertSettingsDraft,
     saveVaultSettings,
-    selectedThemePresetIdDraft,
     setAutosaveDraft,
     setCanvasDraft,
     setCssSnippetDraft,
@@ -282,11 +275,10 @@ export function SettingsDialog(props: SettingsDialogProps) {
     tagColors,
     testAiConnection,
     themeCalloutDraft,
-    themeDraft,
+    themeLibrary,
     themeOptionsDraft,
     tidbitDraft,
     updateAiDraft,
-    updateThemeDraftToken,
     vaultRoot,
   } = props;
 
@@ -581,6 +573,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={tidbitDraft.globalShortcutEnabled}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         const globalShortcutEnabled = event.currentTarget.checked;
@@ -659,6 +652,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={frontmatterPillDraft.enabled}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         const enabled = event.currentTarget.checked;
@@ -699,6 +693,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={editorBehaviorDraft.vimMode}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         // React clears currentTarget after dispatch; the
@@ -714,6 +709,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={editorBehaviorDraft.slashMenu}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         // React clears currentTarget after dispatch; the
@@ -751,6 +747,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={autosaveDraft.enabled}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) =>
                         setAutosaveDraft({
@@ -774,6 +771,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   <label className="settings-check-control">
                     <input
                       checked={onboardingTipsEnabled}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => setOnboardingTipsEnabled(event.currentTarget.checked)}
                     />
@@ -876,6 +874,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={normalizedCanvasDraft.showGrid}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         const showGrid = event.currentTarget.checked;
@@ -891,6 +890,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={normalizedCanvasDraft.snapToGrid}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         const snapToGrid = event.currentTarget.checked;
@@ -906,6 +906,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={normalizedCanvasDraft.showNavigationPreview}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         const showNavigationPreview = event.currentTarget.checked;
@@ -951,6 +952,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                             <input
                               checked={checked}
                               disabled={!vaultRoot}
+                              role="switch"
                               type="checkbox"
                               onChange={(event) => {
                                 const enabled = event.currentTarget.checked;
@@ -1008,6 +1010,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={aiDraft.enabled}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         const enabled = event.currentTarget.checked;
@@ -1139,6 +1142,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={debugDraft.enabled}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) =>
                         setDebugDraft({
@@ -1225,6 +1229,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={normalizedVaultAppearanceDraft.glassEffect}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         const glassEffect = event.currentTarget.checked;
@@ -1276,6 +1281,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     <input
                       checked={normalizedVaultAppearanceDraft.sectionCorners === "rounded"}
                       disabled={!vaultRoot}
+                      role="switch"
                       type="checkbox"
                       onChange={(event) => {
                         const sectionCorners = event.currentTarget.checked
@@ -1329,16 +1335,12 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   </label>
                 </section>
                 <ThemeBuilderPanel
-                  selectedThemePresetIdDraft={selectedThemePresetIdDraft}
                   themeCalloutDraft={themeCalloutDraft}
-                  themeDraft={themeDraft}
+                  themeLibrary={themeLibrary}
                   themeOptionsDraft={themeOptionsDraft}
                   vaultRoot={vaultRoot}
-                  onApplyThemePreset={applyThemePreset}
-                  onResetThemeDraft={resetThemeDraft}
                   onSetThemeCalloutDraft={setThemeCalloutDraft}
                   onSetThemeOptionsDraft={setThemeOptionsDraft}
-                  onUpdateThemeDraftToken={updateThemeDraftToken}
                 />
                 <section className="settings-section" aria-label="CSS snippets">
                   <div className="settings-section-header">
@@ -1390,6 +1392,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                             <input
                               checked={checked}
                               disabled={!vaultRoot}
+                              role="switch"
                               type="checkbox"
                               onChange={(event) => {
                                 const enabled = event.currentTarget.checked;

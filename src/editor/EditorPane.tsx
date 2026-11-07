@@ -21,7 +21,10 @@ import {
   serializeFrontmatterListValues,
   type MarkdownParts,
 } from "../lib/markdown";
+import { noteLocked, toggleNoteLock } from "../lib/note-lock";
 import { fileNameWithoutMarkdownExtension } from "../lib/paths";
+import { imagePropertyValue, isImageProperty } from "../lib/frontmatter-images";
+import { FrontmatterImageField } from "./FrontmatterImageField";
 import { normalizeFrontmatterPillSettings } from "../lib/settings";
 import type {
   ActiveFile,
@@ -77,6 +80,7 @@ export function EditorPane({
   onMetaHeaderChange,
   onOpenFile,
   onOpenImagePreview,
+  onPickImageFile,
   onOpenRemoteImageSource,
   onPageNameChange,
   onSetActiveDocumentDirty,
@@ -122,6 +126,8 @@ export function EditorPane({
   onMetaHeaderChange: (nextMetaHeader: string) => void;
   onOpenFile: (relativePath: string) => void;
   onOpenImagePreview: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  /** Lets the user pick a picture from disk; resolves to the stored file name. */
+  onPickImageFile: () => Promise<string | null>;
   onOpenRemoteImageSource: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onPageNameChange: (nextPageName: string) => void;
   onSetActiveDocumentDirty: (dirty: boolean) => void;
@@ -151,6 +157,7 @@ export function EditorPane({
   const isBaseTab = groupActiveTab?.kind === "base";
   const isMarkdownTab = groupActiveTab?.kind === "markdown";
   const showEditingChrome = documentDisplayMode === "edit";
+  const locked = isMarkdownTab && noteLocked(paneMetaHeader, paneMetaDelimiter);
   const frontmatterPillSettings = normalizeFrontmatterPillSettings(
     vaultSettings.frontmatterPills,
   );
@@ -243,8 +250,20 @@ export function EditorPane({
               <img alt="" src={bannerSrc} />
             </figure>
           ) : null}
+          {locked ? (
+            <div className="note-lock-banner" role="status">
+              <span>This note is locked.</span>
+              <button
+                type="button"
+                className="inline-action"
+                onClick={() => handleMetaHeaderChange(toggleNoteLock(paneMetaHeader, paneMetaDelimiter))}
+              >
+                Unlock
+              </button>
+            </div>
+          ) : null}
           {isMarkdownTab && showEditingChrome ? (
-            <div className="metadata-shell" aria-label="Metadata editor">
+            <div className="metadata-shell" aria-label="Metadata editor" onErrorCapture={handleEditorImageError}>
               <div className="page-name-control">
                 {pageNameEditing && isActiveGroup ? (
                   <input
@@ -312,6 +331,7 @@ export function EditorPane({
                 <div className="metadata-control" id={`${groupId}-frontmatter-editor`}>
                   <div className="frontmatter-rows">
                     {metadataEntries.map((entry, index) => {
+                      const flag = entry.value.trim().toLowerCase();
                       const inputKey = `${paneActiveFile?.relativePath ?? "untitled"}:${entry.startLine}:${entry.key}`;
                       // TOML frontmatter allows dotted keys; YAML keys stay plain.
                       const keyPattern = paneMetaDelimiter === "+++"
@@ -458,6 +478,37 @@ export function EditorPane({
                                 }}
                               />
                             </div>
+                          ) : isImageProperty(entry.key, entry.value) ? (
+                            <FrontmatterImageField
+                              entryKey={entry.key}
+                              groupId={groupId}
+                              value={entry.value}
+                              source={
+                                vaultImagePathCandidates(vaultRoot, entry.value, {
+                                  assetDirectory: vaultSettings.assetDirectory,
+                                  relativePath: paneActiveFile?.relativePath,
+                                })[0] ?? null
+                              }
+                              disabled={!paneActiveFile}
+                              onChange={(value) => updateEntry(entry.key, value)}
+                              onPick={() => {
+                                void onPickImageFile().then((fileName) => {
+                                  if (fileName) {
+                                    updateEntry(entry.key, imagePropertyValue(fileName));
+                                  }
+                                });
+                              }}
+                            />
+                          ) : flag === "true" || flag === "false" ? (
+                            <input
+                              aria-label={`${entry.key} value`}
+                              checked={flag === "true"}
+                              className="frontmatter-checkbox"
+                              disabled={!paneActiveFile}
+                              role="switch"
+                              type="checkbox"
+                              onChange={(event) => updateEntry(entry.key, event.currentTarget.checked ? "true" : "false")}
+                            />
                           ) : (
                             <input
                               aria-label={`${entry.key} value`}
@@ -508,7 +559,7 @@ export function EditorPane({
             </div>
           ) : null}
 
-          {isActiveGroup && isMarkdownTab && showEditingChrome ? (
+          {isActiveGroup && isMarkdownTab && showEditingChrome && !locked ? (
             <Toolbar actions={toolbarActions} onSetEditorFocused={onSetEditorFocused} />
           ) : null}
 

@@ -4,6 +4,7 @@ import { baseTitle, isBasePath } from "../lib/base";
 import { canvasTitle, isCanvasPath } from "../CanvasView";
 import type { DocumentTab, EditorGroupId, EditorGroupState } from "../lib/app-types";
 import { defaultMetaDelimiter } from "../lib/markdown";
+import { hydrateMeta } from "../editor/note-lock";
 import {
   defaultVaultAssetDirectory,
   defaultVaultImageDirectory,
@@ -81,19 +82,34 @@ export function createEmptyEditorGroups(): Record<EditorGroupId, EditorGroupStat
 }
 
 export function setEditorMarkdownContent(targetEditor: Editor, markdown: string) {
-  if (markdown.trim()) {
-    targetEditor.commands.setContent(markdown, { contentType: "markdown" });
-    return;
-  }
-
   // Calendar notes and newly created files are allowed to be truly empty on
   // disk. Tiptap still needs a valid ProseMirror document to render and focus,
   // so empty Markdown is hydrated as one empty paragraph without changing the
-  // saved Markdown value.
-  targetEditor.commands.setContent({
-    type: "doc",
-    content: [{ type: "paragraph" }],
-  });
+  // saved Markdown value. The meta lets the change through a locked editor.
+  const chain = targetEditor.chain().setMeta(hydrateMeta, true);
+
+  if (markdown.trim()) {
+    chain.setContent(markdown, { contentType: "markdown" }).run();
+  } else {
+    chain.setContent({ type: "doc", content: [{ type: "paragraph" }] }).run();
+  }
+
+  dropStaleDomSelection(targetEditor);
+}
+
+// Swapping the document while the editor is blurred (a click on a calendar
+// day or tree row) leaves WebKit's DOM selection parked on the editor root,
+// since the nodes it sat in are gone. ProseMirror only syncs the selection of
+// a focused view, so the later focus() inherits that root selection and
+// WebKit paints a caret at the container origin. With no range left, focus
+// starts at the first paragraph instead.
+function dropStaleDomSelection(targetEditor: Editor) {
+  const root = targetEditor.view.dom;
+  const selection = root.ownerDocument.getSelection();
+
+  if (!targetEditor.view.hasFocus() && selection?.anchorNode && root.contains(selection.anchorNode)) {
+    selection.removeAllRanges();
+  }
 }
 
 export function clearEditorContent(targetEditor: Editor | null) {
@@ -135,10 +151,11 @@ export function vaultImagePathCandidates(
   reference: string,
   options: { assetDirectory?: string; relativePath?: string } = {},
 ) {
-  // Obsidian image properties are bare wikilinks (`[[photo.jpg]]`); embeds
-  // in note text carry the leading bang. Both name the same file.
-  const wikilinkMatch = reference.match(/^!?\[\[([^\]\n]+)\]\]$/);
-  const cleanReference = cleanVaultAssetReference(wikilinkMatch?.[1] ?? reference);
+  // Obsidian image properties are bare wikilinks (`[[photo.jpg]]`), usually
+  // quoted; embeds in note text carry the leading bang. All name the same file.
+  const unquoted = reference.trim().replace(/^["']|["']$/g, "");
+  const wikilinkMatch = unquoted.match(/^!?\[\[([^\]\n]+)\]\]$/);
+  const cleanReference = cleanVaultAssetReference(wikilinkMatch?.[1] ?? unquoted);
 
   if (!root || !cleanReference) {
     return [];

@@ -13,7 +13,8 @@ import { defaultTidbitPathPattern } from "./lib/defaults";
 import { expandDateTemplate } from "./lib/dates";
 import { isMacOsPlatform } from "./lib/platform";
 import { normalizeVaultAppearanceSettings } from "./lib/settings";
-import { normalizeThemeTokens } from "./settings/theme-options";
+import { normalizeThemeTokens, withCustomThemes } from "./settings/theme-options";
+import { readCustomThemes, themeForMode } from "./lib/theme-library";
 import type { VaultAppearanceSettings } from "./lib/app-types";
 import { createGlypharyMarked } from "./lib/markdown-table";
 
@@ -36,7 +37,8 @@ type VaultSettings = {
     glassOpacity?: number | null;
   } | null;
   theme?: {
-    tokens?: Record<string, string> | null;
+    lightThemeId?: string | null;
+    darkThemeId?: string | null;
   } | null;
 };
 
@@ -263,7 +265,15 @@ export default function TidbitCapture() {
         const settings = await invoke<VaultSettings>("read_vault_settings", {
           root: context.root,
         });
-        const tokens = normalizeThemeTokens(settings.theme?.tokens);
+        // shortcut: the capture window resolves the theme once at open; it
+        // does not follow a mode change while it stays open.
+        const tokens = normalizeThemeTokens(
+          themeForMode(
+            withCustomThemes(readCustomThemes()),
+            { light: settings.theme?.lightThemeId, dark: settings.theme?.darkThemeId },
+            resolveAppearance(readPersistedAppearance()),
+          ).tokens,
+        );
 
         if (cancelled) {
           return;

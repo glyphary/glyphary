@@ -44,8 +44,12 @@ views:
         "---\nsourcetype: article\nreviewed: yes\ncover: '![[cover one.png]]'\n---\n# Article\n",
     )
     .expect("article should be created");
-    fs::write(root.join("Link.md"), "---\nsourcetype: link\n---\n# Link\n")
+    // Quoted and unquoted scalars match the same filter, and an unquoted
+    // two-word value stays one string.
+    fs::write(root.join("Link.md"), "---\nsourcetype: \"link\"\n---\n# Link\n")
         .expect("link should be created");
+    fs::write(root.join("Talk.md"), "---\nsourcetype: video talk\n---\n# Talk\n")
+        .expect("talk should be created");
     fs::write(root.join("Loose.md"), "# Loose\n").expect("loose note should be created");
 
     let result = query_base(root.to_string_lossy().into_owned(), "Sources.base".into(), None)
@@ -68,8 +72,10 @@ views:
         .expect("link view should exist");
 
     assert_eq!(result.name, "Sources");
-    assert_eq!(all.rows.len(), 2);
+    assert_eq!(all.rows.len(), 3);
     assert_eq!(articles.rows.len(), 1);
+    assert_eq!(links.rows.len(), 1);
+    assert_eq!(links.rows[0].relative_path, "Link.md");
     assert_eq!(articles.rows[0].relative_path, "Article.md");
     assert_eq!(
         articles.rows[0].image_reference.as_deref(),

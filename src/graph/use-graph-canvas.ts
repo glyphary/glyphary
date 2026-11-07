@@ -230,8 +230,10 @@ export function useGraphCanvas(options: GraphCanvasOptions) {
           rotationRef.current = rotateGlobe(rotationRef.current, dx, dy, scale);
           requestDraw();
         },
-        transformChanged: () => {
-          transformRef.current = interaction.transform();
+        // Applying the initial transform fires this synchronously, while
+        // `interaction` is still being assigned, so the event carries the value.
+        transformChanged: (transform) => {
+          transformRef.current = transform;
           requestDraw();
         },
       },

@@ -7,13 +7,14 @@
 //! Contracts:
 //! - No network: pages are strings, the vault is a temporary directory.
 use super::*;
-use crate::clipper::{clippable_url, compose_clipping, extract_clipping, unique_note_path};
+use crate::clipper::{clippable_url, compose_clipping, extract_clipping, kebab, unique_note_path};
 
 const PAGE: &str = r#"<!doctype html>
 <html lang="en"><head>
 <title>Why Notes Rot: A Field Guide</title>
-<meta name="author" content="Ada Example">
+<meta name="author" content="Ada Example, Bob Sample">
 <meta property="og:site_name" content="Example Journal">
+<meta property="og:image" content="/cover.png">
 <meta property="article:published_time" content="2026-03-04T10:00:00Z">
 <meta name="description" content="Notes rot when nobody revisits them.">
 </head><body>
@@ -34,7 +35,8 @@ fn extracts_readable_article_as_markdown_with_metadata() {
         .expect("article should be readable");
 
     assert_eq!(clipping.title, "Why Notes Rot: A Field Guide");
-    assert_eq!(clipping.author.as_deref(), Some("Ada Example"));
+    assert_eq!(clipping.author.as_deref(), Some("Ada Example, Bob Sample"));
+    assert_eq!(clipping.image.as_deref(), Some("https://example.com/cover.png"));
     assert_eq!(clipping.site_name.as_deref(), Some("Example Journal"));
     assert!(clipping.published.as_deref().unwrap_or("").starts_with("2026-03-04"));
     assert!(clipping.markdown.contains("Notes rot when nobody revisits them."));
@@ -44,9 +46,21 @@ fn extracts_readable_article_as_markdown_with_metadata() {
     assert!(!clipping.markdown.contains("Copyright 2026"));
     assert!(!clipping.markdown.contains("About"));
 
+    // The same text the extension's test expects, minus feature/thumbnail.
     let note = compose_clipping(&clipping, None, "2026-09-20");
-    assert!(note.starts_with("---\ntitle: \"Why Notes Rot: A Field Guide\"\nsource: https://example.com/notes/rot\nauthor: Ada Example\n"));
-    assert!(note.contains("\nclipped: 2026-09-20\ntags:\n  - clippings\n---\n\n"));
+    assert!(note.starts_with(concat!(
+        "---\ntitle: \"Why Notes Rot: A Field Guide\"\nsource: https://example.com/notes/rot\n",
+        "author:\n  - \"[[Ada Example]]\"\n  - \"[[Bob Sample]]\"\npublished: 2026-03-04\ncreated: 2026-09-20\n",
+        "site: Example Journal\ndescription: Notes rot when nobody revisits them.\ntags:\n  - clippings\n",
+        "sourcetype: default\nreviewed: false\ncover: https://example.com/cover.png\n",
+        "permalink: clippings/why-notes-rot-a-field-guide\n---\n\n"
+    )));
+    assert_eq!(kebab("Disk Prices | Compare and Save on DiskPrices at PricePerGig.com"), "disk-prices-compare-and-save-on-disk-prices-at-price-per-gig.com");
+    assert_eq!(kebab("iOS 17+ SwiftUI State Management"), "i-os-17-swift-ui-state-management");
+    assert_eq!(kebab("rizinorg/cutter: Free and Open Source"), "rizinorgcutter-free-and-open-source");
+    assert_eq!(kebab("Requests | F-Droid - Free"), "requests-f-droid-free");
+    assert_eq!(kebab("x/Y"), "xy");
+    assert_eq!(kebab("project based on UIKit or SwiftUI."), "project-based-on-uikit-or-swift-ui.");
     assert!(note.ends_with("threshold used by the extractor.\n"));
 
     let quoted = compose_clipping(&clipping, Some("first line\nsecond line"), "2026-09-20");

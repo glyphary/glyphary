@@ -49,7 +49,14 @@ test("split editor groups find an already open file across both panes", () => {
   assert.match(app, /if \(workspace\?\.openFiles\.length\)/);
   assert.match(app, /\$\{statusPrefix\} \$\{tabs\.length\} tab/);
   assert.match(documentsState, /function setEditorMarkdownContent\(targetEditor: Editor, markdown: string\)/);
-  assert.match(documentsState, /targetEditor\.commands\.setContent\(\{\s*type: "doc"/);
+  assert.match(documentsState, /chain\.setContent\(\{ type: "doc", content: \[\{ type: "paragraph" \}\] \}\)/);
+  // A content swap on a blurred editor must not leave WebKit's DOM selection on
+  // the editor root, or the next focus paints a caret at the container origin.
+  assert.match(documentsState, /dropStaleDomSelection\(targetEditor\);\n\}/);
+  assert.match(
+    documentsState,
+    /!targetEditor\.view\.hasFocus\(\) && selection\?\.anchorNode && root\.contains\(selection\.anchorNode\)[\s\S]*selection\.removeAllRanges\(\)/,
+  );
   assert.match(app, /function hydrateDocumentTabAfterCommit\(tab: DocumentTab/);
   assert.match(app, /window\.requestAnimationFrame\(\(\) => \{/);
   assert.match(app, /hydrateDocumentTabAfterCommit\(closeResult\.nextActiveTab, groupId\)/);

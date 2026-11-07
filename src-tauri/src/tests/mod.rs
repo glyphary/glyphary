@@ -22,6 +22,7 @@ mod base_expr;
 mod calendar;
 mod clipper;
 mod graph;
+mod people;
 mod plugins;
 mod rich_links;
 mod search;

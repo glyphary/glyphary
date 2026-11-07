@@ -1,7 +1,8 @@
 import { Extension } from "@tiptap/core";
 import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
 import { GapCursor } from "@tiptap/pm/gapcursor";
-import { NodeSelection, Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection } from "@tiptap/pm/state";
+import type { EditorState } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { EditorView } from "@tiptap/pm/view";
 import { isAiBuilderMarkerComment } from "./markdown-extensions";
@@ -317,6 +318,97 @@ function moveGapCursorAfterSelectedBlock(view: EditorView) {
   return moveGapCursorTo(view, afterSelectedBlock);
 }
 
+function extendSelectionAcrossSelectedBlock(view: EditorView, direction: -1 | 1) {
+  const { selection } = view.state;
+
+  if (!(selection instanceof NodeSelection) || selection.node.isInline) {
+    return false;
+  }
+
+  // Anchor at the block's own edge so the selection starts at the block, and
+  // move the head into the nearest text beyond it. ProseMirror warns once that
+  // the anchor is not inline; the block selection plugin below owns that state.
+  const anchor = direction > 0 ? selection.$from : selection.$to;
+  const beyond = Selection.findFrom(anchor, direction, true);
+
+  if (!beyond) {
+    return false;
+  }
+
+  view.dispatch(view.state.tr.setSelection(new TextSelection(anchor, beyond.$head)).scrollIntoView());
+
+  return true;
+}
+
+// A text selection anchored directly in the doc only comes from Shift+Arrow on
+// a selected block; its blocks are painted by decorations, not the browser.
+function blockEdgeSelection(state: EditorState) {
+  const { selection } = state;
+
+  return selection instanceof TextSelection && !selection.empty && selection.$anchor.depth === 0
+    ? selection
+    : null;
+}
+
+function keepBlockEdgeAnchor(view: EditorView, $anchor: ResolvedPos, $head: ResolvedPos) {
+  const current = blockEdgeSelection(view.state);
+
+  if (!current || $anchor.pos === $head.pos) {
+    return null;
+  }
+
+  // The browser extends later Shift+Arrow presses from the anchor; WebKit
+  // reports that between-blocks anchor moved into the neighboring text, and
+  // TextSelection.between would then push it past the block. Keep it.
+  const reported = [
+    current.anchor,
+    Selection.findFrom(current.$anchor, -1, true)?.anchor,
+    Selection.findFrom(current.$anchor, 1, true)?.anchor,
+  ];
+
+  if (!reported.includes($anchor.pos)) {
+    return null;
+  }
+
+  return new TextSelection(current.$anchor, TextSelection.between($head, $head).$head);
+}
+
+function blockSelectionDecorations(state: EditorState) {
+  const selection = blockEdgeSelection(state);
+
+  if (!selection) {
+    return DecorationSet.empty;
+  }
+
+  // WebKit paints the gap above a block whose selection starts between blocks,
+  // so native painting is hidden and each covered block is marked instead.
+  const decorations: Decoration[] = [];
+
+  state.doc.forEach((node, start) => {
+    const end = start + node.nodeSize;
+
+    if (end <= selection.from || start >= selection.to) {
+      return;
+    }
+
+    if (!node.isTextblock) {
+      // Not ProseMirror-selectednode: ProseMirror strips that class when the
+      // node selection this started from is cleared.
+      decorations.push(Decoration.node(start, end, { class: "block-selection-node" }));
+      return;
+    }
+
+    const from = Math.max(selection.from, start + 1);
+    const to = Math.min(selection.to, end - 1);
+
+    if (from < to) {
+      decorations.push(Decoration.inline(from, to, { class: "block-selection-text" }));
+    }
+  });
+
+  return DecorationSet.create(state.doc, decorations);
+}
+
 export function createBlockBoundaryInsertionExtension() {
   return Extension.create({
     name: "glypharyBlockBoundaryInsertion",
@@ -334,6 +426,8 @@ export function createBlockBoundaryInsertionExtension() {
         ArrowUp: () =>
           moveCursorOutOfCodeBlock(this.editor.view, "up") ||
           moveGapCursorBeforeSelectedBlock(this.editor.view),
+        "Shift-ArrowDown": () => extendSelectionAcrossSelectedBlock(this.editor.view, 1),
+        "Shift-ArrowUp": () => extendSelectionAcrossSelectedBlock(this.editor.view, -1),
       };
     },
 
@@ -343,6 +437,14 @@ export function createBlockBoundaryInsertionExtension() {
           key: new PluginKey("glypharyBlockBoundaryInsertAffordance"),
           props: {
             decorations: (_state) => blockBoundaryInsertDecorations(this.editor.view),
+          },
+        }),
+        new Plugin({
+          key: new PluginKey("glypharyBlockSelection"),
+          props: {
+            attributes: (state) => ({ class: blockEdgeSelection(state) ? "block-selection" : "" }),
+            createSelectionBetween: keepBlockEdgeAnchor,
+            decorations: blockSelectionDecorations,
           },
         }),
       ];

@@ -1,11 +1,13 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import type {
+  ThemeBuilderDraft,
   ThemePreset,
   ThemeTokenControl,
   VaultThemeCalloutSettings,
   VaultThemeOptions,
 } from "../lib/app-types";
 import { cssColorToHex } from "../lib/settings";
+import { defaultThemeIds, isCustomThemeId } from "../lib/theme-library";
 import {
   calloutIconOptions,
   calloutKinds,
@@ -13,10 +15,24 @@ import {
   defaultThemeCalloutSettings,
   normalizeCalloutIcon,
   normalizeCalloutStyle,
-  sameThemeTokens,
-  themePresets,
   themeTokenGroups,
 } from "./theme-options";
+
+// Everything the panel needs to pick a light/dark theme pair and build new
+// custom themes; App owns the state and the cross-window preview.
+export type ThemeLibraryControls = {
+  allThemes: ThemePreset[];
+  lightThemeId: string | null;
+  darkThemeId: string | null;
+  builderDraft: ThemeBuilderDraft | null;
+  applyThemePreset: (preset: ThemePreset) => void;
+  startThemeBuilder: (from: ThemePreset) => void;
+  cancelThemeBuilder: () => void;
+  saveThemeBuilderDraft: () => void;
+  deleteCustomTheme: (id: string) => void;
+  setThemeBuilderDraft: Dispatch<SetStateAction<ThemeBuilderDraft | null>>;
+  updateThemeDraftToken: (token: string, value: string) => void;
+};
 
 // One row per VaultThemeOptions flag; adding an option means adding an entry
 // here (plus its CSS class) instead of another hand-rolled checkbox block.
@@ -30,81 +46,103 @@ const themeOptionToggles: Array<{ key: keyof VaultThemeOptions; label: string }>
 ];
 
 type ThemeBuilderPanelProps = {
-  selectedThemePresetIdDraft: string | null;
   themeCalloutDraft: VaultThemeCalloutSettings;
-  themeDraft: Record<string, string>;
+  themeLibrary: ThemeLibraryControls;
   themeOptionsDraft: VaultThemeOptions;
   vaultRoot: string;
-  onApplyThemePreset: (preset: ThemePreset) => void;
-  onResetThemeDraft: () => void;
   onSetThemeCalloutDraft: Dispatch<SetStateAction<VaultThemeCalloutSettings>>;
   onSetThemeOptionsDraft: Dispatch<SetStateAction<VaultThemeOptions>>;
-  onUpdateThemeDraftToken: (token: string, value: string) => void;
 };
 
 export function ThemeBuilderPanel({
-  selectedThemePresetIdDraft,
   themeCalloutDraft,
-  themeDraft,
+  themeLibrary,
   themeOptionsDraft,
   vaultRoot,
-  onApplyThemePreset,
-  onResetThemeDraft,
   onSetThemeCalloutDraft,
   onSetThemeOptionsDraft,
-  onUpdateThemeDraftToken,
 }: ThemeBuilderPanelProps) {
+  const {
+    allThemes,
+    lightThemeId,
+    darkThemeId,
+    builderDraft,
+    applyThemePreset,
+    startThemeBuilder,
+    cancelThemeBuilder,
+    saveThemeBuilderDraft,
+    deleteCustomTheme,
+    setThemeBuilderDraft,
+    updateThemeDraftToken,
+  } = themeLibrary;
+  const [builderSourceId, setBuilderSourceId] = useState<string>(defaultThemeIds.light);
+  const builderSource =
+    allThemes.find((theme) => theme.id === builderSourceId) ?? allThemes[0];
+  const draftTokens = builderDraft?.tokens ?? {};
+
   function themeTokenValue(token: string) {
     return cssColorToHex(
-      themeDraft[token] ??
+      draftTokens[token] ??
         window.getComputedStyle(document.documentElement).getPropertyValue(token),
     );
   }
 
   function rawThemeTokenValue(control: ThemeTokenControl) {
     return (
-      themeDraft[control.token] ??
+      draftTokens[control.token] ??
       window.getComputedStyle(document.documentElement).getPropertyValue(control.token).trim() ??
       control.placeholder ??
       ""
     );
   }
 
-  return (
-    <>
-      <section className="settings-section" aria-label="Theme templates">
+  function themeGrid(base: "light" | "dark") {
+    const selectedId = (base === "dark" ? darkThemeId : lightThemeId) ?? defaultThemeIds[base];
+
+    return (
+      <section className="settings-section" aria-label={`${base} theme`}>
         <div className="settings-section-header">
           <div>
-            <h3>Theme Templates</h3>
-            <p>Apply a complete color system, then refine individual tokens below.</p>
+            <h3>{base === "dark" ? "Dark Theme" : "Light Theme"}</h3>
+            <p>
+              {base === "dark"
+                ? "Used whenever the app is in dark mode."
+                : "Used whenever the app is in light mode."}
+            </p>
           </div>
         </div>
         <div className="theme-preset-grid">
-          {themePresets.map((preset) => (
-            <button
-              className={
-                selectedThemePresetIdDraft === preset.id ||
-                sameThemeTokens(themeDraft, preset.tokens)
-                  ? "theme-preset-card active"
-                  : "theme-preset-card"
-              }
-              disabled={!vaultRoot}
-              key={preset.id}
-              type="button"
-              onClick={() => onApplyThemePreset(preset)}
-            >
-              <span className="theme-preset-swatches" aria-hidden="true">
-                <i style={{ background: preset.tokens["--glyphary-app-bg"] }} />
-                <i style={{ background: preset.tokens["--glyphary-surface"] }} />
-                <i style={{ background: preset.tokens["--glyphary-accent"] }} />
-                <i style={{ background: preset.tokens["--glyphary-code-bg"] }} />
-              </span>
-              <strong>{preset.name}</strong>
-              <small>{preset.description}</small>
-            </button>
-          ))}
+          {allThemes
+            .filter((theme) => theme.base === base)
+            .map((theme) => (
+              <button
+                className={
+                  selectedId === theme.id ? "theme-preset-card active" : "theme-preset-card"
+                }
+                disabled={!vaultRoot}
+                key={theme.id}
+                type="button"
+                onClick={() => applyThemePreset(theme)}
+              >
+                <span className="theme-preset-swatches" aria-hidden="true">
+                  <i style={{ background: theme.tokens["--glyphary-app-bg"] }} />
+                  <i style={{ background: theme.tokens["--glyphary-surface"] }} />
+                  <i style={{ background: theme.tokens["--glyphary-accent"] }} />
+                  <i style={{ background: theme.tokens["--glyphary-code-bg"] }} />
+                </span>
+                <strong>{theme.name}</strong>
+                <small>{theme.description}</small>
+              </button>
+            ))}
         </div>
       </section>
+    );
+  }
+
+  return (
+    <>
+      {themeGrid("light")}
+      {themeGrid("dark")}
       <section className="settings-section" aria-label="Theme options">
         <div className="settings-section-header">
           <div>
@@ -117,6 +155,7 @@ export function ThemeBuilderPanel({
             <input
               checked={themeOptionsDraft[key]}
               disabled={!vaultRoot}
+              role="switch"
               type="checkbox"
               onChange={(event) => {
                 const checked = event.currentTarget.checked;
@@ -195,20 +234,83 @@ export function ThemeBuilderPanel({
         <div className="settings-section-header">
           <div>
             <h3>Theme Builder</h3>
-            <p>Changes preview immediately and are saved to this vault.</p>
+            <p>
+              {builderDraft
+                ? `Editing a ${builderDraft.base} theme. Changes preview immediately; Save Theme adds it to the list above.`
+                : "Start from any theme to create a new one. Custom themes are shared by all vaults."}
+            </p>
           </div>
-          <button
-            className="inline-action"
-            disabled={!vaultRoot || Object.keys(themeDraft).length === 0}
-            type="button"
-            onClick={onResetThemeDraft}
-          >
-            Reset Theme
-          </button>
+          {builderDraft ? (
+            <div className="theme-builder-actions">
+              <button className="inline-action" type="button" onClick={cancelThemeBuilder}>
+                Cancel
+              </button>
+              <button
+                className="inline-action"
+                disabled={!builderDraft.name.trim()}
+                type="button"
+                onClick={saveThemeBuilderDraft}
+              >
+                Save Theme
+              </button>
+            </div>
+          ) : null}
         </div>
-        <div className="theme-builder">
+        {builderDraft ? (
+          <label className="settings-field compact-field">
+            <span>Theme name</span>
+            <input
+              type="text"
+              value={builderDraft.name}
+              onChange={(event) => {
+                const name = event.currentTarget.value;
+
+                setThemeBuilderDraft((draft) => (draft ? { ...draft, name } : draft));
+              }}
+            />
+          </label>
+        ) : (
+          <div className="theme-builder-actions">
+            <label className="settings-field compact-field">
+              <span>Start from</span>
+              <select
+                value={builderSource.id}
+                onChange={(event) => setBuilderSourceId(event.currentTarget.value)}
+              >
+                {allThemes.map((theme) => (
+                  <option key={theme.id} value={theme.id}>
+                    {theme.name} ({theme.base})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="inline-action"
+              type="button"
+              onClick={() => startThemeBuilder(builderSource)}
+            >
+              {isCustomThemeId(builderSource.id) ? "Edit Theme" : "New Theme"}
+            </button>
+            {isCustomThemeId(builderSource.id) ? (
+              <button
+                className="inline-action"
+                type="button"
+                onClick={() => {
+                  deleteCustomTheme(builderSource.id);
+                  setBuilderSourceId(defaultThemeIds.light);
+                }}
+              >
+                Delete Theme
+              </button>
+            ) : null}
+          </div>
+        )}
+        {builderDraft ? (
+          // The grid's own display rule would override the hidden attribute,
+          // so the token controls only exist while a theme is being built.
+          <div className="theme-builder">
           {themeTokenGroups.map((group) => (
-            <fieldset className="theme-token-group" disabled={!vaultRoot} key={group.title}>
+            <fieldset className="theme-token-group" key={group.title}>
               <legend>{group.title}</legend>
               {group.controls.map((control) => (
                 <label className="theme-token-control" key={control.token}>
@@ -221,7 +323,7 @@ export function ThemeBuilderPanel({
                         value={rawThemeTokenValue(control)}
                         placeholder={control.placeholder}
                         onChange={(event) =>
-                          onUpdateThemeDraftToken(control.token, event.currentTarget.value)
+                          updateThemeDraftToken(control.token, event.currentTarget.value)
                         }
                       />
                     ) : (
@@ -230,7 +332,7 @@ export function ThemeBuilderPanel({
                         type="color"
                         value={themeTokenValue(control.token)}
                         onChange={(event) =>
-                          onUpdateThemeDraftToken(control.token, event.currentTarget.value)
+                          updateThemeDraftToken(control.token, event.currentTarget.value)
                         }
                       />
                     )}
@@ -240,7 +342,8 @@ export function ThemeBuilderPanel({
               ))}
             </fieldset>
           ))}
-        </div>
+          </div>
+        ) : null}
       </section>
     </>
   );

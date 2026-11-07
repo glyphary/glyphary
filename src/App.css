@@ -380,7 +380,7 @@ body {
 :root[data-window-glass="enabled"] .editor-surface-frame,
 :root[data-window-glass="enabled"] .markdown-import textarea,
 :root[data-window-glass="enabled"] .drawer-pane pre,
-:root[data-window-glass="enabled"] .calendar-day,
+:root[data-window-glass="enabled"] .calendar-day:not(.open), /* glass would wipe the open-day fill */
 :root[data-window-glass="enabled"] .empty-toc,
 :root[data-window-glass="enabled"] .settings-panel input,
 :root[data-window-glass="enabled"] .settings-panel select,
@@ -2364,6 +2364,67 @@ body.workspace-resizing * {
   border-top: 1px solid color-mix(in srgb, var(--border-soft) 58%, transparent);
 }
 
+/* On/off controls read as a macOS-style switch; the native checkbox
+   underneath keeps keyboard and screen-reader behavior. Task boxes and
+   pick-many lists stay checkboxes. */
+.metadata-shell .frontmatter-row .frontmatter-checkbox,
+.settings-panel .settings-check-control input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex-shrink: 0;
+  justify-self: start;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.metadata-shell .frontmatter-row .frontmatter-checkbox {
+  margin-top: 4px;
+}
+
+.metadata-shell .frontmatter-row .frontmatter-checkbox::before,
+.settings-panel .settings-check-control input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+  transition: transform 150ms ease;
+}
+
+.metadata-shell .frontmatter-row .frontmatter-checkbox:checked,
+.settings-panel .settings-check-control input[type="checkbox"]:checked {
+  background: var(--accent);
+}
+
+.metadata-shell .frontmatter-row .frontmatter-checkbox:checked::before,
+.settings-panel .settings-check-control input[type="checkbox"]:checked::before {
+  transform: translateX(14px);
+}
+
+.metadata-shell .frontmatter-row .frontmatter-checkbox:focus-visible,
+.settings-panel .settings-check-control input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.metadata-shell .frontmatter-row .frontmatter-checkbox:disabled,
+.settings-panel .settings-check-control input[type="checkbox"]:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .frontmatter-row:last-child {
   border-bottom: 1px solid color-mix(in srgb, var(--border-soft) 58%, transparent);
 }
@@ -2418,6 +2479,52 @@ body.workspace-resizing * {
   resize: vertical;
   padding: 8px 10px;
   line-height: 1.45;
+}
+
+.frontmatter-image-field {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.frontmatter-image-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+.frontmatter-image-thumb {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface-muted);
+  object-fit: cover;
+}
+
+.frontmatter-image-empty {
+  display: block;
+  border-style: dashed;
+}
+
+.frontmatter-image-pick {
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.frontmatter-image-pick:hover:not(:disabled) {
+  background: var(--hover);
 }
 
 .frontmatter-value-list {
@@ -2656,6 +2763,18 @@ body.workspace-resizing * {
   margin: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
   background: var(--surface-muted);
+}
+
+.note-lock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  background: var(--surface-muted);
+  color: var(--muted-strong);
+  font-size: 0.8rem;
 }
 
 .document-banner img {
@@ -4137,6 +4256,23 @@ body.workspace-resizing * {
   display: none;
 }
 
+.editor-surface .wikilink-avatar {
+  display: inline-block;
+  /* Absolute sizes: WebKit resolved the em-based size of this widget image
+     to zero, leaving a 2px box of border. */
+  width: 20px;
+  height: 20px;
+  max-width: none;
+  max-height: none;
+  border: 1px solid var(--border-soft);
+  border-radius: 50%;
+  /* The general editor image rule adds block margins; on an inline avatar
+     they lift it above the baseline. */
+  margin: 0 5px 0 0;
+  object-fit: cover;
+  vertical-align: -4px;
+}
+
 .editor-surface .wikilink-ambiguous {
   color: var(--syntax-orange);
 }
@@ -4660,6 +4796,7 @@ body.workspace-resizing * {
 }
 
 .editor-surface .rich-link-card {
+  cursor: pointer;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 132px;
   overflow: hidden;
@@ -4671,6 +4808,26 @@ body.workspace-resizing * {
 
 .editor-surface .rich-link-card.ProseMirror-selectednode {
   border-color: var(--focus);
+  box-shadow: 0 0 0 2px var(--selection);
+}
+
+/* Shift+Arrow from a selected block: the blocks are painted by decorations
+   because WebKit would also paint the gap above the block. */
+.editor-surface .block-selection {
+  caret-color: transparent;
+}
+
+.editor-surface .block-selection::selection,
+.editor-surface .block-selection *::selection {
+  background: transparent;
+}
+
+.editor-surface .block-selection-text {
+  background: var(--selection);
+}
+
+.editor-surface .block-selection-node {
+  border-radius: 8px;
   box-shadow: 0 0 0 2px var(--selection);
 }
 
@@ -5579,6 +5736,13 @@ body.workspace-resizing * {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
+/* Today keeps the ring; the day whose note is open is filled. */
+.calendar-day.open {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  color: var(--heading);
+}
+
 .calendar-day span {
   display: block;
 }
@@ -5823,6 +5987,13 @@ body.workspace-resizing * {
   gap: 12px;
 }
 
+.theme-builder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
 .settings-section-header p {
   margin: 4px 0 0;
   color: var(--muted);
@@ -5838,14 +6009,6 @@ body.workspace-resizing * {
   flex-direction: row;
   align-items: flex-start;
   gap: 8px;
-}
-
-.settings-panel .settings-check-control input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  accent-color: var(--accent);
-  margin-top: 1px;
 }
 
 .settings-panel .settings-check-control span {
@@ -8123,6 +8286,187 @@ body.workspace-resizing * {
   color: var(--text);
   font-size: 0.8rem;
   padding: 4px 14px 10px;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  border-bottom: 1px solid var(--border-soft);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface-muted) 70%);
+  padding: 16px 18px 14px;
+}
+
+.dashboard-day-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  margin-top: 4px;
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: dashboard-rise var(--motion-duration-slow, 400ms) var(--motion-ease, ease-out);
+}
+
+.dashboard-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.dashboard-heading h2 {
+  margin: 0;
+  color: var(--heading);
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.dashboard-date {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dashboard-summary {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.dashboard-empty {
+  margin: 4px 4px 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+@keyframes dashboard-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) rotate(-12deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.dashboard-task.leaving {
+  animation: dashboard-leave 360ms var(--motion-ease, ease-in) forwards;
+}
+
+.dashboard-task.leaving strong {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+@keyframes dashboard-leave {
+  40% {
+    transform: translateX(6px);
+    opacity: 0.8;
+  }
+  to {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-day-icon,
+  .dashboard-task.leaving {
+    animation: none;
+  }
+
+  .dashboard-task.leaving {
+    opacity: 0.4;
+  }
+}
+
+.dashboard-columns {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  overflow: auto;
+  padding: 12px 16px 16px;
+}
+
+.dashboard-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--heading);
+  font-size: 0.9rem;
+}
+
+.dashboard-tasks {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 6px 8px;
+}
+
+.dashboard-task input {
+  margin-top: 3px;
+}
+
+.dashboard-task-open {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.dashboard-task-open strong {
+  font-size: 0.84rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-task-open span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-task-open em {
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 700;
+  padding: 1px 5px;
+}
+
+.dashboard-task-open small {
+  color: var(--muted);
+  font-size: 0.7rem;
 }
 
 .task-board-columns {

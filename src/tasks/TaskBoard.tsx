@@ -13,6 +13,8 @@ import {
   taskBoardColumns,
   taskBoardGroups,
   taskBoardSorts,
+  taskKey,
+  taskLabel,
   taskStatusFromLine,
 } from "../lib/task-board";
 import { parseTaskMeta } from "../lib/task-meta";
@@ -46,10 +48,6 @@ type TaskBoardProps = {
   onRequestClose: () => void;
   windowSurface?: boolean;
 };
-
-function taskKey(result: SearchResult) {
-  return `${result.relativePath}:${result.lineNumber ?? 0}`;
-}
 
 export function TaskBoard({
   results,
@@ -152,7 +150,7 @@ export function TaskBoard({
                 {groups[column.status].map((result) => {
                   const key = taskKey(result);
                   const meta = parseTaskMeta(result.lineText);
-                  const label = meta.text.replace(/^(?:[-*+]|\d+[.)])\s+\[.\]\s*/, "") || "Task";
+                  const label = taskLabel(result.lineText);
                   const overdue = column.status !== "x" && meta.due !== null && meta.due < today;
                   const previous = adjacentTaskStatus(column.status, -1);
                   const next = adjacentTaskStatus(column.status, 1);

@@ -142,6 +142,11 @@ test("graph view opens from the palette and native menu without raw invoke calls
   assert.match(graphSources["src/graph/use-graph-canvas.ts"], /from "d3-force"/);
   assert.match(graphSources["src/graph/use-graph-canvas.ts"], /prefers-reduced-motion/);
   assert.match(graphSources["src/graph/graph-interaction.ts"], /from "d3-zoom"/);
+  // The initial zoom transform fires the zoom event synchronously inside
+  // attachGraphInteraction, before its result is assigned; reading the
+  // interaction there threw "Cannot access before initialization" on Cmd+G.
+  assert.match(graphSources["src/graph/graph-interaction.ts"], /host\.transformChanged\(transform\)/);
+  assert.match(graphSources["src/graph/use-graph-canvas.ts"], /transformChanged: \(transform\) => \{\s*transformRef\.current = transform;/);
   assert.doesNotMatch(graphSources["src/graph/GraphView.tsx"], /from "d3-/);
   assert.doesNotMatch(graphSources["src/graph/GraphView.tsx"], /getContext\("2d"\)/);
   assert.doesNotMatch(graphSources["src/graph/graph-renderer.ts"], /from "react"/);
@@ -465,8 +470,8 @@ test("global tidbit capture is vault-gated and opens a lightweight editor window
   assert.match(capture, /const \[nameEditing, setNameEditing\]/);
   assert.match(capture, /const \[nameDraft, setNameDraft\]/);
   assert.match(capture, /const saveRelativePath = tidbitRelativePathFromName\(relativePath, nameDraft\)/);
-  assert.match(capture, /import \{ normalizeThemeTokens \} from "\.\/settings\/theme-options"/);
-  assert.match(capture, /const tokens = normalizeThemeTokens\(settings\.theme\?\.tokens\)/);
+  assert.match(capture, /import \{ readCustomThemes, themeForMode \} from "\.\/lib\/theme-library"/);
+  assert.match(capture, /themeForMode\(\s*withCustomThemes\(readCustomThemes\(\)\),\s*\{ light: settings\.theme\?\.lightThemeId, dark: settings\.theme\?\.darkThemeId \},\s*resolveAppearance\(readPersistedAppearance\(\)\),\s*\)\.tokens/);
   assert.match(capture, /document\.documentElement\.style\.setProperty\(token, value\)/);
   assert.match(capture, /getCurrentWindow\(\)\.setTheme\(appearance === "auto" \? null : appearance\)/);
   assert.match(capture, /requestAnimationFrame/);

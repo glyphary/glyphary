@@ -201,6 +201,20 @@ test("block-widget boundaries expose an editable insertion point", () => {
   assert.match(blockBoundary, /Enter: \(\) =>/);
   assert.match(blockBoundary, /ArrowDown: \(\) =>/);
   assert.match(blockBoundary, /ArrowUp: \(\) =>/);
+  // Shift+Arrow on a selected block anchors at the block's edge so the block
+  // stays inside the extended selection. The anchor survives the browser's
+  // later presses, and the covered blocks are painted by decorations because
+  // WebKit would otherwise paint the gap above the block too.
+  assert.match(blockBoundary, /"Shift-ArrowDown": \(\) => extendSelectionAcrossSelectedBlock\(this\.editor\.view, 1\)/);
+  assert.match(blockBoundary, /"Shift-ArrowUp": \(\) => extendSelectionAcrossSelectedBlock\(this\.editor\.view, -1\)/);
+  assert.match(blockBoundary, /const anchor = direction > 0 \? selection\.\$from : selection\.\$to;/);
+  assert.match(blockBoundary, /selection\.\$anchor\.depth === 0/);
+  assert.match(blockBoundary, /createSelectionBetween: keepBlockEdgeAnchor/);
+  assert.match(blockBoundary, /decorations: blockSelectionDecorations/);
+  assert.match(blockBoundary, /class: "block-selection-node"/);
+  assert.match(blockBoundary, /class: "block-selection-text"/);
+  assert.match(css, /\.editor-surface \.block-selection::selection,\n\.editor-surface \.block-selection \*::selection \{\n  background: transparent;/);
+  assert.match(css, /\.editor-surface \.block-selection-node \{/);
   assert.match(blockBoundary, /moveCursorOutOfCodeBlock\(this\.editor\.view, "down"\) \|\|/);
   assert.match(blockBoundary, /moveCursorOutOfCodeBlock\(this\.editor\.view, "up"\) \|\|/);
   assert.match(blockBoundary, /insertParagraphAtGapCursor\(this\.editor\.view\) \|\|/);
@@ -282,9 +296,10 @@ test("editor images can be opened in a full-size preview", () => {
   assert.match(editorPane, /candidate !== target\.currentSrc/);
   assert.match(editorPane, /target\.src = candidates\[nextIndex\]/);
   assert.match(appState, /function vaultImagePathCandidates/);
-  // A frontmatter image property is a bare wikilink in Obsidian; the resolver
-  // must read it like an embed.
-  assert.match(appState, /reference\.match\(\/\^!\?\\\[\\\[/);
+  // A frontmatter image property is a quoted bare wikilink in Obsidian; the
+  // resolver reads the raw value like an embed, so callers pass it as is.
+  assert.match(appState, /const unquoted = reference\.trim\(\)\.replace\(\/\^\["'\]\|\["'\]\$\/g, ""\)/);
+  assert.match(appState, /unquoted\.match\(\/\^!\?\\\[\\\[/);
   assert.match(appState, /convertFileSrc\(`\$\{root\}\/\$\{defaultVaultAssetDirectory\}\/\$\{cleanReference\}`\)/);
   assert.match(appState, /convertFileSrc\(`\$\{root\}\/Attachments\/\$\{cleanReference\}`\)/);
   assert.match(vaultImages, /start: \(src: string\) => src\.indexOf\("!\[\["\)/);
@@ -430,6 +445,11 @@ siteName: Example Site
   assert.match(paletteDefinitions, /id: "insert-rich-link"/);
   assert.match(app, /openRichLinkDialog/);
   assert.match(app, /insertRichLinkFromUrl/);
+  // Clicking a rich link card opens its URL like a link, http(s) only.
+  assert.match(
+    app,
+    /closest<HTMLElement>\("\[data-rich-link-url\]"\)[\s\S]*?openExternalUrl\(remoteSourceUrl\(richLink\.dataset\.richLinkUrl \?\? ""\), setStatus\)/,
+  );
   assert.match(app, /insertMarkdownAtCursor\(editor, richLinkMarkdown\(metadata\)\)/);
   assert.doesNotMatch(app, /setEditorBody\(`\$\{markdown\.trimEnd\(\)\}\\n\\n\$\{richLinkMarkdown\(metadata\)\}`/);
   assert.match(app, /richLinkDialogOpen/);

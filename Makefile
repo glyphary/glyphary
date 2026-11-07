@@ -99,5 +99,8 @@ ship-dmg: release
 	spctl -a -t open --context context:primary-signature -v "$$DMG"; \
 	echo "Final path: $$DMG";
 
+turn: prod-app
+	open /Users/chris/Projects/glyphary/glyphary/src-tauri/target/release/bundle/macos/Glyphary.app
+
 clean:
 	rm -rf dist src-tauri/target

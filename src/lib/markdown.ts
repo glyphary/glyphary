@@ -227,7 +227,7 @@ export function frontmatterEntries(
   return entries;
 }
 
-function serializeFrontmatterEntry(
+export function serializeFrontmatterEntry(
   delimiter: MarkdownParts["metaDelimiter"],
   entry: Pick<FrontmatterEntry, "key" | "value">,
 ) {

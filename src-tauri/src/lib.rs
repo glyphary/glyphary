@@ -46,6 +46,7 @@ mod clipper;
 mod github;
 mod activity;
 mod graph;
+mod people;
 mod models;
 #[cfg(desktop)]
 #[macro_use]
@@ -79,6 +80,7 @@ use defaults::*;
 use github::*;
 use activity::*;
 use graph::*;
+use people::*;
 use models::*;
 #[cfg(desktop)]
 use native_menu::*;
@@ -340,6 +342,7 @@ pub fn run() {
             search_vault,
             read_link_graph,
             read_vault_tags,
+            read_people_photos,
             list_vault_activity,
             fetch_rich_link_metadata,
             list_ai_models,

@@ -66,6 +66,15 @@ export function isLiveTaskResult(result: SearchResult, archiveNote: string) {
   return result.isContentMatch && result.relativePath !== archiveNote;
 }
 
+export function taskKey(result: SearchResult) {
+  return `${result.relativePath}:${result.lineNumber ?? 0}`;
+}
+
+/** The task's own words: its line without the list marker and checkbox. */
+export function taskLabel(lineText: string | null | undefined) {
+  return parseTaskMeta(lineText).text.replace(/^(?:[-*+]|\d+[.)])\s+\[.\]\s*/, "") || "Task";
+}
+
 /** Newest notes first; a capped Done column keeps recent finishes visible. */
 export function recentFirst(results: readonly SearchResult[]) {
   return [...results].sort((left, right) => (right.modifiedMs ?? 0) - (left.modifiedMs ?? 0));

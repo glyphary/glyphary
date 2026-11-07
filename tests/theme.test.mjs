@@ -107,7 +107,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   // Every preset declares its light/dark base so applying it can switch the
   // appearance mode to match the palette.
   assert.equal((presetBlock.match(/base: "(?:light|dark)"/g) ?? []).length, 14);
-  assert.match(app, /setAppearance\(preset\.base\)/);
+  assert.match(app, /previewAppearance\(preset\.base\)/);
   // Cupertino ships as a light/dark pair sharing one accent and typography.
   assert.match(themeOptions, /id: "cupertino"/);
   assert.match(themeOptions, /id: "cupertino-dark"/);
@@ -119,17 +119,13 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(themeOptions, /token: "--glyphary-list-marker"/);
   assert.match(css, /\.editor-surface mark \{[^}]*background: var\(--glyphary-mark-bg\)/);
   assert.match(css, /\.editor-surface li::marker \{[^}]*color: var\(--glyphary-list-marker\)/);
-  // Every theme-builder token must be accepted by the backend allowlist, or
-  // saving a theme that uses it fails ("Unsupported theme token").
-  const rustDefaults = readFileSync("src-tauri/src/defaults.rs", "utf8");
-  const allowlistBlock =
-    rustDefaults.match(/THEME_TOKEN_ALLOWLIST: &\[&str\] = &\[([\s\S]*?)\];/)?.[1] ?? "";
-  const allowedTokens = new Set(allowlistBlock.match(/"(--[a-z-]+)"/g)?.map((token) => token.slice(1, -1)) ?? []);
-  const editableTokens = themeOptions.match(/token: "(--[a-z-]+)"/g)?.map((token) => token.slice(8, -1)) ?? [];
-  assert.ok(editableTokens.length > 40);
-  for (const token of editableTokens) {
-    assert.ok(allowedTokens.has(token), `backend allowlist missing ${token}`);
-  }
+  // Palettes never reach the backend: a vault stores only which theme id
+  // fills its light and dark slot, and custom palettes live app-wide.
+  assert.match(modelsBackend, /light_theme_id: Option<String>/);
+  assert.match(modelsBackend, /dark_theme_id: Option<String>/);
+  assert.doesNotMatch(modelsBackend, /tokens: HashMap<String, String>/);
+  assert.doesNotMatch(defaultsBackend, /THEME_TOKEN_ALLOWLIST/);
+  assert.match(settingsTestsBackend, /fn writes_vault_theme_selection\(\)/);
   // Save failures render inside the dialog; the settings window has no status bar.
   assert.match(app, /setSettingsSaveError\(message\)/);
   assert.match(settingsDialog, /settings-save-error/);
@@ -138,7 +134,9 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(app, /setStatus\("Saved vault settings"\);[\s\S]{0,400}?dismissSettingsSurface\(\);/);
   assert.match(app, /function dismissSettingsSurface/);
   assert.match(themeOptions, /for \(const preset of themePresets\)/);
-  assert.match(themeBuilderPanel, /Theme Templates/);
+  assert.match(themeBuilderPanel, /Light Theme/);
+  assert.match(themeBuilderPanel, /Dark Theme/);
+  assert.match(themeBuilderPanel, /\.filter\(\(theme\) => theme\.base === base\)/);
   assert.match(themeBuilderPanel, /Theme Options/);
   assert.match(appTypes, /export type VaultThemeOptions/);
   assert.match(appTypes, /export type VaultThemeCalloutSettings/);
@@ -197,9 +195,15 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(themeOptions, /export const calloutKinds/);
   assert.match(themeBuilderPanel, /\{kind\.label\} icon/);
   assert.match(app, /applyThemePreset/);
-  assert.match(appTypes, /presetId\?: string \| null/);
-  assert.match(app, /selectedThemePresetIdDraft/);
-  assert.match(app, /normalizeThemePresetId/);
+  assert.match(appTypes, /lightThemeId\?: string \| null/);
+  assert.match(appTypes, /darkThemeId\?: string \| null/);
+  // The active palette follows the resolved mode, so auto mode flips between
+  // the two chosen themes; the builder and a peer preview take precedence.
+  assert.match(app, /previewThemeTokens \?\?\s*themeBuilderDraft\?\.tokens \?\?\s*themeForMode\(allThemes, themeSelectionDraft, resolvedAppearance\)\.tokens/);
+  assert.match(app, /lightThemeIdDraft !== savedLightThemeId\(\) \|\|\s*darkThemeIdDraft !== savedDarkThemeId\(\)/);
+  assert.match(app, /if \(event\.key === customThemesStorageKey\) \{\s*setCustomThemes\(readCustomThemes\(\)\);/);
+  assert.match(app, /function saveThemeBuilderDraft\(\)[\s\S]*?writeCustomThemes\(themes\);[\s\S]*?applyThemePreset\(theme\);/);
+  assert.match(themeBuilderPanel, /isCustomThemeId\(builderSource\.id\) \? "Edit Theme" : "New Theme"/);
   assert.match(themeOptions, /--glyphary-accent/);
   assert.match(themeOptions, /--glyphary-font-editor/);
   assert.match(themeOptions, /--glyphary-editor-max-width/);
@@ -210,7 +214,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(themeOptions, /--syntax-purple/);
   assert.match(themeBuilderPanel, /rawThemeTokenValue/);
   assert.match(themeBuilderPanel, /type="text"/);
-  assert.match(themeBuilderPanel, /Reset Theme/);
+  assert.match(themeBuilderPanel, /Save Theme/);
   assert.match(appTypes, /export type VaultAppearanceSettings/);
   assert.match(appTypes, /export type FileDisplaySettings/);
   assert.match(appTypes, /export type AutosaveSettings/);
@@ -372,12 +376,6 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.doesNotMatch(css, /data-glyphary-heading-underlines="enabled"/);
   assert.doesNotMatch(css, /data-glyphary-heading-anchors="enabled"/);
   assert.doesNotMatch(css, /data-glyphary-rich-callouts="enabled"/);
-  assert.match(defaultsBackend, /"--glyphary-font-editor"/);
-  assert.match(defaultsBackend, /"--glyphary-callout-padding"/);
-  assert.match(defaultsBackend, /"--glyphary-callout-warning-color"/);
-  assert.match(defaultsBackend, /"--glyphary-editor-max-width"/);
-  assert.match(defaultsBackend, /"--glyphary-radius-md"/);
-  assert.match(defaultsBackend, /"--syntax-purple"/);
   assert.match(modelsBackend, /pub\(crate\) struct VaultThemeOptions/);
   assert.match(modelsBackend, /pub\(crate\) struct VaultThemeCallouts/);
   assert.match(modelsBackend, /pub\(crate\) struct CssSnippetSettings/);
@@ -387,7 +385,7 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(defaultsBackend, /THEME_CALLOUT_STYLE_ALLOWLIST/);
   assert.match(defaultsBackend, /THEME_CALLOUT_ICON_ALLOWLIST/);
   assert.match(themesBackend, /clean_theme_callouts/);
-  assert.match(settingsTestsBackend, /writes_vault_theme_options_without_tokens/);
+  assert.match(settingsTestsBackend, /writes_vault_theme_options_without_theme_ids/);
   assert.equal(config.app.macOSPrivateApi, true);
   assert.equal(config.app.windows[0].transparent, true);
   assert.equal(config.bundle.publisher, "Glyphary contributors");
@@ -404,7 +402,6 @@ test("app css exposes the Obsidian theme compatibility surface", () => {
   assert.match(modelsBackend, /section_corners/);
   assert.match(modelsBackend, /workspace_margin/);
   assert.match(modelsBackend, /ui_font_weight/);
-  assert.match(modelsBackend, /preset_id/);
   assert.match(windowingBackend, /Effect::UnderWindowBackground/);
   assert.match(windowingBackend, /set_background_color\(Some\(Color\(0, 0, 0, 0\)\)\)/);
 });

@@ -371,8 +371,11 @@ test("calendar filenames match the requested note naming scheme and dot marker k
   assert.match(app, /onPointerLeave=\{closeCalendarDayPreview\}/);
   assert.match(app, /aria-label="Previous month"[\s\S]*title="Previous month"/);
   assert.match(app, /aria-label="Next month"[\s\S]*title="Next month"/);
-  assert.match(app, /aria-label="Jump to today"[\s\S]*title="Jump to today"/);
-  assert.match(app, /const today = new Date\(\);\s*setCalendarMonth\(new Date\(today\.getFullYear\(\), today\.getMonth\(\), 1\)\)/);
+  assert.match(app, /aria-label="Open today's note"[\s\S]*title="Open today's note"/);
+  assert.match(app, /const today = new Date\(\);\s*setCalendarMonth\(new Date\(today\.getFullYear\(\), today\.getMonth\(\), 1\)\);\s*void openCalendarDay\(today\)/);
+  // The glass theme repaints every calendar day; the open-day fill must survive it.
+  assert.match(css, /data-window-glass="enabled"\] \.calendar-day:not\(\.open\),/);
+  assert.match(css, /\.calendar-day\.open \{[\s\S]*background: color-mix\(in srgb, var\(--accent\) 24%/);
   assert.match(css, /grid-template-columns: 30px minmax\(0, 1fr\) 30px/);
   assert.match(css, /\.calendar-navigation-button \{[\s\S]*width: 30px/);
   assert.match(css, /\.calendar-footer \{[\s\S]*justify-content: flex-start/);
@@ -651,13 +654,16 @@ test("vault drawer exposes files search recent and task views", () => {
   assert.match(vaultTasks, /line\.match\(\/\^- \\\[/);
   assert.ok(vaultTasks.includes('return "- \\\\[[xX]\\\\]";'));
   assert.ok(vaultTasks.includes('return "- \\\\[( |/)\\\\]";'));
-  assert.match(app, /includeContent: true/);
-  assert.match(app, /markdownOnly: true/);
-  assert.match(app, /excludeDotPaths: true/);
+  // The task drawer scans through the shared live-task scan.
+  const taskScan = readFileSync("src/app-state/task-board.ts", "utf8");
+  assert.match(taskScan, /includeContent: true/);
+  assert.match(taskScan, /markdownOnly: true/);
+  assert.match(taskScan, /excludeDotPaths: true/);
+  assert.match(taskScan, /isLiveTaskResult\(result, archive\)/);
   assert.match(app, /aria-label="Refresh tasks"/);
   assert.match(app, /renderToolbarIcon\("refresh"\)/);
   assert.match(app, /renderToolbarIcon\(task\.completed \? "task-done" : "task-open"\)/);
-  assert.match(app, /isLiveTaskResult\(result, archiveNote\)/);
+  assert.match(app, /scanLiveTasks\(vaultRoot, filter, vaultSettingsRef\.current\)/);
   assert.match(app, /visibleVaultSearchResults\(searchResults\)/);
   assert.match(vaultSearch, /const seenPaths = new Set<string>\(\)/);
   assert.match(vaultSearch, /const matchCounts = searchResults\.reduce/);

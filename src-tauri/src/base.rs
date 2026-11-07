@@ -461,7 +461,7 @@ fn scalar_value(raw: &str, tz_offset_ms: i64) -> Value {
     Value::Str(raw.to_string())
 }
 
-fn parse_note_values(content: &str, tz_offset_ms: i64) -> HashMap<String, Value> {
+pub(crate) fn parse_note_values(content: &str, tz_offset_ms: i64) -> HashMap<String, Value> {
     let mut properties = HashMap::new();
 
     if !content.starts_with("---\n") && !content.starts_with("---\r\n") {

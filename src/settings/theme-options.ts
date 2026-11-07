@@ -899,6 +899,11 @@ for (const preset of themePresets) {
   };
 }
 
+/** Every theme a picker can offer: the built-ins, then this machine's custom ones. */
+export function withCustomThemes(custom: ThemePreset[]) {
+  return [...themePresets, ...custom];
+}
+
 export function normalizeThemeTokens(tokens: Record<string, string> | undefined | null) {
   const normalized: Record<string, string> = {};
 
@@ -913,12 +918,6 @@ export function normalizeThemeTokens(tokens: Record<string, string> | undefined 
   }
 
   return normalized;
-}
-
-export function normalizeThemePresetId(presetId: string | undefined | null) {
-  const cleanPresetId = presetId?.trim() ?? "";
-
-  return themePresets.some((preset) => preset.id === cleanPresetId) ? cleanPresetId : null;
 }
 
 export function normalizeCalloutStyle(style: string | undefined | null): CalloutStyle {

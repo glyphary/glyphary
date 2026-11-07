@@ -1,58 +1,41 @@
 //! Theme settings validation.
 //!
 //! Responsibilities:
-//! - Validate user-editable theme token values against the backend allowlist.
+//! - Trim the chosen light/dark theme ids.
 //! - Normalize callout style/icon choices.
 //! - Drop empty theme payloads so default vaults do not persist noise.
 //!
 //! Contracts:
-//! - Allowed token names remain defined with shared settings constants in
-//!   `lib.rs`; this module owns validation behavior.
-//! - Values are restricted to conservative CSS-like scalar characters. Full CSS
-//!   belongs in approved snippets, not theme token values.
+//! - Theme palettes live in the frontend (built-in presets plus app-wide custom
+//!   themes); the vault only stores which id fills each slot.
 //! - Unknown callout styles or icon names are rejected before saving settings.
 use super::*;
+
+fn clean_theme_id(id: Option<String>) -> Option<String> {
+    id.map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
 
 pub(crate) fn clean_theme(theme: Option<VaultTheme>) -> Result<Option<VaultTheme>, String> {
     let Some(theme) = theme else {
         return Ok(None);
     };
-    let mut tokens = HashMap::new();
-    let preset_id = theme
-        .preset_id
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-
-    for (key, value) in theme.tokens {
-        if !THEME_TOKEN_ALLOWLIST.contains(&key.as_str()) {
-            return Err(format!("Unsupported theme token: {key}"));
-        }
-
-        let value = value.trim();
-
-        if value.is_empty() {
-            continue;
-        }
-
-        if value.len() > 180 || !value.chars().all(is_safe_theme_value_char) {
-            return Err(format!("Invalid theme value for {key}"));
-        }
-
-        tokens.insert(key, value.to_string());
-    }
+    let light_theme_id = clean_theme_id(theme.light_theme_id);
+    let dark_theme_id = clean_theme_id(theme.dark_theme_id);
     let callouts = clean_theme_callouts(theme.callouts)?;
 
-    if tokens.is_empty()
+    if light_theme_id.is_none()
+        && dark_theme_id.is_none()
         && theme.options == VaultThemeOptions::default()
         && callouts == VaultThemeCallouts::default()
     {
         Ok(None)
     } else {
         Ok(Some(VaultTheme {
-            preset_id,
+            light_theme_id,
+            dark_theme_id,
             callouts,
             options: theme.options,
-            tokens,
         }))
     }
 }
@@ -83,26 +66,4 @@ pub(crate) fn clean_theme_callouts(
     }
 
     Ok(VaultThemeCallouts { style, icons })
-}
-pub(crate) fn is_safe_theme_value_char(character: char) -> bool {
-    // Keep theme-builder values expressive enough for colors, lengths, font
-    // stacks, and simple CSS functions while preventing arbitrary declarations.
-    character.is_ascii_alphanumeric()
-        || matches!(
-            character,
-            '#' | '('
-                | ')'
-                | ','
-                | '.'
-                | '%'
-                | '-'
-                | '+'
-                | '/'
-                | '_'
-                | '*'
-                | '"'
-                | '\''
-                | ' '
-                | '\t'
-        )
 }

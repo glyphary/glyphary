@@ -8,7 +8,7 @@ import type { VaultIndexedFile } from "../lib/app-types";
 // - Open the wikilink search after typing a double left bracket.
 // Contracts:
 // - Vault filename indexing and navigation stay app-owned through callbacks.
-// - The active line keeps raw [[target|alias]] syntax editable; inactive lines hide syntax.
+// - A link under the caret keeps its raw [[target|alias]] syntax editable; every other link hides it.
 
 export function wikiLinkTargetFromMarkup(value: string) {
   return value.split("|")[0]?.split("#")[0]?.trim() ?? "";
@@ -16,7 +16,43 @@ export function wikiLinkTargetFromMarkup(value: string) {
 
 export type WikiLinkResolution = {
   candidates: VaultIndexedFile[];
+  /**
+   * Candidate sources for a picture beside the link when it points at one
+   * person note; a bare file name can live in any of the image folders, so
+   * the widget tries them in order.
+   */
+  avatar?: string[];
 };
+
+function avatarWidget(sources: string[]) {
+  const image = document.createElement("img");
+
+  image.className = "wikilink-avatar";
+  image.alt = "";
+  image.draggable = false;
+
+  // WebKit keeps an <img> whose first load failed in its broken, zero-size
+  // state even after a later src loads, so each candidate is tried on a
+  // detached Image and the visible element only ever receives a good one.
+  const tryCandidate = (index: number) => {
+    if (index >= sources.length) {
+      image.remove();
+      return;
+    }
+
+    const probe = new Image();
+
+    probe.onload = () => {
+      image.src = sources[index];
+    };
+    probe.onerror = () => tryCandidate(index + 1);
+    probe.src = sources[index];
+  };
+
+  tryCandidate(0);
+
+  return image;
+}
 
 type WikiLinkExtensionOptions = {
   openSearch: () => void;
@@ -52,7 +88,8 @@ export function createWikiLinkExtension(options: WikiLinkExtensionOptions) {
 
                   const from = position + match.index;
                   const to = from + match[0].length;
-                  const candidates = options.resolveTarget(target).candidates;
+                  const resolution = options.resolveTarget(target);
+                  const candidates = resolution.candidates;
                   const stateClass =
                     candidates.length === 0
                       ? "missing"
@@ -73,7 +110,24 @@ export function createWikiLinkExtension(options: WikiLinkExtensionOptions) {
                     }),
                   );
 
-                  if (state.selection.$from.parent !== parent) {
+                  if (resolution.avatar?.length) {
+                    const avatar = resolution.avatar;
+
+                    // Keyed on the sources so an unchanged avatar is not
+                    // rebuilt on every transaction.
+                    decorations.push(
+                      Decoration.widget(from, () => avatarWidget(avatar), {
+                        side: -1,
+                        key: `avatar:${avatar.join("|")}`,
+                      }),
+                    );
+                  }
+
+                  // The brackets show only while the caret is inside the link,
+                  // so the rest of the paragraph reads as plain links.
+                  const editing = state.selection.from <= to && state.selection.to >= from;
+
+                  if (!editing) {
                     decorations.push(
                       Decoration.inline(from, from + 2, { class: "wikilink-hidden-syntax" }),
                       Decoration.inline(to - 2, to, { class: "wikilink-hidden-syntax" }),

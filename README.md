@@ -37,7 +37,10 @@ hides document-specific controls.
 - **Native integrations**: Excalidraw, Mermaid, and more.
 - **Daily notes and tidbits**: preview calendar notes on hover, open or create daily pages, create quick notes, and capture tidbits from anywhere when the app is running.
 - **Rich Table editing**: Column widths, Pandoc style. As with everything else, columns can be resized in WYSIWYG mode.
+- **Today's dashboard**: a command palette view listing the open tasks due today and the ones overdue, oldest first, with a checkbox to complete each one in its note and a click to open it.
 - **Task board window**: the Kanban board opens in its own window, and two-way synchronization with the source notes is maintained. When a task is created in a note, pressing `+` opens a menu allowing you to set priorities, due dates, etc. Tasks can be in progress, canceled, forwarded, archived.
+- **Picture properties**: a frontmatter property named `photo`, `image`, `avatar`, `cover`, `picture`, or `thumbnail`, or any property whose value names an image, shows a thumbnail, a Choose... button that copies a picture from disk into the vault, and accepts a picture dropped from Finder. The value is written as `"[[file.jpg]]"`, the form Obsidian uses.
+- **Person avatars**: a wikilink to a note under `People/` whose frontmatter names a `photo` shows that picture beside the link, so `[[Michael Romero]]` reads at a glance. The Markdown is untouched.
 - **Tag and people completion**: typing `#` at the start of a word drops a list of the vault's tags under the caret, most used first, filtering as you keep typing. The same goes for notes found under `People/` when typing `@`. Of course, tag colours are supported and persisted, and can be exported to Obsidian styles.
 - **AI assistance**: connect an OpenAI-compatible backend for writing help, summaries, outlines, title generation, and page building.
 - **Optional Vim mode**: use a practical Normal/Insert mode editing layer for keyboard-driven note work.

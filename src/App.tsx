@@ -201,6 +201,7 @@ import {
   pageNameForFileName,
   setEditorMarkdownContent,
   tabTitle,
+  vaultImagePathCandidates,
 } from "./app-state/documents";
 import {
   commandPaletteSelectionPluginKey,
@@ -276,6 +277,7 @@ import {
   saveGithubToken,
   saveGithubVaultToken,
   readVaultActivity,
+  readPeoplePhotos,
   readVaultTags,
   searchVaultFiles,
   writeVaultFile,
@@ -283,15 +285,16 @@ import {
 } from "./vault/persistence";
 import {
   taskResultPresentation,
-  taskSearchPattern,
   visibleVaultTaskResults,
 } from "./tasks/vault-tasks";
 import { TaskBoard } from "./tasks/TaskBoard";
+import { TodayDashboard } from "./dashboard/TodayDashboard";
+import { useTodayDashboard } from "./app-state/dashboard";
 import { TaskDatePicker } from "./editor/TaskDatePicker";
 import { TaskQuickMenu } from "./editor/TaskQuickMenu";
 import { InlineSuggestMenu } from "./editor/InlineSuggestMenu";
 import { useInlineSuggest } from "./app-state/inline-suggest";
-import { useTaskBoard } from "./app-state/task-board";
+import { scanLiveTasks, useTaskBoard } from "./app-state/task-board";
 import { useTaskFieldPickers } from "./app-state/task-field-pickers";
 import { openAuxiliaryWindow } from "./app-state/aux-window";
 import {
@@ -301,7 +304,10 @@ import {
   writeDirtyFilesMirror,
   writePeerNotice,
 } from "./lib/peer-windows";
-import { isLiveTaskResult } from "./lib/task-board";
+import { frontmatterEntries, replaceFrontmatterEntry } from "./lib/markdown";
+import { noteLocked, toggleNoteLock } from "./lib/note-lock";
+import { imagePropertyValue } from "./lib/frontmatter-images";
+import type { WikiLinkResolution } from "./editor/wikilinks";
 import { renderToolbarIcon } from "./toolbar-icons";
 import packageJson from "../package.json";
 import type {
@@ -355,12 +361,20 @@ import {
   defaultThemeOptions,
   normalizeThemeCalloutSettings,
   normalizeThemeOptions,
-  normalizeThemePresetId,
   normalizeThemeTokens,
   sameThemeCalloutSettings,
   sameThemeOptions,
-  sameThemeTokens,
+  withCustomThemes,
 } from "./settings/theme-options";
+import {
+  customThemesStorageKey,
+  isCustomThemeId,
+  newCustomThemeId,
+  normalizeThemeId,
+  readCustomThemes,
+  themeForMode,
+  writeCustomThemes,
+} from "./lib/theme-library";
 import "./App.css";
 
 // Derived from the editor's registration table so the picker can never
@@ -460,6 +474,23 @@ function remoteSourceUrl(value: string) {
     return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
   } catch {
     return "";
+  }
+}
+
+async function openExternalUrl(url: string, setStatus: (status: string) => void) {
+  if (!url) {
+    return;
+  }
+
+  try {
+    if (isTauri()) {
+      await openUrl(url);
+    } else {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  } catch (error) {
+    console.error("Failed to open link", error);
+    setStatus("Could not open link.");
   }
 }
 
@@ -582,7 +613,9 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     pluginCatalog,
     pluginDraft,
     pluginStyles,
-    selectedThemePresetIdDraft,
+    customThemes,
+    darkThemeIdDraft,
+    lightThemeIdDraft,
     setAiDraft,
     setAiModels,
     setAiModelsLoading,
@@ -603,14 +636,16 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     setPluginCatalog,
     setPluginDraft,
     setPluginStyles,
-    setSelectedThemePresetIdDraft,
+    setCustomThemes,
+    setDarkThemeIdDraft,
+    setLightThemeIdDraft,
     setSettingsDraft,
     setSettingsDragging,
     setSettingsOffset,
     setSettingsOpen,
     setSettingsTab,
+    setThemeBuilderDraft,
     setThemeCalloutDraft,
-    setThemeDraft,
     setThemeOptionsDraft,
     setTidbitDraft,
     setTidbitSettings,
@@ -621,8 +656,8 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     settingsOffset,
     settingsOpen,
     settingsTab,
+    themeBuilderDraft,
     themeCalloutDraft,
-    themeDraft,
     themeOptionsDraft,
     tidbitDraft,
     tidbitSettings,
@@ -661,6 +696,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
   // remember the mode from before the first preview so closing or reverting
   // the settings dialog without saving can restore it.
   const appearanceBeforeThemePreviewRef = useRef<AppearanceMode | null>(null);
+  const [previewThemeTokens, setPreviewThemeTokens] = useState<Record<string, string> | null>(null);
   const [vaultDrawerOpen, setVaultDrawerOpen] = useState(defaultVaultDrawerOpen);
   const [vaultDrawerWidth, setVaultDrawerWidth] = useState(defaultVaultDrawerWidth);
   const [vaultDrawerItem, setVaultDrawerItem] = useState<VaultDrawerItem>("files");
@@ -796,6 +832,11 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
   const editorGroupsRef = useRef<Record<EditorGroupId, EditorGroupState>>(editorGroups);
   const activeGroupIdRef = useRef<EditorGroupId>("primary");
   const activeEditorRef = useRef<Editor | null>(null);
+  // Tiptap rebuilds an editor when its settings-driven extensions change,
+  // which happens while a vault is still restoring. Async work that captured
+  // the old instance would hydrate a destroyed editor and leave the new one
+  // on the placeholder; the ref always names the live instances.
+  const editorsRef = useRef<Record<EditorGroupId, Editor | null>>({ primary: null, secondary: null });
   const nativeFileDropRef = useRef<
     (paths: string[], physicalX: number, physicalY: number) => void
   >(() => undefined);
@@ -869,6 +910,9 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     canvas: defaultCanvasSettings,
     theme: null,
   });
+  // Person note path -> picture reference, read from People/ frontmatter so
+  // a wikilink to a person can carry an avatar without touching the note.
+  const peoplePhotosRef = useRef(new Map<string, string>());
   const inlineSuggest = useInlineSuggest({ editorRef: activeEditorRef, vaultRootRef, wikiLinkIndex });
   const pickers = useTaskFieldPickers({ editorRef: activeEditorRef });
   const taskBoard = useTaskBoard({
@@ -884,6 +928,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     patchDrawerTasks: (patch) => setTaskResults((items) => items.map(patch)),
     confirmDestructiveAction,
   });
+  const dashboard = useTodayDashboard({ vaultRoot, vaultSettingsRef, setStatus });
   const excalidraw = useExcalidraw({
     confirmDestructiveAction,
     getEditor: () => activeEditorRef.current,
@@ -1133,12 +1178,26 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     tidbitSettings.globalShortcutEnabled,
   ]);
 
+  const allThemes = useMemo(() => withCustomThemes(customThemes), [customThemes]);
+  const themeSelectionDraft = { light: lightThemeIdDraft, dark: darkThemeIdDraft };
+  // A peer window's preview wins, then the theme being built, then the
+  // vault's choice for the current light/dark mode.
+  const activeThemeTokens = useMemo(
+    () =>
+      normalizeThemeTokens(
+        previewThemeTokens ??
+          themeBuilderDraft?.tokens ??
+          themeForMode(allThemes, themeSelectionDraft, resolvedAppearance).tokens,
+      ),
+    [allThemes, previewThemeTokens, themeBuilderDraft, lightThemeIdDraft, darkThemeIdDraft, resolvedAppearance],
+  );
+
   useEffect(() => {
     const previousTokens = appliedThemeTokensRef.current;
-    const nextTokens = normalizeThemeTokens(themeDraft);
+    const nextTokens = activeThemeTokens;
 
-    // Apply the draft directly to :root for live preview; saving still goes
-    // through the vault settings command so the preview can be reverted.
+    // Apply directly to :root for live preview; saving still goes through
+    // the vault settings command so the preview can be reverted.
     for (const token of previousTokens) {
       if (!(token in nextTokens)) {
         document.documentElement.style.removeProperty(token);
@@ -1150,7 +1209,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     }
 
     appliedThemeTokensRef.current = new Set(Object.keys(nextTokens));
-  }, [themeDraft]);
+  }, [activeThemeTokens]);
 
   useEffect(() => {
     const colorSchemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -1336,18 +1395,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     setEditorStateVersion((version) => version + 1);
   }
 
-  function updateThemeDraftToken(token: string, value: string) {
-    setThemeDraft((tokens) => ({
-      ...tokens,
-      [token]: value,
-    }));
-    setSelectedThemePresetIdDraft(null);
-  }
-
-  function applyThemePreset(preset: ThemePreset) {
-    setSelectedThemePresetIdDraft(preset.id);
-    setThemeDraft(normalizeThemeTokens(preset.tokens));
-
+  function previewAppearance(base: "light" | "dark") {
     // Glass materials and native window chrome follow the appearance mode, not
     // the theme tokens; a mismatched mode makes preset text unreadable there.
     // Always commit the explicit mode so the appearance control reflects the
@@ -1355,24 +1403,103 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     if (appearanceBeforeThemePreviewRef.current === null) {
       appearanceBeforeThemePreviewRef.current = appearance;
     }
-    setAppearance(preset.base);
-
+    setAppearance(base);
     // The settings dialog can live in its own window; peer windows follow the
     // preview through synchronous localStorage writes and storage events.
     // Async channels are unusable here: they lose the race against this
     // window's destruction when the preview is reverted on close.
-    writePersistedAppearance(preset.base);
-    window.localStorage.setItem(themePreviewStorageKey, JSON.stringify(preset.tokens));
-
-    setStatus(`Previewing theme template: ${preset.name}. Save Settings to keep it.`);
+    writePersistedAppearance(base);
   }
 
-  function savedThemeTokens() {
-    return normalizeThemeTokens(vaultSettings.theme?.tokens);
+  function syncPeerThemePreview(tokens: Record<string, string>) {
+    window.localStorage.setItem(themePreviewStorageKey, JSON.stringify(tokens));
   }
 
-  function savedThemePresetId() {
-    return normalizeThemePresetId(vaultSettings.theme?.presetId);
+  function applyThemePreset(preset: ThemePreset) {
+    (preset.base === "dark" ? setDarkThemeIdDraft : setLightThemeIdDraft)(preset.id);
+    previewAppearance(preset.base);
+    syncPeerThemePreview(preset.tokens);
+    setStatus(`Previewing ${preset.base} theme: ${preset.name}. Save Settings to keep it.`);
+  }
+
+  function startThemeBuilder(from: ThemePreset) {
+    // A custom theme is edited in place; a built-in one seeds a new copy.
+    const editing = isCustomThemeId(from.id);
+
+    setThemeBuilderDraft({
+      id: editing ? from.id : null,
+      name: editing ? from.name : `${from.name} Copy`,
+      base: from.base,
+      tokens: { ...from.tokens },
+    });
+    previewAppearance(from.base);
+    syncPeerThemePreview(from.tokens);
+  }
+
+  function updateThemeDraftToken(token: string, value: string) {
+    if (!themeBuilderDraft) {
+      return;
+    }
+
+    const tokens = { ...themeBuilderDraft.tokens, [token]: value };
+
+    setThemeBuilderDraft({ ...themeBuilderDraft, tokens });
+    syncPeerThemePreview(tokens);
+  }
+
+  function cancelThemeBuilder() {
+    setThemeBuilderDraft(null);
+    syncPeerThemePreview(themeForMode(allThemes, themeSelectionDraft, resolvedAppearance).tokens);
+  }
+
+  function saveThemeBuilderDraft() {
+    const name = themeBuilderDraft?.name.trim();
+
+    if (!themeBuilderDraft || !name) {
+      setStatus("Name the theme before saving it");
+      return;
+    }
+
+    const theme: ThemePreset = {
+      id: themeBuilderDraft.id ?? newCustomThemeId(),
+      name,
+      description: "Custom theme",
+      base: themeBuilderDraft.base,
+      tokens: normalizeThemeTokens(themeBuilderDraft.tokens),
+    };
+    const themes = [...customThemes.filter((custom) => custom.id !== theme.id), theme];
+
+    writeCustomThemes(themes);
+    setCustomThemes(themes);
+    setThemeBuilderDraft(null);
+    applyThemePreset(theme);
+    // Last word over the preview status: the theme is saved, its selection is not yet.
+    setStatus(`Saved theme ${name}. Save Settings to keep it selected.`);
+  }
+
+  function deleteCustomTheme(id: string) {
+    const themes = customThemes.filter((custom) => custom.id !== id);
+
+    writeCustomThemes(themes);
+    setCustomThemes(themes);
+    if (lightThemeIdDraft === id) {
+      setLightThemeIdDraft(null);
+    }
+    if (darkThemeIdDraft === id) {
+      setDarkThemeIdDraft(null);
+    }
+    if (themeBuilderDraft?.id === id) {
+      setThemeBuilderDraft(null);
+    }
+    setStatus("Deleted theme");
+  }
+
+  function savedLightThemeId() {
+    return normalizeThemeId(vaultSettings.theme?.lightThemeId);
+  }
+
+  function savedDarkThemeId() {
+    return normalizeThemeId(vaultSettings.theme?.darkThemeId);
   }
 
   function savedThemeOptions() {
@@ -1498,19 +1625,11 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       !samePluginSettings(pluginDraft, savedPluginSettings()) ||
       !sameAiSettings(aiDraft, savedAiSettings()) ||
       !sameCanvasSettings(canvasDraft, savedCanvasSettings()) ||
-      selectedThemePresetIdDraft !== savedThemePresetId() ||
-      !sameThemeTokens(themeDraft, savedThemeTokens()) ||
+      lightThemeIdDraft !== savedLightThemeId() ||
+      darkThemeIdDraft !== savedDarkThemeId() ||
       !sameThemeOptions(themeOptionsDraft, savedThemeOptions()) ||
       !sameThemeCalloutSettings(themeCalloutDraft, savedThemeCalloutSettings())
     );
-  }
-
-  function resetThemeDraft() {
-    setSelectedThemePresetIdDraft(null);
-    setThemeDraft({});
-    setThemeOptionsDraft(defaultThemeOptions);
-    setThemeCalloutDraft(defaultThemeCalloutSettings);
-    setStatus("Reset theme preview");
   }
 
   function restorePreviewedAppearance() {
@@ -1548,8 +1667,9 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     setAiDraft(savedAi);
     setCanvasDraft(savedCanvas);
     setAiTestStatus(null);
-    setSelectedThemePresetIdDraft(savedThemePresetId());
-    setThemeDraft(savedThemeTokens());
+    setLightThemeIdDraft(savedLightThemeId());
+    setDarkThemeIdDraft(savedDarkThemeId());
+    setThemeBuilderDraft(null);
     setThemeOptionsDraft(savedThemeOptions());
     setThemeCalloutDraft(savedThemeCalloutSettings());
     restorePreviewedAppearance();
@@ -1596,7 +1716,11 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     // Closing without saving must not keep previewed settings applied. The
     // revert only uses synchronous state and localStorage writes, so closing
     // immediately afterwards cannot lose it.
-    if (settingsHaveChanges() || appearanceBeforeThemePreviewRef.current !== null) {
+    if (
+      settingsHaveChanges() ||
+      themeBuilderDraft !== null ||
+      appearanceBeforeThemePreviewRef.current !== null
+    ) {
       revertSettingsDraft();
     }
 
@@ -1645,6 +1769,11 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
         return;
       }
 
+      if (event.key === customThemesStorageKey) {
+        setCustomThemes(readCustomThemes());
+        return;
+      }
+
       if (event.key === themePreviewStorageKey) {
         let previewTokens: Record<string, string> | null = null;
 
@@ -1657,9 +1786,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
         }
 
         // A removed preview restores this window's saved theme.
-        setThemeDraft(
-          normalizeThemeTokens(previewTokens ?? vaultSettingsRef.current.theme?.tokens),
-        );
+        setPreviewThemeTokens(previewTokens);
       }
     };
 
@@ -1781,7 +1908,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
   }
 
   function editorForGroup(groupId: EditorGroupId) {
-    const groupEditor = groupId === "primary" ? primaryEditor : secondaryEditor;
+    const groupEditor = editorsRef.current[groupId];
 
     return isEditorReady(groupEditor) ? groupEditor : null;
   }
@@ -1900,12 +2027,17 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     const group = editorGroupsRef.current[groupId];
     const tab = group.tabs.find((documentTab) => documentTab.id === group.activeTabId);
     const groupEditor = editorForGroup(groupId);
+    const editorMarkdown = groupEditor?.getMarkdown();
     const nextMarkdown =
       !tab
         ? initialMarkdown
         : tab.kind !== "markdown"
         ? tab.markdown
-        : groupEditor?.getMarkdown() ?? tab?.markdown ?? initialMarkdown;
+        : // The welcome placeholder is never a note's content; an editor still
+          // showing it was not hydrated for this tab, so the tab keeps its own.
+          editorMarkdown === undefined || (tab.activeFile && editorMarkdown === initialMarkdown)
+          ? tab.markdown
+          : editorMarkdown;
     const isActiveGroup = groupId === activeGroupIdRef.current;
 
     // Inactive panes do not update the top-level mirrors, so their snapshot has
@@ -2373,7 +2505,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
           target,
         ),
       resolveVaultImageSrc: (target) => joinVaultImagePath(vaultRootRef.current, target),
-      resolveWikiLinkTarget: (target) => resolveWikiLinkTargetRef.current(target),
+      resolveWikiLinkTarget: (target) => withPersonAvatar(resolveWikiLinkTargetRef.current(target)),
       getTagColors: () => normalizeTagColors(vaultSettingsRef.current.tagColors),
       setDirty,
       setEditorFocused,
@@ -2395,6 +2527,25 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     editorBehavior.vimMode,
     editorBehavior.slashMenu,
   ]);
+  editorsRef.current = { primary: primaryEditor, secondary: secondaryEditor };
+
+  // A locked note keeps its Tiptap view read-only; the tab's own frontmatter
+  // is the source of truth so each split pane follows its active note.
+  useEffect(() => {
+    for (const groupId of ["primary", "secondary"] as const) {
+      const group = editorGroups[groupId];
+      const tab = group.tabs.find((documentTab) => documentTab.id === group.activeTabId);
+      const groupEditor = editorsRef.current[groupId];
+
+      const editable = !(tab && noteLocked(tab.metaHeader, tab.metaDelimiter));
+
+      // `false` stops Tiptap emitting `update`, which would copy the editor's
+      // current content into whichever tab just became active and dirty it.
+      if (isEditorReady(groupEditor) && groupEditor.isEditable !== editable) {
+        groupEditor.setEditable(editable, false);
+      }
+    }
+  }, [editorGroups, primaryEditor, secondaryEditor]);
 
   async function importNativeDroppedImages(
     root: string,
@@ -2420,7 +2571,104 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     }
   }
 
+  async function importImageFromPath(source: string) {
+    const root = vaultRootRef.current;
+
+    if (!root) {
+      return null;
+    }
+
+    const saved = await invoke<SavedAsset>("import_dropped_vault_image", {
+      root,
+      assetDirectory: defaultVaultImageDirectory,
+      source,
+      fileName: fileNameForDroppedPath(source),
+    });
+
+    return saved.fileName;
+  }
+
+  async function pickImageFile() {
+    if (!vaultRootRef.current) {
+      setStatus("Open a vault file before adding a picture");
+      return null;
+    }
+
+    try {
+      const selected = await open({
+        directory: false,
+        multiple: false,
+        title: "Choose a picture",
+        filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp", "avif", "svg"] }],
+      });
+
+      if (typeof selected !== "string") {
+        return null;
+      }
+
+      const fileName = await importImageFromPath(selected);
+
+      if (fileName) {
+        setStatus(`Added ${fileName} to ${defaultVaultImageDirectory}`);
+      }
+
+      return fileName;
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+      return null;
+    }
+  }
+
+  // Tauri's native drop never reaches the editor's own drop handling, so the
+  // row carries its key and pane as data attributes for the window-level hit test.
+  async function dropImageOnFrontmatterRow(row: HTMLElement, paths: string[]) {
+    const key = row.dataset.frontmatterImageKey ?? "";
+    const [source] = imagePathsFromDrop(paths);
+
+    if (!key || !source) {
+      return;
+    }
+
+    // The frontmatter refs written below belong to the active pane only.
+    if (row.dataset.frontmatterGroup !== activeGroupIdRef.current) {
+      setStatus("Click into that pane first, then drop the picture");
+      return;
+    }
+
+    try {
+      const fileName = await importImageFromPath(source);
+      const entries = frontmatterEntries(metaHeaderRef.current, metaDelimiterRef.current);
+      const index = entries.findIndex((entry) => entry.key === key);
+
+      if (!fileName || index === -1) {
+        return;
+      }
+
+      setActiveMetaHeader(
+        replaceFrontmatterEntry(metaHeaderRef.current, metaDelimiterRef.current, index, {
+          key,
+          value: imagePropertyValue(fileName),
+        }),
+      );
+      setActiveDocumentDirty(true);
+      setStatus(`Set ${key} to ${fileName}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function handleNativeFileDrop(paths: string[], physicalX: number, physicalY: number) {
+    // Tauri reports physical pixels; DOM hit testing wants CSS pixels.
+    const scale = window.devicePixelRatio || 1;
+    const imageRow = document
+      .elementFromPoint(physicalX / scale, physicalY / scale)
+      ?.closest<HTMLElement>("[data-frontmatter-image-key]");
+
+    if (imageRow) {
+      await dropImageOnFrontmatterRow(imageRow, paths);
+      return;
+    }
+
     const target = findNativeDropTarget(
       [
         { groupId: "primary", editor: editorForGroup("primary") },
@@ -2581,6 +2829,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
   const activeFileStarred = activeFileBackedPath
     ? starredFiles.includes(activeFileBackedPath)
     : false;
+  const activeNoteLocked = noteLocked(metaHeader, metaDelimiter);
   activeEditorRef.current = editor;
 
   useEffect(() => {
@@ -2742,6 +2991,15 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
           return;
         }
 
+        const richLink = target.closest<HTMLElement>("[data-rich-link-url]");
+
+        if (richLink && root.contains(richLink)) {
+          event.preventDefault();
+          event.stopPropagation();
+          void openExternalUrl(remoteSourceUrl(richLink.dataset.richLinkUrl ?? ""), setStatus);
+          return;
+        }
+
         const button = target.closest<HTMLButtonElement>(
           "[data-toc-entry-id], [data-toc-edit], [data-mermaid-edit]",
         );
@@ -2887,6 +3145,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     setRecentFiles(recentFiles);
     progress?.(1, 4, "Loading vault settings");
     await loadVaultSettings(root);
+    void refreshPeoplePhotos(root);
     await loadAiBuilderHistory(root);
     currentDirRef.current = currentDir;
     setCurrentDir(currentDir);
@@ -2993,6 +3252,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
   const tableOfContents = useMemo(() => markdownHeadings(markdown), [markdown]);
 
   const calendarDays = useMemo(() => monthGridDays(calendarMonth), [calendarMonth]);
+  const activeCalendarDateKey = activeFileBackedPath ? calendarPathDateKey(activeFileBackedPath) : null;
 
   const calendarNoteDateKeySet = useMemo(
     () => new Set(calendarNoteDateKeys),
@@ -3306,6 +3566,14 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       metaHeader: nextMetaHeader,
       metaDelimiter: nextMetaDelimiter,
     });
+  }
+
+  function toggleActiveNoteLock() {
+    const locking = !noteLocked(metaHeaderRef.current, metaDelimiterRef.current);
+
+    setActiveMetaHeader(toggleNoteLock(metaHeaderRef.current, metaDelimiterRef.current));
+    setActiveDocumentDirty(true);
+    setStatus(locking ? "Note locked" : "Note unlocked");
   }
 
   function setEditorBody(content: string, clean: boolean) {
@@ -3865,7 +4133,51 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
   function notifyVaultChanged(root: string) {
     if (!auxiliaryWindowMode) {
       writePeerNotice(peerStorageKeys.vaultRevision, { root });
+      void refreshPeoplePhotos(root);
     }
+  }
+
+  // The People/ scan is small, so it simply reruns after any vault change.
+  // Editors are nudged only when a picture changed: the redraw rebuilds every
+  // link decoration, which is not worth it after an unrelated save.
+  async function refreshPeoplePhotos(root: string) {
+    try {
+      const photos = await readPeoplePhotos(root);
+
+      if (vaultRootRef.current !== root) {
+        return;
+      }
+
+      const previous = peoplePhotosRef.current;
+      const next = new Map(photos.map((entry) => [entry.relativePath, entry.photo]));
+      const changed =
+        previous.size !== next.size || [...next].some(([path, photo]) => previous.get(path) !== photo);
+
+      peoplePhotosRef.current = next;
+
+      if (changed) {
+        redrawInlineTags();
+      }
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  function withPersonAvatar(resolution: WikiLinkResolution): WikiLinkResolution {
+    // An ambiguous link has no single face to show.
+    const only = resolution.candidates.length === 1 ? resolution.candidates[0] : null;
+    const photo = only ? peoplePhotosRef.current.get(only.relativePath) : undefined;
+
+    if (!only || !photo) {
+      return resolution;
+    }
+
+    const avatar = vaultImagePathCandidates(vaultRootRef.current, photo, {
+      assetDirectory: vaultSettingsRef.current.assetDirectory,
+      relativePath: only.relativePath,
+    });
+
+    return avatar.length > 0 ? { ...resolution, avatar } : resolution;
   }
 
   async function revealFileInVaultDrawer(file: ActiveFile | null) {
@@ -4076,8 +4388,8 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
           canvas: defaultCanvasSettings,
           theme: null,
     };
-    const themeTokens = normalizeThemeTokens(settings.theme?.tokens);
-    const themePresetId = normalizeThemePresetId(settings.theme?.presetId);
+    const lightThemeId = normalizeThemeId(settings.theme?.lightThemeId);
+    const darkThemeId = normalizeThemeId(settings.theme?.darkThemeId);
     const themeOptions = normalizeThemeOptions(settings.theme?.options);
     const themeCallouts = normalizeThemeCalloutSettings(settings.theme?.callouts);
     const frontmatterPills = normalizeFrontmatterPillSettings(settings.frontmatterPills);
@@ -4113,13 +4425,13 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       canvas,
       tagColors: normalizeTagColors(settings.tagColors),
       theme:
-        Object.keys(themeTokens).length > 0 ||
+        Boolean(lightThemeId || darkThemeId) ||
         !sameThemeOptions(themeOptions, defaultThemeOptions) ||
         !sameThemeCalloutSettings(themeCallouts, defaultThemeCalloutSettings)
           ? {
-              presetId: themePresetId,
+              lightThemeId,
+              darkThemeId,
               callouts: themeCallouts,
-              tokens: themeTokens,
               options: themeOptions,
             }
           : null,
@@ -4145,8 +4457,8 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     setAiDraft(ai);
     setCanvasDraft(canvas);
     setAiTestStatus(null);
-    setSelectedThemePresetIdDraft(themePresetId);
-    setThemeDraft(themeTokens);
+    setLightThemeIdDraft(lightThemeId);
+    setDarkThemeIdDraft(darkThemeId);
     setThemeOptionsDraft(themeOptions);
     setThemeCalloutDraft(themeCallouts);
 
@@ -4188,19 +4500,19 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
           ai: normalizeAiSettings(aiDraft),
           canvas: normalizeCanvasSettings(canvasDraft),
           theme:
-            Object.keys(normalizeThemeTokens(themeDraft)).length > 0 ||
+            Boolean(lightThemeIdDraft || darkThemeIdDraft) ||
             !sameThemeOptions(themeOptionsDraft, defaultThemeOptions) ||
             !sameThemeCalloutSettings(themeCalloutDraft, defaultThemeCalloutSettings)
             ? {
-                presetId: selectedThemePresetIdDraft,
+                lightThemeId: lightThemeIdDraft,
+                darkThemeId: darkThemeIdDraft,
                 callouts: normalizeThemeCalloutSettings(themeCalloutDraft),
-                tokens: normalizeThemeTokens(themeDraft),
                 options: normalizeThemeOptions(themeOptionsDraft),
               }
             : null,
       });
-      const themeTokens = normalizeThemeTokens(settings.theme?.tokens);
-      const themePresetId = normalizeThemePresetId(settings.theme?.presetId);
+      const lightThemeId = normalizeThemeId(settings.theme?.lightThemeId);
+      const darkThemeId = normalizeThemeId(settings.theme?.darkThemeId);
       const themeOptions = normalizeThemeOptions(settings.theme?.options);
       const themeCallouts = normalizeThemeCalloutSettings(settings.theme?.callouts);
       const frontmatterPills = normalizeFrontmatterPillSettings(settings.frontmatterPills);
@@ -4235,13 +4547,13 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
         canvas,
         tagColors: normalizeTagColors(settings.tagColors),
         theme:
-          Object.keys(themeTokens).length > 0 ||
+          Boolean(lightThemeId || darkThemeId) ||
           !sameThemeOptions(themeOptions, defaultThemeOptions) ||
           !sameThemeCalloutSettings(themeCallouts, defaultThemeCalloutSettings)
             ? {
-                presetId: themePresetId,
+                lightThemeId,
+              darkThemeId,
                 callouts: themeCallouts,
-                tokens: themeTokens,
                 options: themeOptions,
               }
             : null,
@@ -4271,8 +4583,8 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       setAiDraft(ai);
       setCanvasDraft(canvas);
       setAiTestStatus(null);
-      setSelectedThemePresetIdDraft(themePresetId);
-      setThemeDraft(themeTokens);
+      setLightThemeIdDraft(lightThemeId);
+      setDarkThemeIdDraft(darkThemeId);
       setThemeOptionsDraft(themeOptions);
       setThemeCalloutDraft(themeCallouts);
       await allowVaultAssets(vaultRoot, settings.assetDirectory);
@@ -7024,6 +7336,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     activeDocumentTab,
     activeFileBackedPath,
     activeFileStarred,
+    activeNoteLocked,
     appendCallout,
     appendColumns,
     appendTableOfContentsBlock,
@@ -7043,6 +7356,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     openAiPageBuilder,
     openGraphView,
     openTaskBoard: taskBoard.openBoard,
+    openTodayDashboard: dashboard.openDashboard,
     openLocalGraphView,
     openRichLinkDialog,
     openClipDialog,
@@ -7060,6 +7374,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     setCommandPaletteSelectedIndex,
     setStatus,
     toggleActiveFileStar,
+    toggleActiveNoteLock,
     toggleFocusMode,
     wrapSelectedImagesInGallery,
   });
@@ -7504,16 +7819,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
 
     try {
       setTasksSearching(true);
-      const results = await searchVaultFiles(vaultRoot, taskSearchPattern(filter), {
-        includeContent: true,
-        markdownOnly: true,
-        excludeDotPaths: true,
-      });
-
-      // Filename hits are not useful in this view; task navigation is based on
-      // the exact Markdown task lines returned by content search.
-      const archiveNote = normalizeTaskArchiveNote(vaultSettingsRef.current.taskArchiveNote);
-      const contentResults = results.filter((result) => isLiveTaskResult(result, archiveNote));
+      const contentResults = await scanLiveTasks(vaultRoot, filter, vaultSettingsRef.current);
       setTaskResults(contentResults);
       setStatus(
         `Found ${contentResults.length} task${contentResults.length === 1 ? "" : "s"}`,
@@ -7635,17 +7941,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
 
     event.preventDefault();
     event.stopPropagation();
-
-    try {
-      if (isTauri()) {
-        await openUrl(url);
-      } else {
-        window.open(url, "_blank", "noopener,noreferrer");
-      }
-    } catch (error) {
-      console.error("Failed to open remote image source", error);
-      setStatus("Could not open remote image source.");
-    }
+    await openExternalUrl(url, setStatus);
   }
 
   function workspaceWidth() {
@@ -7851,6 +8147,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
         onMetaHeaderChange={setActiveMetaHeader}
         onOpenFile={openFile}
         onOpenImagePreview={openImagePreviewFromEditor}
+        onPickImageFile={pickImageFile}
         onOpenRemoteImageSource={openRemoteImageSourceFromEditor}
         onPageNameChange={setActivePageName}
         onSetActiveDocumentDirty={setActiveDocumentDirty}
@@ -7977,7 +8274,6 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       aiModelsLoading={aiModelsLoading}
       aiTestStatus={aiTestStatus}
       aiTesting={aiTesting}
-      applyThemePreset={applyThemePreset}
       autosaveDraft={autosaveDraft}
       chooseNewTabFile={chooseNewTabFile}
       closeSettings={closeSettings}
@@ -8001,10 +8297,8 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       refreshPlugins={refreshPlugins}
       requestTidbitShortcutAccessibilityPermission={requestTidbitShortcutAccessibilityPermission}
       resetOnboardingTips={resetOnboardingTips}
-      resetThemeDraft={resetThemeDraft}
       revertSettingsDraft={revertSettingsDraft}
       saveVaultSettings={saveVaultSettings}
-      selectedThemePresetIdDraft={selectedThemePresetIdDraft}
       setAutosaveDraft={setAutosaveDraft}
       setCanvasDraft={setCanvasDraft}
       setCssSnippetDraft={setCssSnippetDraft}
@@ -8036,11 +8330,22 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       stopSettingsDrag={stopSettingsDrag}
       testAiConnection={testAiConnection}
       themeCalloutDraft={themeCalloutDraft}
-      themeDraft={themeDraft}
+      themeLibrary={{
+        allThemes,
+        lightThemeId: lightThemeIdDraft,
+        darkThemeId: darkThemeIdDraft,
+        builderDraft: themeBuilderDraft,
+        applyThemePreset,
+        startThemeBuilder,
+        cancelThemeBuilder,
+        saveThemeBuilderDraft,
+        deleteCustomTheme,
+        setThemeBuilderDraft,
+        updateThemeDraftToken,
+      }}
       themeOptionsDraft={themeOptionsDraft}
       tidbitDraft={tidbitDraft}
       updateAiDraft={updateAiDraft}
-      updateThemeDraftToken={updateThemeDraftToken}
       vaultRoot={vaultRoot}
     />
   );
@@ -9308,6 +9613,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
                       const inMonth = date.getMonth() === calendarMonth.getMonth();
                       const today = sameCalendarDate(date, new Date());
                       const hasNote = calendarNoteDateKeySet.has(calendarDateKey(date));
+                      const open = activeCalendarDateKey === calendarDateKey(date);
 
                       return (
                         <button
@@ -9315,6 +9621,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
                             "calendar-day",
                             inMonth ? "" : "outside-month",
                             today ? "today" : "",
+                            open ? "open" : "",
                             hasNote ? "has-note" : "",
                           ]
                             .filter(Boolean)
@@ -9341,12 +9648,13 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
                     <button
                       className="inline-action calendar-today-button"
                       type="button"
-                      aria-label="Jump to today"
-                      title="Jump to today"
+                      aria-label="Open today's note"
+                      title="Open today's note"
                       onClick={() => {
                         closeCalendarDayPreview();
                         const today = new Date();
                         setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+                        void openCalendarDay(today);
                       }}
                     >
                       Today
@@ -9400,6 +9708,24 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
           <span>{calendarDayPreview.relativePath}</span>
           <CanvasMarkdownPreview markdown={calendarDayPreview.markdown} />
         </aside>
+      ) : null}
+      {dashboard.open && vaultRoot ? (
+        <TodayDashboard
+          tasks={dashboard.tasks}
+          loading={dashboard.loading}
+          now={new Date()}
+          onOpenTask={(result) => {
+            dashboard.close();
+            void openSearchResult(result);
+          }}
+          onCompleteTask={(result) => {
+            // The board's move does the rewrite and the dirty-tab check; the
+            // row leaves the dashboard once the move has settled.
+            void taskBoard.moveTask(result, "x").then(() => dashboard.remove(result));
+          }}
+          onRefresh={() => void dashboard.refresh()}
+          onRequestClose={dashboard.close}
+        />
       ) : null}
       {taskBoard.open && vaultRoot ? (
         <TaskBoard

@@ -27,6 +27,7 @@ export type CommandPaletteContext = {
   activeDocumentTab: DocumentTab | null;
   activeFileBackedPath: string | null;
   activeFileStarred: boolean;
+  activeNoteLocked: boolean;
   appendCallout: () => void;
   appendColumns: () => void;
   appendTableOfContentsBlock: () => void;
@@ -51,6 +52,7 @@ export type CommandPaletteContext = {
   openAiPageBuilder: () => void;
   openGraphView: () => void;
   openTaskBoard: () => void;
+  openTodayDashboard: () => void;
   openLocalGraphView: () => void;
   openRichLinkDialog: () => void;
   openClipDialog: () => void;
@@ -72,6 +74,7 @@ export type CommandPaletteContext = {
   setCommandPaletteSelectedIndex: Dispatch<SetStateAction<number>>;
   setStatus: (message: string) => void;
   toggleActiveFileStar: () => void;
+  toggleActiveNoteLock: () => void;
   toggleFocusMode: () => void;
   wrapSelectedImagesInGallery: () => void;
 };
@@ -83,6 +86,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
     activeDocumentTab,
     activeFileBackedPath,
     activeFileStarred,
+    activeNoteLocked,
     appendCallout,
     appendColumns,
     appendTableOfContentsBlock,
@@ -102,6 +106,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
     openAiPageBuilder,
     openGraphView,
     openTaskBoard,
+    openTodayDashboard,
     openLocalGraphView,
     openRichLinkDialog,
     openClipDialog,
@@ -119,6 +124,7 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
     setCommandPaletteSelectedIndex,
     setStatus,
     toggleActiveFileStar,
+    toggleActiveNoteLock,
     toggleFocusMode,
     wrapSelectedImagesInGallery,
   } = context;
@@ -559,11 +565,29 @@ export function buildCommandPaletteCommands(context: CommandPaletteContext) {
             : "Add the current file to Starred",
           run: toggleActiveFileStar,
         },
+        ...(activeDocumentIsMarkdown
+          ? [
+              {
+                id: activeNoteLocked ? "unlock-note" : "lock-note",
+                title: activeNoteLocked ? "Unlock Note" : "Lock Note",
+                description: activeNoteLocked
+                  ? "Allow editing this note again"
+                  : "Make this note read-only until it is unlocked",
+                run: toggleActiveNoteLock,
+              },
+            ]
+          : []),
       ]
     : [];
   // Both graph scopes are offered together whatever document is active; the
   // local one reports through status when no note is open.
   const graphCommandPaletteCommands: CommandPaletteCommand[] = [
+    {
+      id: "open-today-dashboard",
+      title: "Today's Dashboard",
+      description: "See the tasks due today and the ones overdue",
+      run: openTodayDashboard,
+    },
     {
       id: "open-task-board",
       title: "Open Task Board",

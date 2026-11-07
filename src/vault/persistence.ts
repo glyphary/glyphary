@@ -11,6 +11,7 @@ import type {
   VaultIndexedFile,
   VaultFileActivity,
   VaultSettings,
+  PersonPhoto,
   VaultTag,
 } from "../lib/app-types";
 
@@ -147,6 +148,10 @@ export function searchVaultFiles(
 
 export function readLinkGraph(root: string) {
   return invoke<LinkGraph>("read_link_graph", { root });
+}
+
+export function readPeoplePhotos(root: string) {
+  return invoke<PersonPhoto[]>("read_people_photos", { root });
 }
 
 export function readVaultTags(root: string) {
