@@ -41,11 +41,13 @@ hides document-specific controls.
 - **Task board window**: the Kanban board opens in its own window, and two-way synchronization with the source notes is maintained. When a task is created in a note, pressing `+` opens a menu allowing you to set priorities, due dates, etc. Tasks can be in progress, canceled, forwarded, archived.
 - **Picture properties**: a frontmatter property named `photo`, `image`, `avatar`, `cover`, `picture`, or `thumbnail`, or any property whose value names an image, shows a thumbnail, a Choose... button that copies a picture from disk into the vault, and accepts a picture dropped from Finder. The value is written as `"[[file.jpg]]"`, the form Obsidian uses.
 - **Person avatars**: a wikilink to a note under `People/` whose frontmatter names a `photo` shows that picture beside the link, so `[[Michael Romero]]` reads at a glance. The Markdown is untouched.
+- **Locked notes**: Lock Note writes `locked: true` to the frontmatter, and the editor refuses every change until the note is unlocked. The lock travels with the file.
+- **Web clipper**: clip a page by URL from the command palette, a `glyphary://clip` link, or a bookmarklet, with the frontmatter Obsidian's clipper writes. A Chrome extension, [glyphary-web-clipper](https://github.com/glyphary/glyphary-web-clipper), clips the current tab straight into the vault.
 - **Tag and people completion**: typing `#` at the start of a word drops a list of the vault's tags under the caret, most used first, filtering as you keep typing. The same goes for notes found under `People/` when typing `@`. Of course, tag colours are supported and persisted, and can be exported to Obsidian styles.
 - **AI assistance**: connect an OpenAI-compatible backend for writing help, summaries, outlines, title generation, and page building.
 - **Optional Vim mode**: use a practical Normal/Insert mode editing layer for keyboard-driven note work.
 - **Focused reading and editing**: switch between View and Edit chrome, enter Focus Mode to hide everything but the note, close every tab when you want a blank workspace, and configure `Cmd+T` to reopen a chosen vault note.
-- **Themes and appearance**: choose light, dark, auto, glass, theme templates, CSS snippets, page banners, and editor treatments.
+- **Themes and appearance**: pick a light and a dark theme per vault, build custom themes shared by all your vaults, and add glass, CSS snippets, page banners, and editor treatments.
 - **Plugin system**: enable vault-local plugins that run fast inside a WASM sandbox.
 
 ## Visual Editing
@@ -156,11 +158,13 @@ through follow-up prompts.
 
 ## Appearance
 
-Glyphary supports light, dark, and auto modes, theme templates (including the
-Cupertino light and dark pair), approved CSS snippets, a theme builder, basic
+Glyphary supports light, dark, and auto modes. Each vault picks a light theme
+and a dark theme, and the mode decides which applies. The Theme Builder starts
+from any theme, including the Cupertino pair, and saves the result as a custom
+theme shared by every vault on the machine. Approved CSS snippets, basic
 Obsidian-style theme compatibility, optional native glass, first-use hints that
 can be disabled or reset in Settings, and a title-bar document proxy with
-Reveal, Open in Default App, and Copy Path actions.
+Reveal, Open in Default App, and Copy Path actions round it out.
 
 ## Learn More
 
