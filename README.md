@@ -19,6 +19,15 @@ blocks are edited visually instead of through raw syntax.
   <img src="https://glyphary.github.io/assets/screenshots/main-workspace.png" alt="Glyphary workspace with the file drawer, tabs, and a note with rich link cards" />
 </p>
 
+<table>
+  <tr>
+    <td align="center"><img src="https://glyphary.github.io/assets/screenshots/theme-cupertino-dark.png" alt="Glyphary in the Cupertino Dark theme" width="200" /><br /><sub>Cupertino Dark</sub></td>
+    <td align="center"><img src="https://glyphary.github.io/assets/screenshots/theme-alpine-dark.png" alt="Glyphary in the Alpine Dark theme" width="200" /><br /><sub>Alpine Dark</sub></td>
+    <td align="center"><img src="https://glyphary.github.io/assets/screenshots/theme-graphite.png" alt="Glyphary in the Graphite theme" width="200" /><br /><sub>Graphite</sub></td>
+    <td align="center"><img src="https://glyphary.github.io/assets/screenshots/theme-blueprint.png" alt="Glyphary in the Blueprint theme" width="200" /><br /><sub>Blueprint</sub></td>
+  </tr>
+</table>
+
 ## Get Started
 
 A good first vault is the [Glyphary demonstration vault](https://github.com/glyphary/demo).
