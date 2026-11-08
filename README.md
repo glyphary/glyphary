@@ -16,7 +16,7 @@ columns, callouts, card links, image galleries, task lists, and expand/collapse
 blocks are edited visually instead of through raw syntax.
 
 <p align="center">
-  <img src="https://glyphary.github.io/assets/screenshots/main-workspace.png" alt="Glyphary workspace with an open vault" />
+  <img src="https://glyphary.github.io/assets/screenshots/main-workspace.png" alt="Glyphary workspace with the file drawer, tabs, and a note with rich link cards" />
 </p>
 
 ## Get Started
@@ -109,6 +109,10 @@ gallery cards, including optional first-image thumbnails. Open views can be
 searched by title, sorted by any available property, and trimmed to only the
 properties you want to see.
 
+<p align="center">
+  <img src="https://glyphary.github.io/assets/screenshots/base-view.png" alt="Sources.base open as a card gallery of notes with cover images and properties" />
+</p>
+
 ## Search And Commands
 
 Search, recent files, tasks, and quick commands are built into the workspace so
@@ -135,7 +139,7 @@ Remote YouTube URLs used as Markdown images render as video thumbnails in the
 page; clicking the thumbnail opens the original video URL.
 
 <p align="center">
-  <img src="https://glyphary.github.io/assets/screenshots/vault-search.png" alt="Glyphary vault search" />
+  <img src="https://glyphary.github.io/assets/screenshots/vault-search.png" alt="Search drawer listing notes that match a query, grouped by file with match counts" />
 </p>
 
 ## AI
