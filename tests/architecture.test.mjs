@@ -293,17 +293,26 @@ test("vault plugins are settings-gated and run commands through safe host paths"
   assert.match(app, /defaultPluginSettings/);
   assert.match(appTypes, /plugins\?: PluginSettings \| null/);
   assert.match(settings, /normalizePluginSettings/);
-  assert.match(app, /refreshPlugins/);
-  assert.match(app, /list_vault_plugins/);
-  assert.match(app, /read_plugin_styles/);
-  assert.match(app, /read_plugin_template/);
-  assert.match(app, /read_plugin_wasm/);
-  assert.match(app, /new Worker\(new URL\("\.\/pluginWorker\.ts", import\.meta\.url\)/);
-  assert.match(app, /setTimeout\(\(\) => \{/);
-  assert.match(app, /runWasmPluginTransform/);
+  assert.match(app, /pluginHost\.refresh\(/);
+  // The worker runner and the host runtime live outside the app shell.
+  const wasmRunner = readFileSync("src/plugins/run-wasm.ts", "utf8");
+  const pluginHostState = readFileSync("src/app-state/plugin-host.ts", "utf8");
+
+  assert.match(wasmRunner, /new Worker\(new URL\("\.\.\/pluginWorker\.ts", import\.meta\.url\)/);
+  assert.match(wasmRunner, /setTimeout\(\(\) => \{\s*worker\.terminate\(\)/);
+  assert.match(pluginHostState, /runWasmTransform/);
+  assert.match(pluginHostState, /list_vault_plugins/);
+  assert.match(pluginHostState, /read_plugin_styles/);
+  assert.match(pluginHostState, /read_plugin_template/);
+  assert.match(pluginHostState, /read_plugin_wasm/);
+  assert.doesNotMatch(app, /read_plugin_/);
+  assert.doesNotMatch(app, /new Worker\(new URL\("\.\/pluginWorker/);
+  assert.match(app, /usePluginHost\(/);
+  assert.doesNotMatch(app, /runPluginHostCall/);
+  assert.match(pluginHostState, /runPluginHostCall/);
   assert.match(paletteDefinitions, /pluginCommandPaletteCommands/);
   assert.match(paletteDefinitions, /id: `plugin:\$\{plugin\.id\}:\$\{command\.id\}`/);
-  assert.match(app, /Open a vault before running plugin commands/);
+  assert.match(pluginHostState, /Open a vault before running plugin commands/);
   assert.match(settingsDialog, /settingsTab === "plugins"/);
   assert.match(settingsDialog, /settingsTab === "ai"/);
   assert.match(settingsDialog, /settingsTab === "debug"/);

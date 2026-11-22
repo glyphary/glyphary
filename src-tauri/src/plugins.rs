@@ -29,7 +29,24 @@ pub(crate) fn clean_plugin_settings(settings: PluginSettings) -> Result<PluginSe
 
     enabled.sort();
 
-    Ok(PluginSettings { enabled })
+    let mut values = BTreeMap::new();
+
+    for (plugin_id, settings) in settings.values {
+        let mut clean = BTreeMap::new();
+
+        for (setting_id, value) in settings {
+            clean.insert(
+                clean_plugin_id(&setting_id)?,
+                value.chars().take(PLUGIN_SETTING_VALUE_LIMIT).collect::<String>(),
+            );
+        }
+
+        if !clean.is_empty() {
+            values.insert(clean_plugin_id(&plugin_id)?, clean);
+        }
+    }
+
+    Ok(PluginSettings { enabled, values })
 }
 pub(crate) fn clean_plugin_id(id: &str) -> Result<String, String> {
     let id = id.trim();
@@ -84,7 +101,13 @@ pub(crate) fn clean_plugin_permission(permission: &str) -> Result<String, String
 
     if !matches!(
         permission,
-        "document:read" | "document:write" | "selection:read" | "selection:write" | "styles:load"
+        "document:read"
+            | "document:write"
+            | "selection:read"
+            | "selection:write"
+            | "styles:load"
+            | "vault:read"
+            | "vault:write"
     ) {
         return Err(format!("Unsupported plugin permission: {permission}"));
     }
@@ -93,13 +116,10 @@ pub(crate) fn clean_plugin_permission(permission: &str) -> Result<String, String
 }
 pub(crate) fn clean_plugin_command(
     command: PluginCommandManifest,
+    host_runtime: bool,
 ) -> Result<PluginCommandManifest, String> {
     let id = clean_plugin_id(&command.id)?;
-    let title = command.title.trim().to_string();
-
-    if title.is_empty() || title.len() > 96 {
-        return Err("Plugin command title must be 1-96 characters".into());
-    }
+    let title = clean_plugin_label(&command.title, "command title")?;
 
     let description = command
         .description
@@ -117,7 +137,8 @@ pub(crate) fn clean_plugin_command(
         .transpose()?;
     let wasm = command.wasm.map(clean_plugin_wasm_command).transpose()?;
 
-    if insert_markdown.is_none() && template.is_none() && wasm.is_none() {
+    // A host-runtime command without an action is sent to the plugin module.
+    if !host_runtime && insert_markdown.is_none() && template.is_none() && wasm.is_none() {
         return Err(format!("Plugin command has no action: {id}"));
     }
 
@@ -157,6 +178,160 @@ pub(crate) fn clean_plugin_wasm_command(
         timeout_ms: command.timeout_ms.clamp(50, 2_000),
     })
 }
+/// Display text shared by plugin names and command, panel, and setting titles.
+fn clean_plugin_label(value: &str, what: &str) -> Result<String, String> {
+    let label = value.trim();
+
+    if label.is_empty() || label.len() > 96 {
+        return Err(format!("Plugin {what} must be 1-96 characters"));
+    }
+
+    Ok(label.into())
+}
+
+/// Validates each entry and drops repeats, keeping manifest order.
+fn clean_unique(
+    values: Vec<String>,
+    clean: impl Fn(&str) -> Result<String, String>,
+) -> Result<Vec<String>, String> {
+    let mut unique = Vec::new();
+
+    for value in values {
+        let value = clean(&value)?;
+
+        if !unique.contains(&value) {
+            unique.push(value);
+        }
+    }
+
+    Ok(unique)
+}
+
+/// Returns whether the manifest targets the host runtime.
+fn clean_plugin_runtime(runtime: &str) -> Result<bool, String> {
+    match runtime.trim() {
+        "" => Err(format!(
+            "Plugin manifest must declare runtime: {PLUGIN_RUNTIME_WASM_TRANSFORM_V1}"
+        )),
+        PLUGIN_RUNTIME_WASM_TRANSFORM_V1 => Ok(false),
+        PLUGIN_RUNTIME_WASM_HOST_V1 => Ok(true),
+        // Rejecting unknown runtimes at discovery time makes unsupported plugins
+        // visible in Settings while keeping them out of the executable command set.
+        other => Err(format!("Unsupported plugin runtime: {other}")),
+    }
+}
+
+fn clean_plugin_event(event: &str) -> Result<String, String> {
+    match event.trim() {
+        event @ ("save" | "open") => Ok(event.into()),
+        other => Err(format!("Unsupported plugin event: {other}")),
+    }
+}
+
+fn clean_plugin_renderer(language: &str) -> Result<String, String> {
+    let language = clean_plugin_id(language)?.to_lowercase();
+
+    // Built-in renderers keep their languages.
+    if matches!(language.as_str(), "toc" | "mermaid") {
+        return Err(format!(
+            "Plugin cannot render built-in language: {language}"
+        ));
+    }
+
+    Ok(language)
+}
+
+fn clean_plugin_panel(panel: PluginPanelManifest) -> Result<PluginPanelManifest, String> {
+    let icon = panel
+        .icon
+        .map(|icon| icon.trim().to_string())
+        .filter(|icon| !icon.is_empty());
+    // Only path data is accepted, never SVG markup, so an icon cannot carry
+    // script, styles, or references to anything outside itself.
+    let is_path_data = |icon: &str| {
+        icon.len() <= 2_000
+            && icon.chars().all(|character| {
+                character.is_ascii_digit() || "MmLlHhVvCcSsQqTtAaZzeE .,+-".contains(character)
+            })
+    };
+
+    if icon.as_deref().is_some_and(|icon| !is_path_data(icon)) {
+        return Err("Plugin panel icon must be SVG path data of at most 2000 characters".into());
+    }
+
+    Ok(PluginPanelManifest {
+        id: clean_plugin_id(&panel.id)?,
+        title: clean_plugin_label(&panel.title, "panel title")?,
+        icon,
+    })
+}
+
+/// Resolves the value a setting holds before the user changes it. Every type
+/// ends up with a default its control can show, so a plugin never receives a
+/// value its own manifest does not allow.
+fn clean_plugin_setting_default(
+    id: &str,
+    kind: &str,
+    options: &[String],
+    default: String,
+) -> Result<String, String> {
+    match kind {
+        "text" | "switch" if !options.is_empty() => {
+            Err(format!("Plugin setting {id} has options but is not a select"))
+        }
+        "text" => Ok(default.chars().take(PLUGIN_SETTING_VALUE_LIMIT).collect()),
+        "switch" => match default.as_str() {
+            "" | "false" => Ok("false".into()),
+            "true" => Ok(default),
+            _ => Err(format!("Plugin switch {id} default must be true or false")),
+        },
+        "select" => {
+            let valid_options = !options.is_empty()
+                && options.len() <= 32
+                && options
+                    .iter()
+                    .all(|option| !option.is_empty() && option.len() <= 96);
+
+            if !valid_options {
+                return Err(format!(
+                    "Plugin select {id} needs 1-32 options of 1-96 characters"
+                ));
+            }
+
+            if default.is_empty() {
+                return Ok(options[0].clone());
+            }
+
+            if !options.contains(&default) {
+                return Err(format!(
+                    "Plugin select {id} default is not one of its options"
+                ));
+            }
+
+            Ok(default)
+        }
+        other => Err(format!("Unsupported plugin setting type: {other}")),
+    }
+}
+
+fn clean_plugin_setting(setting: PluginSettingManifest) -> Result<PluginSettingManifest, String> {
+    let id = clean_plugin_id(&setting.id)?;
+    let options = setting
+        .options
+        .iter()
+        .map(|option| option.trim().to_string())
+        .collect::<Vec<_>>();
+    let default = clean_plugin_setting_default(&id, &setting.kind, &options, setting.default)?;
+
+    Ok(PluginSettingManifest {
+        id,
+        title: clean_plugin_label(&setting.title, "setting title")?,
+        kind: setting.kind,
+        options,
+        default,
+    })
+}
+
 pub(crate) fn clean_plugin_manifest(
     manifest: PluginManifest,
     expected_id: &str,
@@ -169,73 +344,68 @@ pub(crate) fn clean_plugin_manifest(
         ));
     }
 
-    let name = manifest.name.trim().to_string();
+    let name = clean_plugin_label(&manifest.name, "name")?;
+    let host_runtime = clean_plugin_runtime(&manifest.runtime)?;
+    let module = manifest
+        .module
+        .map(|path| clean_plugin_file_path(&path, &["wasm"]))
+        .transpose()?;
+    let declares_host_fields = !(manifest.events.is_empty()
+        && manifest.panels.is_empty()
+        && manifest.renderers.is_empty()
+        && manifest.settings.is_empty());
 
-    if name.is_empty() || name.len() > 96 {
-        return Err("Plugin name must be 1-96 characters".into());
-    }
-
-    let runtime = manifest.runtime.trim();
-
-    if runtime.is_empty() {
+    if host_runtime != module.is_some() || (!host_runtime && declares_host_fields) {
         return Err(format!(
-            "Plugin manifest must declare runtime: {PLUGIN_RUNTIME_WASM_TRANSFORM_V1}"
+            "Plugin module, events, panels, renderers, and settings require runtime {PLUGIN_RUNTIME_WASM_HOST_V1}, which requires a module"
         ));
     }
 
-    // Rejecting unknown runtimes at discovery time makes unsupported plugins
-    // visible in Settings while keeping them out of the executable command set.
-    if runtime != PLUGIN_RUNTIME_WASM_TRANSFORM_V1 {
-        return Err(format!("Unsupported plugin runtime: {runtime}"));
-    }
-
-    let version = manifest.version.trim().chars().take(40).collect::<String>();
-    let description = manifest
-        .description
-        .trim()
-        .chars()
-        .take(240)
-        .collect::<String>();
-    let mut permissions = Vec::new();
-
-    for permission in manifest.permissions {
-        let permission = clean_plugin_permission(&permission)?;
-
-        if !permissions.contains(&permission) {
-            permissions.push(permission);
-        }
-    }
-
-    let mut styles = Vec::new();
-
-    for style in manifest.styles {
-        let style = clean_plugin_file_path(&style, &["css"])?;
-
-        if !styles.contains(&style) {
-            styles.push(style);
-        }
-    }
+    let styles = clean_unique(manifest.styles, |style| {
+        clean_plugin_file_path(style, &["css"])
+    })?;
+    let renderers = clean_unique(manifest.renderers, clean_plugin_renderer)?;
 
     if styles.len() > 8 {
         return Err("Plugins may declare at most 8 stylesheets".into());
     }
 
-    let commands = manifest
-        .commands
-        .into_iter()
-        .take(32)
-        .map(clean_plugin_command)
-        .collect::<Result<Vec<_>, String>>()?;
+    if manifest.panels.len() > 8 {
+        return Err("Plugins may declare at most 8 panels".into());
+    }
+
+    if renderers.len() > 8 || manifest.settings.len() > 16 {
+        return Err("Plugins may declare at most 8 renderers and 16 settings".into());
+    }
 
     Ok(PluginManifest {
         id,
         name,
-        runtime: runtime.into(),
-        version,
-        description,
-        permissions,
-        commands,
+        runtime: manifest.runtime.trim().into(),
+        version: manifest.version.trim().chars().take(40).collect(),
+        description: manifest.description.trim().chars().take(240).collect(),
+        permissions: clean_unique(manifest.permissions, clean_plugin_permission)?,
+        commands: manifest
+            .commands
+            .into_iter()
+            .take(32)
+            .map(|command| clean_plugin_command(command, host_runtime))
+            .collect::<Result<_, _>>()?,
         styles,
+        module,
+        timeout_ms: manifest.timeout_ms.clamp(50, 2_000),
+        events: clean_unique(manifest.events, clean_plugin_event)?,
+        panels: manifest
+            .panels
+            .into_iter()
+            .map(clean_plugin_panel)
+            .collect::<Result<_, _>>()?,
+        renderers,
+        settings: manifest
+            .settings
+            .into_iter()
+            .map(clean_plugin_setting)
+            .collect::<Result<_, _>>()?,
     })
 }
 pub(crate) fn plugin_directory(root: &Path, plugin_id: &str) -> Result<PathBuf, String> {
@@ -444,9 +614,10 @@ pub(crate) fn read_plugin_wasm(
     let module = clean_plugin_file_path(&module, &["wasm"])?;
     let plugin_dir = plugin_directory(&root, &plugin_id)?;
     let manifest = read_plugin_manifest_from_dir(&plugin_dir, &plugin_id)?;
-    let declared = manifest.commands.iter().any(|command| {
-        command.wasm.as_ref().map(|wasm| wasm.module.as_str()) == Some(module.as_str())
-    });
+    let declared = manifest.module.as_deref() == Some(module.as_str())
+        || manifest.commands.iter().any(|command| {
+            command.wasm.as_ref().map(|wasm| wasm.module.as_str()) == Some(module.as_str())
+        });
 
     // Treat the manifest as the capability list: an arbitrary .wasm file in the
     // plugin directory is not executable unless a command references it.

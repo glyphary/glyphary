@@ -69,6 +69,8 @@ import {
 import {
   MermaidCodeBlockRenderer,
   TocCodeBlockRenderer,
+  createPluginCodeBlockRenderer,
+  type PluginCodeBlockRendering,
 } from "./code-block-renderers";
 import {
   createCalloutExtension,
@@ -180,6 +182,7 @@ export function createGlypharyEditorOptions({
   openCommandPalette,
   openExcalidrawDrawing,
   openWikiLinkSearch,
+  pluginCodeBlocks,
   onInlineSuggest,
   onInlineSuggestKey,
   openTaskDatePicker,
@@ -209,6 +212,7 @@ export function createGlypharyEditorOptions({
   openCommandPalette: () => void;
   openExcalidrawDrawing: (target: string) => void;
   openWikiLinkSearch: () => void;
+  pluginCodeBlocks: () => PluginCodeBlockRendering | null;
   onInlineSuggest: (session: InlineSuggestSession | null) => void;
   onInlineSuggestKey: (key: string) => boolean;
   openTaskDatePicker: (trigger: TaskDateTrigger) => void;
@@ -263,6 +267,7 @@ export function createGlypharyEditorOptions({
       CommandPaletteSelectionRenderer,
       TocCodeBlockRenderer,
       MermaidCodeBlockRenderer,
+      createPluginCodeBlockRenderer(pluginCodeBlocks),
       createWikiLinkExtension({
         openSearch: openWikiLinkSearch,
         resolveTarget: resolveWikiLinkTarget,

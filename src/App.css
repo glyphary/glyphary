@@ -9092,3 +9092,77 @@ body.workspace-resizing * {
     margin-left: 0;
   }
 }
+
+/* Plugin panels (right drawer) */
+.plugin-panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 8px;
+}
+
+.plugin-code-body {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.plugin-code-body h4,
+.plugin-code-body p {
+  margin: 0;
+}
+
+.plugin-details,
+.plugin-setting {
+  display: grid;
+  gap: 3px;
+  padding: 0 0 8px 46px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.plugin-details p {
+  margin: 0;
+}
+
+.plugin-setting input[type="text"],
+.plugin-setting select {
+  max-width: 320px;
+}
+
+.plugin-setting input[type="checkbox"] {
+  justify-self: start;
+}
+
+.plugin-panel-body {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.plugin-panel-body h3,
+.plugin-panel-body p {
+  margin: 0;
+}
+
+.plugin-panel-body h3 {
+  color: var(--heading);
+  font-size: 0.9rem;
+  padding-top: 6px;
+}
+
+.plugin-panel-bullet {
+  padding-left: 12px;
+}
+
+.plugin-panel-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.plugin-panel-link:hover {
+  text-decoration: underline;
+}

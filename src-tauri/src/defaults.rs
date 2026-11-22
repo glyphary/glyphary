@@ -43,6 +43,8 @@ pub(crate) const DEFAULT_AI_MODEL: &str = "gpt-5.5";
 // Current v1 plugin runtime: a pure WASM transform loaded by the frontend worker.
 // Native/Extism/component runtimes should get their own manifest value.
 pub(crate) const PLUGIN_RUNTIME_WASM_TRANSFORM_V1: &str = "glyphary-wasm-transform@1";
+pub(crate) const PLUGIN_RUNTIME_WASM_HOST_V1: &str = "glyphary-wasm-host@1";
+pub(crate) const PLUGIN_SETTING_VALUE_LIMIT: usize = 2_000;
 pub(crate) const SETTINGS_DIRECTORY_NAME: &str = ".glyphary";
 pub(crate) const SETTINGS_CONFIG_FILE_NAME: &str = "config.json";
 pub(crate) const AI_BUILDER_HISTORY_FILE_NAME: &str = "ai-builder-history.json";
@@ -70,6 +72,10 @@ pub(crate) fn default_plugin_wasm_input() -> String {
 
 pub(crate) fn default_plugin_wasm_output() -> String {
     "replaceSelection".into()
+}
+
+pub(crate) fn default_plugin_setting_type() -> String {
+    "text".into()
 }
 
 pub(crate) fn default_plugin_wasm_timeout_ms() -> u64 {

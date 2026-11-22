@@ -426,6 +426,9 @@ pub(crate) struct CssSnippetContent {
 pub(crate) struct PluginSettings {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) enabled: Vec<String>,
+    // Plugin id -> setting id -> value, for settings a plugin manifest declares.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) values: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -519,6 +522,45 @@ pub(crate) struct PluginManifest {
     pub(crate) commands: Vec<PluginCommandManifest>,
     #[serde(default)]
     pub(crate) styles: Vec<String>,
+    // The fields below belong to the host runtime, where one module receives
+    // every command, panel, and event call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) module: Option<String>,
+    #[serde(default = "crate::defaults::default_plugin_wasm_timeout_ms")]
+    pub(crate) timeout_ms: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) events: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) panels: Vec<PluginPanelManifest>,
+    // Code block languages the module renders.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) renderers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) settings: Vec<PluginSettingManifest>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PluginSettingManifest {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    // "text", "switch" (value "true" or "false"), or "select" (one of `options`).
+    #[serde(default = "crate::defaults::default_plugin_setting_type", rename = "type")]
+    pub(crate) kind: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) options: Vec<String>,
+    #[serde(default)]
+    pub(crate) default: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PluginPanelManifest {
+    pub(crate) id: String,
+    pub(crate) title: String,
+    // SVG path data for the drawer tab, drawn by the app in a 24x24 viewBox.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) icon: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

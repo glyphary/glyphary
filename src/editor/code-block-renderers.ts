@@ -7,9 +7,13 @@
  * - Keep navigation helpers for rendered table-of-contents entries near the
  *   code that creates those entries.
  *
+ * - Hand fences in a language an enabled plugin declares to that plugin and
+ *   draw the Markdown subset it returns.
+ *
  * Contracts:
  * - The Markdown source remains a normal fenced code block and is never
  *   rewritten by these preview renderers.
+ * - Plugin output is built from text nodes and buttons only, never HTML.
  * - Mermaid is loaded lazily so regular editor startup does not pay for it.
  */
 
@@ -20,6 +24,7 @@ import type { Selection } from "@tiptap/pm/state";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { TocEntry } from "../lib/markdown";
+import { renderPluginBlocks } from "../plugins/render-blocks";
 
 let mermaidRenderer: Promise<typeof import("mermaid")["default"]> | null = null;
 
@@ -362,3 +367,143 @@ export const MermaidCodeBlockRenderer = Extension.create({
     ];
   },
 });
+
+export type PluginCodeBlockRendering = {
+  /** Languages that enabled plugins render right now. */
+  languages: () => string[];
+  /** Changes after a save or a note switch, so blocks are drawn again. */
+  revision: () => number;
+  render: (language: string, source: string) => Promise<string>;
+  onOpenNote: (target: string) => void;
+  onCommand: (language: string, commandId: string) => void;
+};
+
+function createPluginCodeWidget(
+  getPlugins: () => PluginCodeBlockRendering | null,
+  language: string,
+  source: string,
+  nodeSize: number,
+  getPos: () => number | undefined,
+) {
+  // The Mermaid classes and data attributes are reused on purpose: the widget
+  // gets the same frame, and App's existing Edit handler moves the caret in.
+  const render = document.createElement("div");
+  render.className = "mermaid-code-render mermaid-code-widget plugin-code-render";
+  render.contentEditable = "false";
+
+  const header = document.createElement("div");
+  header.className = "mermaid-code-header";
+
+  const title = document.createElement("strong");
+  title.textContent = language;
+  header.appendChild(title);
+
+  const editButton = document.createElement("button");
+  editButton.type = "button";
+  editButton.dataset.mermaidEdit = "true";
+  editButton.textContent = "Edit";
+  // The widget outlives edits above it, so the block position is read when
+  // Edit is pressed. The widget sits right after its block.
+  editButton.addEventListener("mousedown", () => {
+    const end = getPos();
+
+    if (end !== undefined) {
+      render.dataset.mermaidBlockPosition = String(end - nodeSize);
+    }
+  });
+  header.appendChild(editButton);
+  render.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "mermaid-code-body plugin-code-body";
+  render.appendChild(body);
+
+  (getPlugins()?.render(language, source) ?? Promise.resolve("")).then(
+    (markdown) =>
+      renderPluginBlocks(body, markdown, "h4", {
+        onOpenNote: (target) => getPlugins()?.onOpenNote(target),
+        onCommand: (commandId) => getPlugins()?.onCommand(language, commandId),
+      }),
+    (error) => {
+      body.textContent = error instanceof Error ? error.message : String(error);
+    },
+  );
+
+  return render;
+}
+
+export function createPluginCodeBlockRenderer(
+  getPlugins: () => PluginCodeBlockRendering | null,
+) {
+  return Extension.create({
+    name: "pluginCodeBlockRenderer",
+
+    addProseMirrorPlugins() {
+      return [
+        new Plugin({
+          key: new PluginKey("pluginCodeBlockRenderer"),
+          props: {
+            decorations: (state) => {
+              const plugins = getPlugins();
+              const languages = plugins?.languages() ?? [];
+              const decorations: Decoration[] = [];
+              let ordinal = 0;
+
+              if (!plugins || languages.length === 0) {
+                return DecorationSet.empty;
+              }
+
+              state.doc.descendants((node, position) => {
+                if (node.type.name !== "codeBlock") {
+                  return true;
+                }
+
+                const language = String(node.attrs.language ?? "").toLowerCase();
+
+                if (!languages.includes(language)) {
+                  return false;
+                }
+
+                const selected = codeBlockContainsSelection(
+                  state.selection,
+                  position,
+                  node.nodeSize,
+                );
+                const source = node.textContent;
+                const nodeSize = node.nodeSize;
+
+                ordinal += 1;
+                decorations.push(
+                  Decoration.node(position, position + nodeSize, {
+                    class: selected ? "mermaid-code-block editing" : "mermaid-code-block rendered",
+                  }),
+                );
+
+                if (!selected) {
+                  decorations.push(
+                    Decoration.widget(
+                      position + nodeSize,
+                      (_view, getPos) =>
+                        createPluginCodeWidget(getPlugins, language, source, nodeSize, getPos),
+                      {
+                        // Keyed by order, not position, so typing above a block
+                        // does not run the plugin again. The revision makes
+                        // ProseMirror rebuild the widget after a save.
+                        key: `plugin-code:${ordinal}:${language}:${shortHash(source)}:${plugins.revision()}`,
+                        side: -1,
+                      },
+                    ),
+                  );
+                }
+
+                return false;
+              });
+
+              return DecorationSet.create(state.doc, decorations);
+            },
+          },
+        }),
+      ];
+    },
+  });
+}

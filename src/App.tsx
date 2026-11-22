@@ -163,7 +163,6 @@ import { refreshTagColorsMeta } from "./editor/inline-tags";
 import { jumpToHeadingInEditor } from "./editor/code-block-renderers";
 import {
   alignCurrentTableColumn,
-  currentSelectionText,
   formatSelectionWithMark,
   insertMarkdownAtCursor,
   selectedGalleryImages,
@@ -306,6 +305,8 @@ import {
 } from "./lib/peer-windows";
 import { frontmatterEntries, replaceFrontmatterEntry } from "./lib/markdown";
 import { noteLocked, toggleNoteLock } from "./lib/note-lock";
+import { usePluginHost } from "./app-state/plugin-host";
+import { PluginPanel } from "./plugins/PluginPanel";
 import { imagePropertyValue } from "./lib/frontmatter-images";
 import type { WikiLinkResolution } from "./editor/wikilinks";
 import { renderToolbarIcon } from "./toolbar-icons";
@@ -327,11 +328,6 @@ import type {
   GithubSyncProgress,
   OpenedFile,
   PersistedWorkspace,
-  PluginCatalog,
-  PluginCommandManifest,
-  PluginManifest,
-  PluginStyleContent,
-  PluginWasmCommand,
   RenamedDirectory,
   ResizeSide,
   SavedAsset,
@@ -538,18 +534,6 @@ type CalendarDayPreviewState = {
 
 const calendarPreviewWidth = 320;
 const calendarPreviewHeight = 260;
-
-type WasmPluginResponse =
-  | {
-      id: string;
-      ok: true;
-      output: string;
-    }
-  | {
-      id: string;
-      ok: false;
-      error: string;
-    };
 
 type RichLinkMetadata = {
   url: string;
@@ -893,6 +877,24 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
   const clearRecentFilesRef = useRef<() => void>(() => undefined);
   const openPageSearchRef = useRef<() => void>(() => undefined);
   const vaultRootRef = useRef("");
+  const pluginHost = usePluginHost({
+    active: !auxiliaryWindowMode,
+    pluginCatalog,
+    pluginDraft,
+    vaultRootRef,
+    activeFileRef,
+    getActiveMarkdownEditor: activeMarkdownEditor,
+    getEditors: () => Object.values(editorsRef.current).filter(isEditorReady),
+    hasUnsavedEdits: (relativePath) => Boolean(findOpenFileTab(relativePath)?.tab.dirty),
+    reloadOpenTab: reloadOpenTabFromDisk,
+    notifyVaultChanged,
+    openFile: (relativePath) => void openFile(relativePath),
+    openWikiLinkTarget: (target) => openWikiLinkTarget(target),
+    replaceDocument: (markdown) => setEditorBody(markdown, false),
+    setPluginCatalog,
+    setPluginStyles,
+    setStatus,
+  });
   const vaultSettingsRef = useRef<VaultSettings>({
     assetDirectory: defaultVaultAssetDirectory,
     newTabFile: defaultNewTabFile,
@@ -1677,7 +1679,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     void refreshCssSnippets(vaultRoot, savedCssSnippets).catch((error) => {
       setStatus(error instanceof Error ? error.message : String(error));
     });
-    void refreshPlugins(vaultRoot, savedPlugins).catch((error) => {
+    void pluginHost.refresh(vaultRoot, savedPlugins).catch((error) => {
       setStatus(error instanceof Error ? error.message : String(error));
     });
     setStatus("Reverted settings preview");
@@ -1911,6 +1913,14 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     const groupEditor = editorsRef.current[groupId];
 
     return isEditorReady(groupEditor) ? groupEditor : null;
+  }
+
+  function activeMarkdownEditor() {
+    const groupId = activeGroupIdRef.current;
+    const group = editorGroupsRef.current[groupId];
+    const tab = group.tabs.find((candidate) => candidate.id === group.activeTabId);
+
+    return tab?.kind === "markdown" ? editorForGroup(groupId) : null;
   }
 
   function setEditorGroupsAndRef(nextGroups: Record<EditorGroupId, EditorGroupState>) {
@@ -2150,6 +2160,8 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     window.setTimeout(() => {
       hydratingEditor.current[groupId] = false;
     }, 0);
+    // The editor holds the note from here on, which is what plugins are shown.
+    queueMicrotask(() => pluginHost.emit("open"));
   }
 
   function hydrateDocumentTabAfterCommit(tab: DocumentTab, groupId = activeGroupIdRef.current) {
@@ -2493,6 +2505,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       openCommandPalette: () => openCommandPaletteRootRef.current("flat"),
       openExcalidrawDrawing: excalidraw.stable.openDrawing,
       openWikiLinkSearch: () => openWikiLinkSearchRef.current(),
+      pluginCodeBlocks: pluginHost.codeBlocks,
       onInlineSuggest: inlineSuggest.onSessionChange,
       onInlineSuggestKey: inlineSuggest.onKey,
       openTaskDatePicker: pickers.openTaskDatePicker,
@@ -4345,28 +4358,6 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     setCssSnippetContents(contents);
   }
 
-  async function refreshPlugins(root = vaultRoot, settings = pluginDraft) {
-    if (!root || !isTauri()) {
-      setPluginCatalog({ plugins: [], errors: [] });
-      setPluginStyles([]);
-      return;
-    }
-
-    const normalizedSettings = normalizePluginSettings(settings);
-    // Discovery and style loading are separate backend calls by design: invalid
-    // plugins remain visible as catalog errors, while only enabled plugins may
-    // inject CSS into the running editor.
-    const [catalog, styles] = await Promise.all([
-      invoke<PluginCatalog>("list_vault_plugins", { root }),
-      invoke<PluginStyleContent[]>("read_plugin_styles", {
-        root,
-        enabled: normalizedSettings.enabled,
-      }),
-    ]);
-
-    setPluginCatalog(catalog);
-    setPluginStyles(styles);
-  }
 
   async function loadVaultSettings(root: string) {
     const settings = isTauri()
@@ -4470,7 +4461,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     }
 
     await refreshCssSnippets(root, cssSnippets);
-    await refreshPlugins(root, plugins);
+    await pluginHost.refresh(root, plugins);
 
     return settings;
   }
@@ -4590,7 +4581,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       await allowVaultAssets(vaultRoot, settings.assetDirectory);
       await allowVaultAssets(vaultRoot, defaultVaultImageDirectory);
       await refreshCssSnippets(vaultRoot, cssSnippets);
-      await refreshPlugins(vaultRoot, plugins);
+      await pluginHost.refresh(vaultRoot, plugins);
       await loadEntries(vaultRoot, currentDir);
       notifyVaultSettingsChanged(vaultRoot);
       // The previewed appearance and theme are now the saved ones; peers
@@ -4775,6 +4766,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     setEditorGroupsAndRef(nextGroups);
     setDirty(false);
     setStatus(`Saved ${file.name}`);
+    pluginHost.emit("save");
   }
 
   useEffect(() => {
@@ -6987,114 +6979,6 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     }
   }
 
-  function runWasmPluginTransform(
-    pluginId: string,
-    commandId: string,
-    wasm: PluginWasmCommand,
-    bytes: Uint8Array,
-    input: string,
-  ) {
-    return new Promise<string>((resolve, reject) => {
-      // Each command run gets a fresh worker and WASM instance. That keeps
-      // plugin memory isolated and lets the timeout terminate stuck transforms.
-      const worker = new Worker(new URL("./pluginWorker.ts", import.meta.url), {
-        type: "module",
-      });
-      const requestId = `${pluginId}:${commandId}:${Date.now()}`;
-      const timeout = window.setTimeout(() => {
-        worker.terminate();
-        reject(new Error(`Plugin ${pluginId}/${commandId} exceeded ${wasm.timeoutMs}ms`));
-      }, wasm.timeoutMs);
-
-      worker.onmessage = (event: MessageEvent<WasmPluginResponse>) => {
-        if (event.data.id !== requestId) {
-          return;
-        }
-
-        window.clearTimeout(timeout);
-        worker.terminate();
-
-        if (event.data.ok) {
-          resolve(event.data.output);
-        } else {
-          reject(new Error(event.data.error));
-        }
-      };
-      worker.onerror = (event) => {
-        window.clearTimeout(timeout);
-        worker.terminate();
-        reject(new Error(event.message));
-      };
-      worker.postMessage({
-        id: requestId,
-        bytes,
-        input,
-      });
-    });
-  }
-
-  async function runPluginCommand(plugin: PluginManifest, command: PluginCommandManifest) {
-    if (!editor) {
-      return;
-    }
-
-    if (!vaultRoot) {
-      setStatus("Open a vault before running plugin commands");
-      return;
-    }
-
-    try {
-      if (command.insertMarkdown) {
-        insertMarkdownAtCursor(editor, command.insertMarkdown);
-        setStatus(`Ran plugin command: ${command.title}`);
-        return;
-      }
-
-      if (command.template) {
-        const template = await invoke<string>("read_plugin_template", {
-          root: vaultRoot,
-          pluginId: plugin.id,
-          template: command.template,
-        });
-
-        insertMarkdownAtCursor(editor, template);
-        setStatus(`Inserted template from ${plugin.name}`);
-        return;
-      }
-
-      if (command.wasm) {
-        const wasmBytes = await invoke<number[]>("read_plugin_wasm", {
-          root: vaultRoot,
-          pluginId: plugin.id,
-          module: command.wasm.module,
-        });
-        const input =
-          command.wasm.input === "document" ? editor.getMarkdown() : currentSelectionText(editor);
-        const output = await runWasmPluginTransform(
-          plugin.id,
-          command.id,
-          command.wasm,
-          new Uint8Array(wasmBytes),
-          input,
-        );
-
-        if (command.wasm.output === "replaceDocument") {
-          setEditorBody(output, false);
-        } else if (command.wasm.output === "insertAtCursor") {
-          // Insert-at-cursor should append after a selection rather than replace
-          // it, so collapse the selection to its end before writing Markdown.
-          editor.chain().focus().setTextSelection(editor.state.selection.to).run();
-          insertMarkdownAtCursor(editor, output);
-        } else {
-          insertMarkdownAtCursor(editor, output);
-        }
-
-        setStatus(`Ran WASM plugin command: ${command.title}`);
-      }
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  }
 
   function appendTableOfContentsBlock() {
     if (!editor) {
@@ -7366,7 +7250,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
     runAiContinueWritingCommand,
     runAiSelectionCommand,
     runAiSelectionOrDocumentCommand,
-    runPluginCommand,
+    runPluginCommand: pluginHost.runCommand,
     savedAiSettings,
     setCanvasCommandRequest,
     setCommandPaletteQuery,
@@ -8294,7 +8178,7 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
       pluginDraft={pluginDraft}
       refreshAiModels={refreshAiModels}
       refreshCssSnippets={refreshCssSnippets}
-      refreshPlugins={refreshPlugins}
+      refreshPlugins={pluginHost.refresh}
       requestTidbitShortcutAccessibilityPermission={requestTidbitShortcutAccessibilityPermission}
       resetOnboardingTips={resetOnboardingTips}
       revertSettingsDraft={revertSettingsDraft}
@@ -9438,6 +9322,39 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
                 <path d="M12 17h.1" />
               </svg>
             </button>
+            {pluginHost.panels.map(({ key, panel }) => {
+              const shown =
+                drawerItem === "plugin" && pluginHost.activePanel?.key === key && (drawerOpen || drawerPeek);
+
+              return (
+                <button
+                  className={shown ? "drawer-tab active" : "drawer-tab"}
+                  key={key}
+                  type="button"
+                  aria-label={`${shown ? "Close" : "Open"} ${panel.title} panel`}
+                  title={`${shown ? "Close" : "Open"} ${panel.title}`}
+                  onClick={() => {
+                    // Another plugin panel is showing: switch to this one
+                    // instead of closing the drawer.
+                    if (drawerItem === "plugin" && !shown && (drawerOpen || drawerPeek)) {
+                      pluginHost.selectPanel(key);
+                      return;
+                    }
+
+                    pluginHost.selectPanel(key);
+                    toggleDrawerItem("plugin");
+                  }}
+                >
+                  {panel.icon ? (
+                    <svg aria-hidden="true" viewBox="0 0 24 24">
+                      <path d={panel.icon} />
+                    </svg>
+                  ) : (
+                    <span aria-hidden="true">{panel.title.slice(0, 2)}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           {drawerOpen || drawerPeek ? (
             <div className="drawer-content">
@@ -9448,7 +9365,9 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
                       ? "Source"
                       : drawerItem === "toc"
                         ? "Contents"
-                        : "Calendar"}
+                        : drawerItem === "plugin"
+                          ? (pluginHost.activePanel?.panel.title ?? "Plugins")
+                          : "Calendar"}
                   </h2>
                   <span>
                     {drawerItem === "source"
@@ -9459,7 +9378,11 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
                           : "Markdown source and export"
                       : drawerItem === "toc"
                         ? "Current document headings"
-                        : "Monthly calendar notes"}
+                        : drawerItem === "plugin"
+                          ? pluginHost.activePanel
+                            ? `${pluginHost.activePanel.plugin.name} plugin`
+                            : "No plugin panel"
+                          : "Monthly calendar notes"}
                   </span>
                 </div>
                 <div className="drawer-header-actions">
@@ -9563,6 +9486,14 @@ function App({ settingsWindowMode = false, taskBoardWindowMode = false }: AppPro
                     <p className="empty-toc">No headings in this document.</p>
                   )}
                 </div>
+              ) : drawerItem === "plugin" ? (
+                <PluginPanel
+                  panelKey={pluginHost.activePanel?.key ?? ""}
+                  revision={pluginHost.panelRevision}
+                  load={pluginHost.loadActivePanel}
+                  onOpenNote={pluginHost.openNote}
+                  onCommand={pluginHost.runActivePanelCommand}
+                />
               ) : (
                 <div className="drawer-panel calendar-panel">
                   <div className="calendar-toolbar">

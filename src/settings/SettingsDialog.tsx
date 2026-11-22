@@ -51,6 +51,7 @@ import {
   normalizeVaultAppearanceSettings,
   isRunningOnMacOs,
 } from "../lib/settings";
+import { PluginSettingsEntry } from "./PluginSettingsEntry";
 import { ThemeBuilderPanel, type ThemeLibraryControls } from "./ThemeBuilderPanel";
 import { OBSIDIAN_TAG_SNIPPET_NAME, obsidianTagColorSnippet, type TagColors } from "../lib/tag-colors";
 import { writeObsidianSnippet } from "../vault/persistence";
@@ -944,45 +945,39 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   </div>
                   <div className="plugin-list">
                     {pluginCatalog.plugins.length > 0 ? (
-                      pluginCatalog.plugins.map((plugin) => {
-                        const checked = pluginDraft.enabled.includes(plugin.id);
+                      pluginCatalog.plugins.map((plugin) => (
+                        <PluginSettingsEntry
+                          disabled={!vaultRoot}
+                          enabled={pluginDraft.enabled.includes(plugin.id)}
+                          key={plugin.id}
+                          plugin={plugin}
+                          values={pluginDraft.values?.[plugin.id]}
+                          onToggle={(enabled) => {
+                            const nextSettings = normalizePluginSettings({
+                              ...pluginDraft,
+                              enabled: enabled
+                                ? [...pluginDraft.enabled, plugin.id]
+                                : pluginDraft.enabled.filter((id) => id !== plugin.id),
+                            });
 
-                        return (
-                          <label className="settings-check-control plugin-control" key={plugin.id}>
-                            <input
-                              checked={checked}
-                              disabled={!vaultRoot}
-                              role="switch"
-                              type="checkbox"
-                              onChange={(event) => {
-                                const enabled = event.currentTarget.checked;
-                                const nextSettings = normalizePluginSettings({
-                                  enabled: enabled
-                                    ? [...pluginDraft.enabled, plugin.id]
-                                    : pluginDraft.enabled.filter((id) => id !== plugin.id),
-                                });
-
-                                setPluginDraft(nextSettings);
-                                void refreshPlugins(vaultRoot, nextSettings).catch((error) => {
-                                  setStatus(error instanceof Error ? error.message : String(error));
-                                });
-                              }}
-                            />
-                            <span>
-                              <strong>{plugin.name}</strong>
-                              <small>
-                                {plugin.commands.length} command
-                                {plugin.commands.length === 1 ? "" : "s"}
-                                {plugin.styles.length > 0
-                                  ? ` / ${plugin.styles.length} stylesheet${
-                                      plugin.styles.length === 1 ? "" : "s"
-                                    }`
-                                  : ""}
-                              </small>
-                            </span>
-                          </label>
-                        );
-                      })
+                            setPluginDraft(nextSettings);
+                            void refreshPlugins(vaultRoot, nextSettings).catch((error) => {
+                              setStatus(error instanceof Error ? error.message : String(error));
+                            });
+                          }}
+                          onValue={(settingId, value) =>
+                            setPluginDraft(
+                              normalizePluginSettings({
+                                ...pluginDraft,
+                                values: {
+                                  ...pluginDraft.values,
+                                  [plugin.id]: { ...pluginDraft.values?.[plugin.id], [settingId]: value },
+                                },
+                              }),
+                            )
+                          }
+                        />
+                      ))
                     ) : (
                       <p className="settings-note">No plugins found.</p>
                     )}

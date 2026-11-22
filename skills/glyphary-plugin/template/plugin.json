@@ -1,0 +1,21 @@
+{
+  "id": "my_plugin",
+  "name": "My Plugin",
+  "runtime": "glyphary-wasm-transform@1",
+  "version": "0.1.0",
+  "description": "Uppercases the selected text.",
+  "permissions": ["selection:read", "selection:write"],
+  "commands": [
+    {
+      "id": "transform_selection",
+      "title": "Uppercase Selection",
+      "description": "Replace the selection with its uppercase form.",
+      "wasm": {
+        "module": "plugin.wasm",
+        "input": "selection",
+        "output": "replaceSelection",
+        "timeoutMs": 500
+      }
+    }
+  ]
+}

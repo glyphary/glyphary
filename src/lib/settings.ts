@@ -170,7 +170,9 @@ function normalizePersistedWorkspace(
   const taskSort: PersistedWorkspace["taskSort"] =
     workspace.taskSort === "date" ? "date" : "name";
   const drawerItem: PersistedWorkspace["drawerItem"] =
-    workspace.drawerItem === "toc" || workspace.drawerItem === "calendar"
+    workspace.drawerItem === "toc" ||
+    workspace.drawerItem === "calendar" ||
+    workspace.drawerItem === "plugin"
       ? workspace.drawerItem
       : "source";
 
@@ -806,8 +808,19 @@ export function normalizePluginSettings(settings: PluginSettings | undefined | n
         .filter((id): id is string => Boolean(id)),
     ),
   ).sort();
+  // Sorted and stripped of empty groups so two drafts compare equal exactly
+  // when they would save the same thing.
+  const values = Object.fromEntries(
+    Object.entries(settings?.values ?? {})
+      .filter(([id, group]) => cleanPluginId(id) && Object.keys(group ?? {}).length > 0)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([id, group]) => [
+        id,
+        Object.fromEntries(Object.entries(group).sort(([left], [right]) => left.localeCompare(right))),
+      ]),
+  );
 
-  return { enabled };
+  return Object.keys(values).length > 0 ? { enabled, values } : { enabled };
 }
 
 export function samePluginSettings(

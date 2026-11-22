@@ -81,6 +81,8 @@ export type CssSnippetSettings = {
 
 export type PluginSettings = {
   enabled: string[];
+  /** Plugin id -> setting id -> value. */
+  values?: Record<string, Record<string, string>>;
 };
 
 export type AiSettings = {
@@ -156,12 +158,28 @@ export type PluginCommandManifest = {
 export type PluginManifest = {
   id: string;
   name: string;
-  runtime: "glyphary-wasm-transform@1";
+  runtime: "glyphary-wasm-transform@1" | "glyphary-wasm-host@1";
   version?: string;
   description?: string;
   permissions: string[];
   commands: PluginCommandManifest[];
   styles: string[];
+  // Host runtime only: one module answers every command, panel, and event.
+  module?: string | null;
+  timeoutMs?: number;
+  events?: ("save" | "open")[];
+  /** `icon` is SVG path data for a 24x24 viewBox, validated by the backend. */
+  panels?: { id: string; title: string; icon?: string | null }[];
+  /** Code block languages the module renders. */
+  renderers?: string[];
+  settings?: {
+    id: string;
+    title: string;
+    /** A switch holds "true" or "false"; a select holds one of `options`. */
+    type?: "text" | "switch" | "select";
+    options?: string[];
+    default?: string;
+  }[];
 };
 
 export type PluginCatalog = {
@@ -432,7 +450,7 @@ export type TaskFilter = "incomplete" | "complete" | "all";
 export type TaskSort = "name" | "date";
 export type AppearanceMode = "auto" | "light" | "dark";
 export type SettingsTab = "main" | "appearance" | "canvas" | "plugins" | "ai" | "export" | "debug";
-export type DrawerItem = "source" | "toc" | "calendar";
+export type DrawerItem = "source" | "toc" | "calendar" | "plugin";
 export type VaultDrawerItem = "vaults" | "files" | "search" | "starred" | "recent" | "tasks" | "tags";
 export type ResizeSide = "vault" | "drawer";
 

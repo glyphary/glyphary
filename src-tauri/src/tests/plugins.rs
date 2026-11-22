@@ -210,3 +210,96 @@ fn rejects_missing_plugin_runtime_with_actionable_error() {
 
     fs::remove_dir_all(root).expect("test root should be removed");
 }
+
+#[test]
+fn host_runtime_requires_a_module_and_serves_it() {
+    let root = test_root();
+    let plugin_dir = root.join(PLUGIN_DIRECTORY).join("backlinks");
+    fs::create_dir_all(&plugin_dir).expect("plugin directory should exist");
+    let manifest = |module: &str, event: &str| {
+        let icon = "M4 6h16M4 12h10";
+        format!(
+            r#"{{
+  "id": "backlinks",
+  "name": "Backlinks",
+  "runtime": "glyphary-wasm-host@1",
+  {module}
+  "permissions": ["vault:read"],
+  "events": ["{event}"],
+  "panels": [{{ "id": "list", "title": "Backlinks", "icon": "{icon}" }}],
+  "renderers": ["Query"],
+  "settings": [
+    {{ "id": "limit", "title": "Limit", "default": "10" }},
+    {{ "id": "compact", "title": "Compact", "type": "switch" }},
+    {{ "id": "order", "title": "Order", "type": "select", "options": ["{event}", "Z to A"] }}
+  ],
+  "commands": [{{ "id": "refresh", "title": "Refresh Backlinks" }}]
+}}"#
+        )
+    };
+    let list = || list_vault_plugins(root.to_string_lossy().into_owned()).expect("plugins list");
+
+    fs::write(plugin_dir.join("plugin.wasm"), [0_u8, 97, 115, 109]).expect("wasm written");
+    fs::write(
+        plugin_dir.join(PLUGIN_MANIFEST_FILE),
+        manifest(r#""module": "plugin.wasm","#, "save"),
+    )
+    .expect("manifest should be written");
+
+    let catalog = list();
+
+    assert_eq!(catalog.errors, Vec::<String>::new());
+    assert_eq!(catalog.plugins[0].panels[0].id, "list");
+    assert_eq!(catalog.plugins[0].panels[0].icon.as_deref(), Some("M4 6h16M4 12h10"));
+    assert_eq!(catalog.plugins[0].events, vec!["save"]);
+    assert_eq!(catalog.plugins[0].renderers, vec!["query"]);
+    assert_eq!(catalog.plugins[0].settings[0].default, "10");
+    assert_eq!(catalog.plugins[0].settings[1].default, "false");
+    assert_eq!(catalog.plugins[0].settings[2].default, "save");
+
+    let saved = clean_plugin_settings(PluginSettings {
+        enabled: vec!["backlinks".into()],
+        values: BTreeMap::from([
+            ("backlinks".into(), BTreeMap::from([("limit".into(), "5".into())])),
+            ("empty".into(), BTreeMap::new()),
+        ]),
+    })
+    .expect("settings should clean");
+
+    assert_eq!(saved.values["backlinks"]["limit"], "5");
+    assert!(!saved.values.contains_key("empty"));
+    assert!(clean_plugin_settings(PluginSettings {
+        enabled: Vec::new(),
+        values: BTreeMap::from([("../x".into(), BTreeMap::from([("a".into(), "b".into())]))]),
+    })
+    .is_err());
+    assert_eq!(
+        read_plugin_wasm(
+            root.to_string_lossy().into_owned(),
+            "backlinks".into(),
+            "plugin.wasm".into(),
+        )
+        .expect("declared module should be served"),
+        vec![0_u8, 97, 115, 109]
+    );
+
+    fs::write(plugin_dir.join(PLUGIN_MANIFEST_FILE), manifest("", "save"))
+        .expect("manifest should be written");
+    assert!(list().errors[0].contains("requires a module"));
+
+    fs::write(
+        plugin_dir.join(PLUGIN_MANIFEST_FILE),
+        manifest(r#""module": "plugin.wasm","#, "delete"),
+    )
+    .expect("manifest should be written");
+    assert!(list().errors[0].contains("Unsupported plugin event: delete"));
+
+    fs::write(
+        plugin_dir.join(PLUGIN_MANIFEST_FILE),
+        manifest(r#""module": "plugin.wasm","#, "save").replace("M4 6h16M4 12h10", "<svg>"),
+    )
+    .expect("manifest should be written");
+    assert!(list().errors[0].contains("icon must be SVG path data"));
+
+    fs::remove_dir_all(root).expect("test root should be removed");
+}

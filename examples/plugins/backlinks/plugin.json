@@ -1,0 +1,31 @@
+{
+  "id": "backlinks",
+  "name": "Backlinks",
+  "runtime": "glyphary-wasm-host@1",
+  "version": "0.1.0",
+  "description": "Lists the notes that link to the open note.",
+  "module": "plugin.wasm",
+  "timeoutMs": 500,
+  "permissions": ["vault:read", "selection:write"],
+  "events": [],
+  "panels": [
+    {
+      "id": "linked_from",
+      "title": "Backlinks",
+      "icon": "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"
+    }
+  ],
+  "renderers": ["backlinks"],
+  "settings": [
+    { "id": "heading", "title": "List heading", "default": "Linked from" },
+    { "id": "order", "title": "Order", "type": "select", "options": ["A to Z", "Z to A"] },
+    { "id": "insert_button", "title": "Show the insert button", "type": "switch", "default": "true" }
+  ],
+  "commands": [
+    {
+      "id": "insert_backlinks",
+      "title": "Insert Backlinks List",
+      "description": "Insert links to every note that links to this one."
+    }
+  ]
+}
